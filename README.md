@@ -1,5 +1,9 @@
 # StreamFlow
 
+⚠️ Important Notice: StreamFlow is currently in an early alpha stage. We highly recommend conducting extensive off-air testing before using it for live broadcasts, as you may experience stability issues or unexpected behavior.
+
+----
+
 StreamFlow is a Windows desktop app that combines a soundboard/audio mixer with a live-streaming
 control surface. It captures your screen/window/camera sources, composites them (with overlays,
 chroma key, scenes, and transitions) via a native Rust core, and streams the result to Twitch or
