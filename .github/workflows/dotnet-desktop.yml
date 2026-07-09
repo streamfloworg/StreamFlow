@@ -62,7 +62,7 @@ jobs:
 
     strategy:
       matrix:
-        configuration: [Debug, Release]
+        configuration: [Release]
 
     runs-on: windows-latest  # For a list of available runner types, refer to
                              # https://help.github.com/en/actions/reference/workflow-syntax-for-github-actions#jobsjob_idruns-on
@@ -231,4 +231,4 @@ jobs:
     # routine push to main.
     - name: Publish Velopack release to GitHub
       if: matrix.configuration == 'Release' && steps.version.outputs.is_release == 'true'
-      run: vpk upload github --repoUrl https://github.com/nomadamo/StreamFlow --token ${{ secrets.GITHUB_TOKEN }} --publish --releaseName "StreamFlow ${{ steps.version.outputs.version }}"
+      run: vpk upload github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --publish --releaseName "StreamFlow ${{ steps.version.outputs.version }}"
