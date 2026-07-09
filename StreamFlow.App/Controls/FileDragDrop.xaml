@@ -1,0 +1,169 @@
+﻿<adonisControls:AdonisWindow x:Class="StreamFlow.App.Controls.FileDragDrop"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:adonisUi="clr-namespace:AdonisUI;assembly=AdonisUI"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="clr-namespace:StreamFlow.App.Controls"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:converters="clr-namespace:StreamFlow.App.Converter"
+    xmlns:adonisControls="clr-namespace:AdonisUI.Controls;assembly=AdonisUI"
+    xmlns:adonisExtensions="clr-namespace:AdonisUI.Extensions;assembly=AdonisUI"
+    SizeToContent="WidthAndHeight"
+    WindowStartupLocation="CenterOwner"
+    WindowStyle="ToolWindow"
+    ShowInTaskbar="False"
+    mc:Ignorable="d"
+    d:IsHitTestVisible="True">
+
+    <Window.Resources>
+        <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        <converters:BooleanInvertConverter x:Key="BooleanInvertConverter" />
+        <converters:ValueConverterGroup x:Key="InvertedBooleanVisibilityConverter">
+            <converters:BooleanInvertConverter/>
+            <converters:BooleanToVisibilityConverter/>
+        </converters:ValueConverterGroup>
+        <converters:StringHelper x:Key="StringHelper"/>
+    </Window.Resources>
+
+    <Border Background="{DynamicResource {x:Static adonisUi:Brushes.Layer1BackgroundBrush}}"
+            BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}"
+            BorderThickness="1"
+            CornerRadius="8"
+            Padding="24,20"
+            Width="420">
+        <Border.Effect>
+            <DropShadowEffect Color="#000000" Opacity="0.3" BlurRadius="16" ShadowDepth="0" Direction="270"/>
+        </Border.Effect>
+        <StackPanel>
+            <!-- Title -->
+            <TextBlock Text="Import File" FontSize="16" FontWeight="Bold" Margin="0,0,0,16" HorizontalAlignment="Center"/>
+
+            <!-- grd_audio -->
+            <StackPanel x:Name="grd_audio" Visibility="Visible">
+                <TextBlock Text="{Binding FileName}" HorizontalAlignment="Center" x:Name="lbl_fileName" FontWeight="SemiBold" Margin="0,0,0,8"/>
+
+                <!-- Cover Art or Default Audio Icon -->
+                <Border Width="64" Height="64" CornerRadius="6" BorderThickness="1" 
+                        BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer2BorderBrush}}"
+                        Background="{DynamicResource {x:Static adonisUi:Brushes.Layer2BackgroundBrush}}"
+                        HorizontalAlignment="Center" Margin="0,0,0,16" ClipToBounds="True">
+                    <Grid>
+                        <!-- Cover Art Image -->
+                        <Image Stretch="UniformToFill" Source="{Binding ImportedImageSource}"/>
+                        
+                        <!-- Default Icon (visible if no cover art) -->
+                        <Path Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="32" Height="32" Data="{StaticResource AudioIconData}" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Path.Style>
+                                <Style TargetType="Path">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ImportedImageSource}" Value="{x:Null}">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Path.Style>
+                        </Path>
+                    </Grid>
+                </Border>
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,16">
+                    <StackPanel Margin="0,0,20,0" HorizontalAlignment="Center">
+                        <ToggleButton x:Name="tglbtn_audioTrack"
+                                      Width="56" Height="56"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center"
+                                      IsChecked="True" Click="AudioTrack_Clicked">
+                            <Path Stretch="Uniform" Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Data="{StaticResource VolumeHighIconData}" Width="20" Height="20"/>
+                        </ToggleButton>
+                        <TextBlock Text="Audio Track" FontSize="12" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                    </StackPanel>
+
+                    <StackPanel HorizontalAlignment="Center">
+                        <ToggleButton x:Name="tglbtn_soundEffect"
+                                      Width="56" Height="56"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center"
+                                      Click="SoundEffect_Clicked">
+                            <Path Stretch="Uniform" Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Data="{StaticResource SpeakerIconData}" Width="20" Height="20"/>
+                        </ToggleButton>
+                        <TextBlock Text="Sound Effect" FontSize="12" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <TextBox Text="{Binding DirectoryPath}" IsEnabled="False" IsReadOnly="True" x:Name="lbl_filePath" FontSize="11" Margin="0,0,0,8"/>
+
+                <StackPanel Margin="0,0,0,12">
+                    <TextBlock Text="Audio Name" Margin="0,0,0,4" FontSize="12" FontWeight="SemiBold"/>
+                    <TextBox adonisExtensions:WatermarkExtension.Watermark="Name your audio" x:Name="tbox_newFileName" Text="{Binding AudioName, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource StringHelper}, ConverterParameter=Case}" Height="28" Padding="4" />
+                </StackPanel>
+
+                <!-- Extracted Metadata Display -->
+                <StackPanel Visibility="{Binding HasMetadataTags, Converter={StaticResource BooleanToVisibilityConverter}}" Margin="0,0,0,16">
+                    <Border Background="{DynamicResource {x:Static adonisUi:Brushes.Layer2BackgroundBrush}}"
+                            BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer2BorderBrush}}"
+                            BorderThickness="1" Padding="10,8" CornerRadius="6">
+                        <StackPanel>
+                            <TextBlock Text="Embedded Metadata" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,4"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,2">
+                                <TextBlock Text="Artist: " FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" Width="50"/>
+                                <TextBlock Text="{Binding ArtistName, TargetNullValue='Unknown'}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,2">
+                                <TextBlock Text="Album: " FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" Width="50"/>
+                                <TextBlock Text="{Binding AlbumName, TargetNullValue='Unknown'}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- grd_convert -->
+            <StackPanel x:Name="grd_convert" Visibility="Collapsed">
+                <Path Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="48" Height="48" Data="{StaticResource SettingsIconData}" HorizontalAlignment="Center" Margin="0,0,0,16"/>
+                <TextBlock Text="{Binding FileName}" x:Name="lbl_fileNameConvert" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,0,0,8" />
+                <ProgressBar Name="pgb_converting" Margin="10,0,10,10" Height="15" IsIndeterminate="True" Visibility="Collapsed" />
+                <TextBox x:Name="tbx_infoText" Height="60" Margin="0,0,0,8" IsReadOnly="True" TextWrapping="Wrap"
+                         Text="For compatibility reasons we need to convert the audio file to 44kHz. You can cancel this process and stop the import of this file." />
+                <TextBlock Text="{Binding DirectoryPath}" x:Name="lbl_filePathConvert" FontSize="11" Height="26" Margin="0,0,0,8"/>
+            </StackPanel>
+
+            <!-- grd_sceneImport -->
+            <StackPanel x:Name="grd_sceneImport" Visibility="Collapsed">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,16">
+                    <Path Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="20" Height="20" Data="{StaticResource GoLiveIconData}" Margin="0,0,8,0"/>
+                    <TextBlock Text="Scene Import" FontSize="14" FontWeight="Bold"/>
+                </StackPanel>
+                <Border Height="140" CornerRadius="5" Margin="0,0,0,8">
+                    <Grid>
+                        <Border VerticalAlignment="Stretch" CornerRadius="5">
+                            <Border.Background>
+                                <ImageBrush ImageSource="{Binding ImportedScene.ImageSource}" Stretch="UniformToFill" Opacity="0.3" />
+                            </Border.Background>
+                        </Border>
+                        <TextBlock Text="{Binding ImportedScene.SceneName, TargetNullValue=None}" Margin="0,20,0,0" TextAlignment="Center" VerticalAlignment="Top" FontWeight="Bold"/>
+                        <ProgressBar Name="pgb_loadingScene" Visibility="Collapsed" Margin="10,55,10,10" Height="15" IsIndeterminate="True" />
+                        <StackPanel VerticalAlignment="Bottom" Margin="10">
+                            <TextBlock Text="{Binding ImportedScene.SceneAudioTrack.Name, TargetNullValue=None, StringFormat='Audio: {0}'}" />
+                            <TextBlock Text="{Binding ImportedScene.SceneSoundEffects.Count, StringFormat='Sound Effects: {0}', TargetNullValue=None}" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+                <Grid Margin="0,10,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Import directory:" VerticalAlignment="Center" ToolTip="The directory to which all audio files will be saved to."/>
+                    <TextBox Grid.Column="1" Text="{Binding ImportedSceneStoragePath, TargetNullValue={}\\imported_scene_audio}" IsReadOnly="True" Margin="8,0"/>
+                    <Button Grid.Column="2" Content="..." Click="btn_browseSceneStoragePath_Click" Width="30"/>
+                </Grid>
+            </StackPanel>
+
+            <!-- Action Buttons -->
+            <UniformGrid Columns="2" Margin="0,10,0,0">
+                <Button Content="Cancel" IsCancel="True" Click="Abort_Click" Height="30" Margin="0,0,6,0" />
+                <Button Content="Add" IsDefault="True" Click="Add_Click" Height="30" Margin="6,0,0,0" />
+            </UniformGrid>
+        </StackPanel>
+    </Border>
+</adonisControls:AdonisWindow>

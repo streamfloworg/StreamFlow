@@ -1,0 +1,392 @@
+﻿<adonisControls:AdonisWindow
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:adonisUi="clr-namespace:AdonisUI;assembly=AdonisUI"
+    xmlns:adonisControls="clr-namespace:AdonisUI.Controls;assembly=AdonisUI"
+    xmlns:adonisExtensions="clr-namespace:AdonisUI.Extensions;assembly=AdonisUI"
+    x:Class="StreamFlow.App.Views.Windows.MainWindow"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="clr-namespace:StreamFlow.App.Views.Windows"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="clr-namespace:StreamFlow.App.ViewModels.Pages"
+    xmlns:sys="clr-namespace:System;assembly=mscorlib"
+    xmlns:settings="clr-namespace:StreamFlow.Core.Data.UserOptions;assembly=StreamFlow.Core"
+    xmlns:converters="clr-namespace:StreamFlow.App.Converter"
+    xmlns:commands="clr-namespace:StreamFlow.App.Commands"
+    xmlns:controls="clr-namespace:StreamFlow.App.Controls"
+    Title="{Binding ViewModel.ApplicationTitle, Mode=OneWay}"
+    Width="1100"
+    Height="700"
+    MinWidth="1461"
+    MinHeight="600"
+    d:DataContext="{d:DesignInstance local:MainWindow, IsDesignTimeCreatable=True}"
+    DataContext="{Binding Current, RelativeSource={RelativeSource Self}}"
+    d:DesignHeight="700"
+    d:DesignWidth="1100"
+    WindowStartupLocation="CenterScreen"
+    Activated="Window_Activated"
+    HorizontalContentAlignment="Stretch"
+    mc:Ignorable="d">
+    <Window.CommandBindings>
+        <CommandBinding
+            Command="MediaCommands.TogglePlayPause"
+            CanExecute="PlayPauseCanExecute"
+            Executed="PlayPauseExecuted" />
+        <CommandBinding
+            Command="MediaCommands.Stop"
+            CanExecute="StopCanExecute"
+            Executed="StopExecuted" />
+        <CommandBinding
+            Command="MediaCommands.MuteVolume"
+            CanExecute="CanMuteVolume"
+            Executed="VolumeMuted" />
+        <CommandBinding
+            Command="MediaCommands.IncreaseVolume"
+            CanExecute="CanIncreaseVolume"
+            Executed="VolumeIncreased" />
+        <CommandBinding
+            Command="MediaCommands.DecreaseVolume"
+            CanExecute="CanDecreaseVolume"
+            Executed="VolumeDecreased"/>
+        <!--<CommandBinding
+            Command="StreamFlow.PlayAudio"
+            CanExecute="CanExecutePlayAudio"
+            Executed="PlayAudioExecuted" />-->
+    </Window.CommandBindings>
+    <Window.Resources>
+        <DrawingImage x:Key="PlayImage">
+            <DrawingImage.Drawing>
+                <DrawingGroup>
+                    <DrawingGroup.Children>
+                        <GeometryDrawing Brush="{StaticResource TextPrimaryBrush}" Geometry="M 8.8574219 5.8300781 A 0.998 0.998 0 0 0 8 6.8203125 L 8 17.179688 C 8 17.969687 8.8690632 18.449531 9.5390625 18.019531 L 17.679688 12.839844 A 1 1 0 0 0 17.679688 11.150391 L 9.5390625 5.9804688 A 0.998 0.998 0 0 0 8.8574219 5.8300781 z "/>
+                    </DrawingGroup.Children>
+                </DrawingGroup>
+            </DrawingImage.Drawing>
+        </DrawingImage>
+        <DrawingImage x:Key="StopImage">
+            <DrawingImage.Drawing>
+                <DrawingGroup>
+                    <DrawingGroup.Children>
+                        <GeometryDrawing Brush="{StaticResource TextPrimaryBrush}" Geometry="M666.7 550H333.3C287.5 550 250 512.5 250 466.7V133.3C250 87.5 287.5 50 333.3 50H666.7C712.5 50 750 87.5 750 133.3V466.7C750 512.5 712.5 550 666.7 550z"/>
+                    </DrawingGroup.Children>
+                </DrawingGroup>
+            </DrawingImage.Drawing>
+        </DrawingImage>
+        <DrawingImage x:Key="PauseImage">
+            <DrawingImage.Drawing>
+                <DrawingGroup>
+                    <DrawingGroup.Children>
+                        <GeometryDrawing Brush="{StaticResource TextPrimaryBrush}" Geometry="M 8 5 C 6.9000011 5 6 5.9000011 6 7 L 6 17 C 6 18.099999 6.9000011 19 8 19 C 9.0999989 19 10 18.099999 10 17 L 10 7 C 10 5.9000011 9.0999989 5 8 5 z M 16 5 C 14.900001 5 14 5.9000011 14 7 L 14 17 C 14 18.099999 14.900001 19 16 19 C 17.099999 19 18 18.099999 18 17 L 18 7 C 18 5.9000011 17.099999 5 16 5 z "/>
+                    </DrawingGroup.Children>
+                </DrawingGroup>
+            </DrawingImage.Drawing>
+        </DrawingImage>
+        <DrawingImage x:Key="VolumeDownImage">
+            <DrawingImage.Drawing>
+                <DrawingGroup>
+                    <DrawingGroup.Children>
+                        <GeometryDrawing Brush="{StaticResource TextPrimaryBrush}" Geometry="M3 9H7L12 4V20L7 15H3V9M14 11H22V13H14V11Z"/>
+                    </DrawingGroup.Children>
+                </DrawingGroup>
+            </DrawingImage.Drawing>
+        </DrawingImage>
+        <DrawingImage x:Key="VolumeUpImage">
+            <DrawingImage.Drawing>
+                <DrawingGroup>
+                    <DrawingGroup.Children>
+                        <GeometryDrawing Brush="{StaticResource TextPrimaryBrush}" Geometry="M3 9H7L12 4V20L7 15H3V9M14 11H17V8H19V11H22V13H19V16H17V13H14V11Z"/>
+                    </DrawingGroup.Children>
+                </DrawingGroup>
+            </DrawingImage.Drawing>
+        </DrawingImage>
+        <DrawingImage x:Key="MuteImage">
+            <DrawingImage.Drawing>
+                <DrawingGroup>
+                    <DrawingGroup.Children>
+                        <GeometryDrawing Brush="{StaticResource TextPrimaryBrush}" Geometry="M3 9H7L12 4V20L7 15H3V9M16.59 12L14 9.41L15.41 8L18 10.59L20.59 8L22 9.41L19.41 12L22 14.59L20.59 16L18 13.41L15.41 16L14 14.59L16.59 12Z"/>
+                    </DrawingGroup.Children>
+                </DrawingGroup>
+            </DrawingImage.Drawing>
+        </DrawingImage>
+        <converters:ValueConverterGroup x:Key="MediaButtonSelectorConverter">
+            <converters:BooleanInvertConverter />
+            <converters:BooleanToObjectConverter>
+                <converters:BooleanToObjectConverter.TrueValue>
+                    <StaticResource ResourceKey="PlayImage"/>
+                </converters:BooleanToObjectConverter.TrueValue>
+                <converters:BooleanToObjectConverter.FalseValue>
+                    <StaticResource ResourceKey="PauseImage"/>
+                </converters:BooleanToObjectConverter.FalseValue>
+            </converters:BooleanToObjectConverter>
+        </converters:ValueConverterGroup>
+        <converters:ValueConverterGroup x:Key="MediaCommandSelectorConverter">
+            <converters:BooleanInvertConverter />
+            <converters:BooleanToObjectConverter>
+                <converters:BooleanToObjectConverter.TrueValue>
+                    MediaCommands.Play
+                </converters:BooleanToObjectConverter.TrueValue>
+                <converters:BooleanToObjectConverter.FalseValue>
+                    MediaCommands.Pause
+                </converters:BooleanToObjectConverter.FalseValue>
+            </converters:BooleanToObjectConverter>
+        </converters:ValueConverterGroup>
+        <converters:ValueConverterGroup x:Key="MediaDescriptionSelectorConverter">
+            <converters:BooleanInvertConverter />
+            <converters:BooleanToObjectConverter>
+                <converters:BooleanToObjectConverter.TrueValue>Play</converters:BooleanToObjectConverter.TrueValue>
+                <converters:BooleanToObjectConverter.FalseValue>Pause</converters:BooleanToObjectConverter.FalseValue>
+            </converters:BooleanToObjectConverter>
+        </converters:ValueConverterGroup>
+        <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        <converters:LookupTableHelper x:Key="LookupTableHelper" />
+        <converters:ValueConverterGroup x:Key="InvertedBooleanVisibilityConverter">
+            <converters:BooleanInvertConverter />
+            <converters:BooleanToVisibilityConverter />
+        </converters:ValueConverterGroup>
+        <converters:DoubleToPercentageConverter x:Key="DoubleToPercentageConverter"/>
+        <converters:NullVisibilityConverter x:Key="NullVisibilityConverter"/>
+    </Window.Resources>
+    <Window.TaskbarItemInfo>
+        <TaskbarItemInfo x:Name="TaskBarMediaButtons">
+            <TaskbarItemInfo.ThumbButtonInfos>
+                <ThumbButtonInfoCollection>
+                    <ThumbButtonInfo
+                        x:Name="TaskBarPlayPauseButton"
+                        Command="{Binding AudioViewModel.PlayAudioCommand}"
+                        DismissWhenClicked="False"
+                        Description="{Binding AudioViewModel.IsPlaying, Converter={StaticResource MediaDescriptionSelectorConverter}, UpdateSourceTrigger=PropertyChanged}"
+                        ImageSource="{Binding AudioViewModel.IsPlaying, Converter={StaticResource MediaButtonSelectorConverter}, UpdateSourceTrigger=PropertyChanged}"/>
+                    <ThumbButtonInfo
+                        x:Name="TaskBarStopButton"
+                        Command="{Binding AudioViewModel.StopAudioCommand}"
+                        DismissWhenClicked="False"
+                        Description="Stop"
+                        ImageSource="{StaticResource ResourceKey=StopImage}"/>
+                    <ThumbButtonInfo
+                        x:Name="TaskBarMuteButton"
+                        Command="{Binding AudioViewModel.VolumeMuteCommand}"
+                        CommandParameter="Mute"
+                        DismissWhenClicked="False"
+                        Description="Mute"
+                        ImageSource="{StaticResource ResourceKey=MuteImage}"/>
+                    <ThumbButtonInfo
+                        x:Name="TaskBarVolumeDownButton"
+                        Command="{Binding AudioViewModel.VolumeDecreaseCommand}"
+                        CommandParameter="Down"
+                        DismissWhenClicked="False"
+                        Description="Volume Down"
+                        ImageSource="{StaticResource ResourceKey=VolumeDownImage}"/>
+                    <ThumbButtonInfo
+                        x:Name="TaskBarVolumeUpButton"
+                        Command="{Binding AudioViewModel.VolumeIncreaseCommand}"
+                        CommandParameter="Up"
+                        DismissWhenClicked="False"
+                        Description="Volume Up"
+                        ImageSource="{StaticResource ResourceKey=VolumeUpImage}"/>
+                </ThumbButtonInfoCollection>
+            </TaskbarItemInfo.ThumbButtonInfos>
+        </TaskbarItemInfo>
+    </Window.TaskbarItemInfo>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="220" /> <!-- Sidebar width -->
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Sidebar Navigation -->
+            <Border Grid.Column="0" Background="{DynamicResource {x:Static adonisUi:Brushes.Layer1BackgroundBrush}}" BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="0,0,1,0">
+                <Grid Margin="0,15,0,15">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />    <!-- Main Nav Items -->
+                        <RowDefinition Height="Auto" /> <!-- Footer Nav Items -->
+                    </Grid.RowDefinitions>
+
+                    <!-- Main items -->
+                    <ListBox x:Name="NavMenu"
+                             Grid.Row="0"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             SelectionChanged="NavMenu_SelectionChanged"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                                <Setter Property="Height" Value="30"/>
+                                <Setter Property="Margin" Value="5,2,10,2"/>
+                                <Setter Property="Padding" Value="10,6"/>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBoxItem x:Name="GoLiveItem">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Path Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="14" Height="14" Data="{StaticResource GoLiveIconData}" Margin="0,0,10,0"/>
+                                <TextBlock Text="Go Live" VerticalAlignment="Center" FontSize="13"/>
+                            </StackPanel>
+                        </ListBoxItem>
+                        <ListBoxItem x:Name="AudioItem">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Path Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="14" Height="14" Data="{StaticResource AudioIconData}" Margin="0,0,10,0"/>
+                                <TextBlock Text="Audio" VerticalAlignment="Center" FontSize="13"/>
+                            </StackPanel>
+                        </ListBoxItem>
+                        <ListBoxItem x:Name="ScenesItem">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Path Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="14" Height="14" Data="{StaticResource ScenesIconData}" Margin="0,0,10,0"/>
+                                <TextBlock Text="Scenes" VerticalAlignment="Center" FontSize="13"/>
+                            </StackPanel>
+                        </ListBoxItem>
+                        <ListBoxItem x:Name="ComposeItem">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Path Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="14" Height="14" Data="{StaticResource ComposeIconData}" Margin="0,0,10,0"/>
+                                <TextBlock Text="Compose" VerticalAlignment="Center" FontSize="13"/>
+                            </StackPanel>
+                        </ListBoxItem>
+                    </ListBox>
+
+                    <!-- Footer items -->
+                    <ListBox x:Name="NavMenuFooter"
+                             Grid.Row="1"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             SelectionChanged="NavMenuFooter_SelectionChanged"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                                <Setter Property="Height" Value="30"/>
+                                <Setter Property="Margin" Value="10,2,10,2"/>
+                                <Setter Property="Padding" Value="10,6"/>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBoxItem x:Name="DebugWindowItem" Visibility="{Binding ViewModel.IsDebug}">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Path Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="14" Height="14" Data="{StaticResource DebugIconData}" Margin="0,0,10,0"/>
+                                <TextBlock Text="Debug" VerticalAlignment="Center" FontSize="13"/>
+                            </StackPanel>
+                        </ListBoxItem>
+                        <ListBoxItem x:Name="SettingsItem">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Path Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="14" Height="14" Data="{StaticResource SettingsIconData}" Margin="0,0,10,0"/>
+                                <TextBlock Text="Settings" VerticalAlignment="Center" FontSize="13"/>
+                            </StackPanel>
+                        </ListBoxItem>
+                    </ListBox>
+                </Grid>
+            </Border>
+
+            <!-- Main Content Area -->
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="30" />
+                </Grid.RowDefinitions>
+
+                <Frame Grid.Row="0" x:Name="ContentFrame" NavigationUIVisibility="Hidden" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+
+                <StackPanel
+                    Visibility="{Binding Children, RelativeSource={RelativeSource Self}, Converter={StaticResource NullVisibilityConverter}}"
+                    Panel.ZIndex="1"
+                    x:FieldModifier="public"
+                    x:Name="AudioControlPresenter"
+                    Grid.Row="0"
+                    Margin="0,0,10,0"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Bottom" />
+
+                <StackPanel
+                    Visibility="{Binding Children, RelativeSource={RelativeSource Self}, Converter={StaticResource NullVisibilityConverter}}"
+                    Panel.ZIndex="1"
+                    x:FieldModifier="public"
+                    x:Name="ibPresenter"
+                    Grid.Row="0"
+                    Margin="0,0,10,0"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Bottom" />
+
+                <Grid Grid.Row="1" HorizontalAlignment="Stretch" VerticalAlignment="Bottom" Margin="1,0,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="0" />
+                        <RowDefinition Height="30"/>
+                    </Grid.RowDefinitions>
+                    <DockPanel
+                        Height="30"
+                        Grid.Row="1"
+                        Visibility="Visible"
+                        Background="#20000000"
+                        Width="{Binding ActualWidth, RelativeSource={RelativeSource FindAncestor, AncestorLevel=1, AncestorType=Grid}}"
+                        VerticalAlignment="Bottom">
+                        <TextBlock
+                            DockPanel.Dock="Left"
+                            VerticalAlignment="Center"
+                            Margin="3,0,5,0"
+                            Padding="4,0,0,3"
+                            FontSize="12"
+                            MaxWidth="240"
+                            TextTrimming="CharacterEllipsis"
+                            ToolTip="{Binding AppModelInstance.Settings.OutputDevice, Mode=OneWay}"
+                            Text="{Binding AppModelInstance.Settings.OutputDevice, Mode=OneWay, UpdateSourceTrigger=PropertyChanged}"
+                            x:Name="OutputDeviceText"/>
+
+                        <!-- Core status/resource stats — declared first among the Dock="Right"
+                             children so it lands flush against the absolute right edge (WPF
+                             docks each side's children in declaration order, outermost first).
+                             Monospace font + fixed-width padding (see MainWindowViewModel's
+                             CoreStatsText) keeps this from shifting position as the numbers
+                             change. -->
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="15,0,10,0">
+                            <Ellipse Width="8" Height="8" Margin="0,0,5,0" VerticalAlignment="Center" Fill="{Binding ViewModel.CoreStatusBrush}"/>
+                            <TextBlock Text="{Binding ViewModel.CoreStatusText}" VerticalAlignment="Center" FontSize="12" Margin="0,0,10,0"/>
+                            <TextBlock Text="{Binding ViewModel.CoreStatsText}" VerticalAlignment="Center" FontSize="11"
+                                       FontFamily="Consolas" Foreground="{StaticResource TextSecondaryBrush}"/>
+                        </StackPanel>
+
+                        <!-- Add Sound Effect Status Indicator -->
+                        <TextBlock
+                            Foreground="LightBlue"
+                            DockPanel.Dock="Right"
+                            VerticalAlignment="Center"
+                            Margin="3,0,15,0"
+                            FontSize="12"
+                            Text="{Binding ViewModel.PlayingSoundEffectsStatus, Mode=OneWay, UpdateSourceTrigger=PropertyChanged}"
+                            Visibility="{Binding ViewModel.HasSoundEffectsPlaying, Converter={StaticResource BooleanToVisibilityConverter}}"
+                            ToolTip="Currently playing sound effects" />
+
+                        <!-- Optional: Add a small icon indicator -->
+                        <Path
+                            DockPanel.Dock="Right"
+                            VerticalAlignment="Center"
+                            HorizontalAlignment="Right"
+                            Height="14"
+                            Width="14"
+                            Stretch="Uniform"
+                            Data="{StaticResource SpeakerIconData}"
+                            Fill="LightBlue"
+                            Visibility="{Binding ViewModel.HasSoundEffectsPlaying, Converter={StaticResource BooleanToVisibilityConverter}}"
+                            ToolTip="Sound effects are currently playing">
+                            <Path.Style>
+                                <Style TargetType="Path">
+                                    <Style.Triggers>
+                                        <Trigger Property="Visibility" Value="Visible">
+                                            <Trigger.EnterActions>
+                                                <BeginStoryboard>
+                                                    <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                                                        <DoubleAnimation
+                                                            Storyboard.TargetProperty="Opacity"
+                                                            From="0.5" To="1.0"
+                                                            Duration="0:0:1" />
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </Trigger.EnterActions>
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Path.Style>
+                        </Path>
+                    </DockPanel>
+                </Grid>
+            </Grid>
+        </Grid>
+    </Grid>
+</adonisControls:AdonisWindow>

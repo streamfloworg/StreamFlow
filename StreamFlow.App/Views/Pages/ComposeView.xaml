@@ -1,0 +1,364 @@
+﻿<Page
+    x:Class="StreamFlow.App.Views.Pages.ComposeView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:adonisUi="clr-namespace:AdonisUI;assembly=AdonisUI"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:behaviors="clr-namespace:StreamFlow.App.Helpers.Behaviors"
+    xmlns:compose="clr-namespace:StreamFlow.App.ViewModels.Pages.Compose"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="clr-namespace:StreamFlow.App.Views.Pages"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:converters="clr-namespace:StreamFlow.App.Converter"
+    xmlns:rcconverters="clr-namespace:RichCanvas.Converters;assembly=RichCanvas"
+    xmlns:rc="clr-namespace:RichCanvas;assembly=RichCanvas"
+    Title="ComposeView"
+    d:DataContext="{d:DesignInstance local:ComposeView, IsDesignTimeCreatable=False}"
+    d:DesignHeight="720"
+    d:DesignWidth="1280"
+    Background="Transparent"
+    Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+    ScrollViewer.CanContentScroll="False"
+    mc:Ignorable="d"
+    Margin="0,0,0,-32">
+    <Page.Resources>
+        <rcconverters:UIntToRectConverter x:Key="UIntToRectConverter" />
+        <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        <converters:KindToVisibilityConverter x:Key="KindToVisibilityConverter" />
+        <converters:KindToOpacityConverter x:Key="KindToOpacityConverter" />
+        <DrawingGroup x:Key="RectangleGridGeometry">
+            <GeometryDrawing>
+                <GeometryDrawing.Pen>
+                    <Pen Brush="{StaticResource Surface0Brush}" Thickness="0.1" DashCap="Flat" />
+                </GeometryDrawing.Pen>
+                <GeometryDrawing.Geometry>
+                    <LineGeometry StartPoint="0,0" EndPoint="10,0"/>
+                </GeometryDrawing.Geometry>
+            </GeometryDrawing>
+            <GeometryDrawing>
+                <GeometryDrawing.Pen>
+                    <Pen Brush="Transparent" Thickness="0.1" DashCap="Flat" />
+                </GeometryDrawing.Pen>
+                <GeometryDrawing.Geometry>
+                    <RectangleGeometry Rect="0,1,10,11"/>
+                </GeometryDrawing.Geometry>
+            </GeometryDrawing>
+            <DrawingGroup.ClipGeometry>
+                <RectangleGeometry Rect="0,0,10,10" />
+            </DrawingGroup.ClipGeometry>
+        </DrawingGroup>
+    </Page.Resources>
+
+    <Grid Margin="-20,0,10,40">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <!--PreviewMouseLeftButtonDown="WorkflowCanvas_OnPreviewMouseLeftButtonDown"-->
+            <!--Loaded="WorkflowCanvas_OnLoaded"-->
+
+        <rc:RichCanvas
+            ViewportZoom="{Binding ViewModel.CanvasZoom, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Stretch"
+            CanSelectMultipleItems="False"
+            RealTimeDraggingEnabled="True"
+            RealTimeSelectionEnabled="True"
+            CanHorizontallyScroll="True"
+            CanVerticallyScroll="True"
+            IsManipulationEnabled="True"
+            EnableAutoPanning="True"
+            SelectionChanged="WorkflowCanvas_SelectionChanged"
+            Margin="30,0,0,0"
+            AllowDrop="True"
+            EnableSnapping="True"
+            MouseMove="OnSelectionDragging"
+            MouseUp="OnDragComplete"
+            GridSpacing="{Binding ViewModel.GridSize, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+            ItemsSource="{Binding ViewModel.Types, Delay=500, TargetNullValue={x:Null}}"
+            SelectedItem="{Binding ViewModel.SelectedType}"
+            SelectedItems="{Binding ViewModel.SelectedTypes}"
+            behaviors:CanvasDragBehavior.IsEnabled="True"
+            behaviors:CanvasDragBehavior.ClampToCanvas="True"
+            x:Name="WorkflowCanvas">
+            <rc:RichCanvas.Background>
+                <DrawingBrush
+                        TileMode="Tile"
+                        ViewportUnits="Absolute"
+                        Viewport="{Binding GridSpacing, ElementName=WorkflowCanvas, Converter={StaticResource UIntToRectConverter}}"
+                        Transform="{Binding AppliedTransform, ElementName=WorkflowCanvas}"
+                        Drawing="{StaticResource RectangleGridGeometry}" />
+            </rc:RichCanvas.Background>
+            <rc:RichCanvas.ItemContainerStyle>
+                <Style TargetType="rc:RichCanvasContainer">
+
+                    <Setter Property="Top"
+                    Value="{Binding Top, Mode=TwoWay}" />
+
+                    <Setter Property="Left"
+                    Value="{Binding Left, Mode=TwoWay}" />
+
+                    <Setter Property="Width"
+                    Value="{Binding Width, Mode=TwoWay}" />
+
+                    <Setter Property="Height"
+                    Value="{Binding Height, Mode=TwoWay}" />
+
+                    <Style.Triggers>
+                        <Trigger
+                            Property="IsSelected"
+                            Value="True">
+                            <Setter
+                                Property="Opacity"
+                                Value="1" />
+                            <Setter
+                                Property="BorderBrush"
+                                Value="DodgerBlue" />
+                            <Setter
+                                Property="BorderThickness"
+                                Value="2"/>
+                        </Trigger>
+                        <Trigger
+                            Property="IsSelected"
+                            Value="False">
+                            <Setter
+                                Property="Opacity"
+                                Value="0.5" />
+                            <Setter
+                                Property="BorderBrush"
+                                Value="Transparent" />
+                            <Setter
+                                Property="BorderThickness"
+                                Value="2"/>
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+            </rc:RichCanvas.ItemContainerStyle>
+            <rc:RichCanvas.ItemTemplate>
+                <DataTemplate DataType="{x:Type compose:CanvasAudioTypeViewModel}">
+                    <Border
+                            x:Name="AudioContainer"
+                            CornerRadius="4"
+                            Opacity="{Binding Path=Kind, Converter={StaticResource KindToOpacityConverter}}"
+                            SnapsToDevicePixels="False"
+                            ToolTip="{Binding DisplayName}"
+                            Width="{Binding Width}"
+                            Height="{Binding GridSpacing, RelativeSource={RelativeSource AncestorType=rc:RichCanvas}}"
+                            Visibility="{Binding Visibility, UpdateSourceTrigger=PropertyChanged}"
+                            behaviors:CanvasResizeBehavior.RowSize="{Binding GridSpacing, RelativeSource={RelativeSource AncestorType=rc:RichCanvas}}">
+                        <Border
+                            x:Name="SelectionBorder"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            Width="{Binding Width}"
+                            Height="{Binding GridSpacing, RelativeSource={RelativeSource AncestorType=rc:RichCanvas}}">
+                            <Grid>
+                                <Border
+                                    Background="{DynamicResource LineBrush}"
+                                    BorderThickness="1,1,0,0"
+                                    BorderBrush="Bisque"
+                                    Margin="0"
+                                    CornerRadius="3,0,3,0"
+                                    VerticalAlignment="Top"
+                                    HorizontalAlignment="Left"
+                                    Visibility="{Binding Kind, Converter={StaticResource KindToVisibilityConverter}}"
+                                    Width="Auto"
+                                    Height="Auto">
+                                    <TextBlock
+                                        Margin="2"
+                                        FontSize="12"
+                                        Visibility="{Binding Kind, Converter={StaticResource KindToVisibilityConverter}}"
+                                        Foreground="{DynamicResource TextPrimaryBrush}"
+                                        Text="{Binding DisplayName}" />
+                                </Border>
+                                <Grid
+                                    Width="Auto"
+                                    Height="{Binding GridSpacing, RelativeSource={RelativeSource AncestorType=rc:RichCanvas}}"
+                                    Visibility="{Binding IsSelected, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Thumb
+                                        Grid.Row="0"
+                                        Grid.RowSpan="4"
+                                        Grid.Column="0"
+                                        Width="3"
+                                        Margin="-1"
+                                        Height="85"
+                                        Cursor="SizeWE"
+                                        behaviors:CanvasResizeBehavior.Handle="Left"
+                                        behaviors:CanvasResizeBehavior.RowSize="{Binding GridSpacing, RelativeSource={RelativeSource AncestorType=rc:RichCanvas}}">
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Border
+                                                    BorderBrush="{DynamicResource TextPrimaryBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="2" />
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+
+                                    <Thumb
+                                    Grid.Row="0"
+                                    Grid.RowSpan="4"
+                                    Grid.Column="2"
+                                    Width="3"
+                                    Margin="-1"
+                                    Height="85"
+                                    Cursor="SizeWE"
+                                    behaviors:CanvasResizeBehavior.Handle="Right"
+                                    behaviors:CanvasResizeBehavior.RowSize="{Binding GridSpacing, RelativeSource={RelativeSource AncestorType=rc:RichCanvas}}">
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Border
+                                            BorderBrush="{DynamicResource TextPrimaryBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="2" />
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                    </Border>
+                    <DataTemplate.Triggers>
+                        <DataTrigger Binding="{Binding Kind}" Value="SoundEffect">
+                            <Setter TargetName="AudioContainer" Property="Background" Value="{StaticResource AccentDimFadedBrush}" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding Kind}" Value="AudioTrack">
+                            <Setter TargetName="AudioContainer" Property="Background" Value="{StaticResource AccentDimBrush}" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                            <Setter TargetName="SelectionBorder" Property="BorderBrush" Value="DodgerBlue"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding IsSelected}" Value="False">
+                            <Setter TargetName="SelectionBorder" Property="BorderBrush" Value="Transparent"/>
+                        </DataTrigger>
+                    </DataTemplate.Triggers>
+                </DataTemplate>
+            </rc:RichCanvas.ItemTemplate>
+            <rc:RichCanvas.ContextMenu>
+                <ContextMenu>
+                    <MenuItem Header="Eat">
+                        <MenuItem Header="a">
+                            <MenuItem Header="dick"/>
+                        </MenuItem>
+                    </MenuItem>
+                </ContextMenu>
+            </rc:RichCanvas.ContextMenu>
+        </rc:RichCanvas> 
+        <Border
+            Grid.Row="1"
+            Margin="28,12,0,0"
+            Padding="10,4,4,4"
+            Background="{DynamicResource LayerFillColorDefaultBrush}"
+            CornerRadius="8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="15" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="15" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="15" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="0" Width="40" Click="AddButton_Click" x:Name="AddButton">
+                    <Path Stretch="Uniform" Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Data="{StaticResource AddIconData}" Width="12" Height="12"/>
+                    <Button.ContextMenu>
+                        <ContextMenu x:Name="AddMenu">
+                            <MenuItem Header="Audio Track" Command="{Binding ViewModel.AddAudioTrackCommand}" />
+                            <MenuItem Header="Sound Effect" Command="{Binding ViewModel.AddSoundEffectCommand}" />
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
+                <Button Grid.Column="2" Width="40" Click="GridButton_Click" x:Name="GridButton">
+                    <Path Stretch="Uniform" Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Data="{StaticResource ScenesIconData}" Width="12" Height="12"/>
+                    <Button.ContextMenu>
+                        <ContextMenu x:Name="GridMenu">
+                            <MenuItem Header="Audio Track" Command="{Binding ViewModel.AddAudioTrackCommand}" />
+                            <MenuItem Header="Sound Effect" Command="{Binding ViewModel.AddSoundEffectCommand}" />
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
+                <StackPanel
+                    Grid.Column="4"
+                    Orientation="Horizontal"
+                    VerticalAlignment="Stretch"
+                    MaxWidth="260"
+                    AutomationProperties.HelpText="Row size">
+                    <Path
+                        HorizontalAlignment="Left"
+                        Margin="0,0,8,0"
+                        VerticalAlignment="Center"
+                        Stretch="Uniform"
+                        Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"
+                        Data="{StaticResource LevelMeterIconData}" Width="12" Height="12"/>
+                    <Slider
+                        Width="100"
+                        Minimum="48"
+                        Maximum="96"
+                        TickFrequency="8"
+                        IsSnapToTickEnabled="False"
+                        LargeChange="1"
+                        SmallChange="1"
+                        VerticalAlignment="Center"
+                        HorizontalAlignment="Center"
+                        TickPlacement="BottomRight"
+                        ToolTip="{Binding ViewModel.GridSize, StringFormat='{}{0:0.00}'}"
+                        Value="{Binding ViewModel.GridSize, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock
+                        Margin="8,0,20,0"
+                        VerticalAlignment="Center"
+                        HorizontalAlignment="Center"
+                        FontSize="12"
+                        Text="{Binding ViewModel.GridSize, StringFormat='{}{0:0.00}'}" />
+                </StackPanel>
+
+                <StackPanel
+                    Grid.Column="6"
+                    Orientation="Horizontal"
+                    Margin="5"
+                    MaxWidth="260"
+                        VerticalAlignment="Center"
+                        HorizontalAlignment="Center"
+                    AutomationProperties.HelpText="Zoom Level">
+                    <Path
+                        Margin="0,0,5,0"
+                        VerticalAlignment="Center"
+                        HorizontalAlignment="Center"
+                        Stretch="Uniform"
+                        Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"
+                        Data="{StaticResource LevelMeterIconData}" Width="12" Height="12"/>
+                    <Slider
+                        Width="120"
+                        Minimum="0.5"
+                        Maximum="3"
+                        LargeChange="0.5"
+                        SmallChange="0.1"
+                        TickFrequency="1"
+                        IsSnapToTickEnabled="False"
+                        TickPlacement="BottomRight"
+                        VerticalAlignment="Center"
+                        HorizontalAlignment="Center"
+                        ToolTip="{Binding ViewModel.CanvasZoom, StringFormat='{}{0:0.00}×'}"
+                        Value="{Binding ViewModel.CanvasZoom, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                        MouseDoubleClick="Slider_MouseDoubleClick" />
+                    <TextBlock
+                        Margin="8,0,0,0"
+                        VerticalAlignment="Center"
+                        HorizontalAlignment="Center"
+                        FontSize="12"
+                        Text="{Binding ViewModel.CanvasZoom, StringFormat='{}{0:0.00}×'}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Page>

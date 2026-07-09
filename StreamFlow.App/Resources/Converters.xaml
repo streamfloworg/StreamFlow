@@ -1,0 +1,27 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:converters="clr-namespace:StreamFlow.App.Converter">
+
+  <!-- Converters shared across the app -->
+    <converters:ColorMediaBrushConverter x:Key="ColorMediaBrushConverter" />
+    <converters:BooleanToResourceConverter x:Key="BooleanToResourceConverter" />
+    <converters:ObjectToPlayingStringConverter x:Key="ObjectToPlayingStringConverter" />
+    <converters:DecimalToAudioTime x:Key="DecimalToAudioTimeConverter" />
+    <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+    <converters:BooleanInvertConverter x:Key="BooleanInvertConverter" />
+    <converters:NextAudioTrackToBooleanConverter x:Key="NextAudioTrackToBooleanConverter" />
+    <converters:IsDefaultAudioToBooleanConverter x:Key="IsDefaultAudioToBooleanConverter" />
+    <converters:VisibilityToBooleanConverter x:Key="VisibilityToBooleanConverter" />
+    <converters:NullVisibilityConverter x:Key="NullVisibilityConverter" />
+    <converters:InvertedNullVisibilityConverter x:Key="InvertedNullVisibilityConverter" />
+    <converters:ValueConverterGroup x:Key="InvertedBooleanVisibilityConverter">
+        <converters:BooleanInvertConverter />
+        <converters:BooleanToVisibilityConverter />
+    </converters:ValueConverterGroup>
+    <converters:AudioStateToIconConverter x:Key="AudioStateToIconConverter" />
+    <converters:AudioIsPlayingConverter x:Key="AudioIsPlayingConverter" />
+    <converters:DebugDummyConverter x:Key="DebugDummyConverter"/>
+    <converters:AudioTypeToAbbreviationConverter x:Key="AudioTypeToAbbreviationConverter" />
+    <converters:TimeSpanToDoubleConverter x:Key="TimeSpanToDoubleConverter" />
+
+</ResourceDictionary>

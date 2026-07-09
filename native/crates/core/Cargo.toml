@@ -1,0 +1,43 @@
+﻿[package]
+name        = "streamflow-core"
+version.workspace    = true
+edition.workspace    = true
+authors.workspace    = true
+license.workspace    = true
+description = "Native capture, encoding, and streaming core for StreamFlow"
+
+[[bin]]
+name = "streamflow-core"
+path = "src/main.rs"
+
+[dependencies]
+streamflow-ipc      = { workspace = true }
+tokio               = { workspace = true }
+serde               = { workspace = true }
+serde_json          = { workspace = true }
+notify              = { workspace = true }
+tracing             = { workspace = true }
+tracing-subscriber  = { workspace = true }
+anyhow              = { workspace = true }
+windows             = { workspace = true }
+ffmpeg-sys-next     = { workspace = true }
+cpal                = { workspace = true }
+ringbuf             = { workspace = true }
+spin_sleep = "1.3.3"
+libblur    = "0.24.0"
+base64     = "0.22"
+# GPU blur-layer pipeline (gl_blur.rs): glium renders the two-pass Gaussian, glutin provides
+# the WGL context bootstrapped off a hidden window, raw-window-handle bridges the two.
+glium             = { version = "0.36", default-features = false }
+glutin            = { version = "0.32", default-features = false, features = ["wgl"] }
+raw-window-handle = "0.6"
+
+[dev-dependencies]
+tokio               = { workspace = true, features = ["test-util", "full"] }
+proptest            = { workspace = true }
+mockall             = { workspace = true }
+rstest              = { workspace = true }
+insta               = { workspace = true }
+
+[lints]
+workspace   = true

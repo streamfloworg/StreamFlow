@@ -1,0 +1,17 @@
+<Project>
+
+  <!--
+    Single source of truth for the app's version across every StreamFlow-owned project
+    (App, Core, Shared, Tests, StreamDeck plugin). CI overrides this by passing
+    -p:Version=X.Y.Z (derived from the pushed release tag); local/dev builds fall back to the
+    placeholder below. Deliberately does NOT apply to vendored submodules (SoundFlow,
+    atldotnet, libxmpBindings) - those ship their own versioning and picking up ours here would
+    just be noise in their assembly metadata.
+  -->
+  <PropertyGroup Condition="!$(MSBuildProjectDirectory.Contains('\SoundFlow\')) And
+                            !$(MSBuildProjectDirectory.Contains('\atldotnet\')) And
+                            !$(MSBuildProjectDirectory.Contains('\libxmpBindings\'))">
+    <Version Condition="'$(Version)' == ''">0.0.1-dev</Version>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,267 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StreamFlow URI Protocol Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        h1 {
+            color: #667eea;
+            margin-top: 0;
+        }
+        .test-section {
+            margin: 30px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        .test-section h2 {
+            margin-top: 0;
+            color: #555;
+            font-size: 1.2em;
+        }
+        .test-link {
+            display: block;
+            padding: 12px 20px;
+            margin: 10px 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+        .test-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        .test-link code {
+            background: rgba(255,255,255,0.2);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+        .instructions {
+            background: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+        .instructions h3 {
+            margin-top: 0;
+            color: #0066cc;
+        }
+        .note {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            padding: 12px;
+            border-radius: 6px;
+            margin: 15px 0;
+            font-size: 0.95em;
+        }
+        .input-group {
+            margin: 20px 0;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #555;
+        }
+        .input-group input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 1em;
+            box-sizing: border-box;
+        }
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .btn {
+            padding: 10px 20px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        .btn:hover {
+            background: #218838;
+            transform: translateY(-1px);
+        }
+        #customLink {
+            display: inline-block;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎵 StreamFlow URI Protocol Tester</h1>
+        
+        <div class="instructions">
+            <h3>📋 Instructions</h3>
+            <ol>
+                <li>Make sure StreamFlow is running at least once (to register the protocol)</li>
+                <li>Get an audio ID from StreamFlow (check the Audio object's <code>Id</code> property)</li>
+                <li>Replace the placeholder IDs below with your actual audio IDs</li>
+                <li>Click any link to test the protocol</li>
+            </ol>
+        </div>
+
+        <div class="test-section">
+            <h2>Basic Tests</h2>
+            <a href="streamflow://play/jYXHPIiK" class="test-link">
+                🎵 Play Audio <code>10 Years - Fix Me</code>
+            </a>
+            <a href="streamflow://play/TG2OWQtk" class="test-link">
+                🎵 Play Audio <code>Highly Suspect - My Name Is Human [Official Video]</code>
+            </a>
+        </div>
+
+        <div class="test-section">
+            <h2>Loop Point Tests</h2>
+            <a href="streamflow://play/Zp3aDHAo?loop=Loop%202" class="test-link">
+                🔁 Play with Loop "Loop 2"
+            </a>
+            <a href="streamflow://play/Zp3aDHAo?loop=L1aB" class="test-link">
+                🔁 Play with Loop ID <code>ZaP1</code> "Loop 2"
+            </a>
+            <a href="streamflow://play/Zp3aDHAo?loop=Loop 3" class="test-link">
+                🔁 Play with Loop "Loop 3"
+            </a>
+        </div>
+
+        <div class="test-section">
+            <h2>Position Tests</h2>
+            <a href="streamflow://play/OqONmJkw?position=15" class="test-link">
+                ⏩ Start at 15 seconds
+            </a>
+            <a href="streamflow://play/OqONmJkw?position=30" class="test-link">
+                ⏩ Start at 30 seconds
+            </a>
+            <a href="streamflow://play/OqONmJkw?position=60" class="test-link">
+                ⏩ Start at 1 minute
+            </a>
+        </div>
+
+        <div class="test-section">
+            <h2>Combined Tests</h2>
+            <a href="streamflow://play/Zp3aDHAo?loop=L1aB&position=5" class="test-link">
+                🎯 Loop "Loop 2" by ID 'L1aB' + Start at 5s
+            </a>
+            <a href="streamflow://play/Zp3aDHAo?loop=Loop%202&position=10" class="test-link">
+                🎯 Loop "Loop 2" + Start at 10s
+            </a>
+            <a href="streamflow://play/Zp3aDHAo?loop=Loop%203&position=15" class="test-link">
+                🎯 Loop "Loop 3" + Start at 15s
+            </a>
+        </div>
+
+        <div class="test-section">
+            <h2>Custom URI Builder</h2>
+            <div class="input-group">
+                <label for="audioId">Audio ID (8 characters):</label>
+                <input type="text" id="audioId" placeholder="e.g., AbC123De" maxlength="8">
+            </div>
+            <div class="input-group">
+                <label for="loopId">Loop ID or Name (optional):</label>
+                <input type="text" id="loopId" placeholder="e.g., intro or L1aB">
+            </div>
+            <div class="input-group">
+                <label for="position">Position in seconds (optional):</label>
+                <input type="number" id="position" placeholder="e.g., 30" min="0" step="0.1">
+            </div>
+            <button class="btn" onclick="buildCustomUri()">🔗 Build Custom URI</button>
+            <div id="customUriResult" style="margin-top: 15px;"></div>
+        </div>
+
+        <div class="instructions" style="margin-top: 30px;">
+            <h3>🔍 How to Get Your Audio IDs</h3>
+            <p>In StreamFlow, you can get audio IDs programmatically:</p>
+            <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto;">
+var audio = AppModel.Instance.Audios.First();
+string audioId = audio.Id; // e.g., "AbC123De"
+string uri = StreamFlowUri.Build(audioId);
+Console.WriteLine(uri);
+            </pre>
+            <p>Consider adding a "Copy URI" button in your UI to make this easier!</p>
+        </div>
+    </div>
+
+    <script>
+        function buildCustomUri() {
+            const audioId = document.getElementById('audioId').value.trim();
+            const loopId = document.getElementById('loopId').value.trim();
+            const position = document.getElementById('position').value.trim();
+
+            if (!audioId) {
+                alert('Please enter an Audio ID');
+                return;
+            }
+
+            let uri = `streamflow://play/${audioId}`;
+            const params = [];
+
+            if (loopId) {
+                params.push(`loop=${encodeURIComponent(loopId)}`);
+            }
+            if (position) {
+                params.push(`position=${position}`);
+            }
+
+            if (params.length > 0) {
+                uri += '?' + params.join('&');
+            }
+
+            const resultDiv = document.getElementById('customUriResult');
+            resultDiv.innerHTML = `
+                <div style="background: #e7f3ff; padding: 15px; border-radius: 6px; border: 1px solid #b3d9ff;">
+                    <strong>Your Custom URI:</strong><br>
+                    <code style="background: white; padding: 8px; display: block; margin-top: 8px; border-radius: 4px; word-break: break-all;">${uri}</code>
+                    <a href="${uri}" class="test-link" style="margin-top: 10px;">🚀 Test This URI</a>
+                    <button class="btn" style="margin-top: 10px;" onclick="copyToClipboard('${uri}')">📋 Copy to Clipboard</button>
+                </div>
+            `;
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                alert('URI copied to clipboard!');
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                alert('URI copied to clipboard!');
+            });
+        }
+    </script>
+</body>
+</html>

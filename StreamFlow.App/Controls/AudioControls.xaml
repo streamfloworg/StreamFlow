@@ -1,0 +1,276 @@
+﻿<UserControl
+    x:Class="StreamFlow.App.Controls.AudioControls"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:adonisUi="clr-namespace:AdonisUI;assembly=AdonisUI"
+    xmlns:adonisControls="clr-namespace:AdonisUI.Controls;assembly=AdonisUI"
+    xmlns:adonisExtensions="clr-namespace:AdonisUI.Extensions;assembly=AdonisUI"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="clr-namespace:StreamFlow.App.ViewModels.Pages"
+    xmlns:controls="clr-namespace:StreamFlow.App.Controls"
+    xmlns:converters="clr-namespace:StreamFlow.App.Converter"
+    xmlns:ac="clr-namespace:StreamFlow.App.Commands"
+    d:DataContext="{d:DesignInstance vm:AudioViewModel, IsDesignTimeCreatable=True}"
+    DataContext="{Binding ViewModel, RelativeSource={RelativeSource Self}}"
+    mc:Ignorable="d"
+    x:Name="AudioController"
+    d:Foreground="{StaticResource TextPrimaryBrush}">
+    <UserControl.Resources>
+        <converters:PrecisionConverter x:Key="PrecisionConverter"/>
+
+        <!-- Skip-back/skip-forward icon geometries — a bar plus a triangle, the standard
+             "previous/next track" glyph. Authored as compound geometries (not a single hand
+             path) so they're easy to verify/tweak. -->
+        <GeometryGroup x:Key="SkipPreviousIconData" FillRule="Nonzero">
+            <RectangleGeometry Rect="0,1,2,12"/>
+            <PathGeometry Figures="M 13,1 L 13,13 L 3.5,7 Z"/>
+        </GeometryGroup>
+        <GeometryGroup x:Key="SkipNextIconData" FillRule="Nonzero">
+            <RectangleGeometry Rect="11,1,2,12"/>
+            <PathGeometry Figures="M 0,1 L 0,13 L 9.5,7 Z"/>
+        </GeometryGroup>
+        <!-- Material Design "repeat" / "shuffle" glyphs. -->
+        <Geometry x:Key="RepeatIconData">M7,7H17V10L21,6L17,2V5H5V11H7V7M17,17H7V14L3,18L7,22V19H19V13H17V17Z</Geometry>
+        <Geometry x:Key="ShuffleIconData">M14.83,13.41L13.42,14.82L16.55,17.95L14.5,20H20V14.5L17.96,16.54L14.83,13.41M14.5,4L16.54,6.04L4,18.59L5.41,20L17.96,7.46L20,9.5V4M10.59,9.17L5.41,4L4,5.41L9.17,10.58L10.59,9.17Z</Geometry>
+    </UserControl.Resources>
+
+    <!-- Player card: art | title+waveform+scrubber | transport. Row 0 in AudioView.xaml is
+         Auto-height, so this can be as tall as it needs without disturbing the library list
+         below it. -->
+    <Border MaxWidth="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType={x:Type Page}}}"
+            Background="{DynamicResource {x:Static adonisUi:Brushes.Layer1BackgroundBrush}}"
+            BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}"
+            BorderThickness="1" CornerRadius="10" Padding="16,14">
+        <Grid x:Name="ControlHolder">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*" MinWidth="420"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Album art placeholder - displays track's cover art if available, otherwise shows the vinyl record glyph -->
+            <Border Grid.Column="0" Width="84" Height="84" CornerRadius="10" Margin="0,0,16,0" VerticalAlignment="Center" ClipToBounds="True">
+                <Grid>
+                    <!-- Vinyl record icon placeholder -->
+                    <Border x:Name="VinylPlaceholder" CornerRadius="6">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding AudioTrack.ImageSource}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#CC9575CD" Offset="0"/>
+                                <GradientStop Color="#9575CD" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                        <Grid>
+                            <Ellipse Width="36" Height="36" Stroke="White" StrokeThickness="1.5" Opacity="0.55"/>
+                            <Ellipse Width="11" Height="11" Fill="White" Opacity="0.9"/>
+                            <Ellipse Width="4" Height="4" Fill="{StaticResource AccentBrush}"/>
+                        </Grid>
+                    </Border>
+                    <!-- Real cover art image -->
+                    <Image x:Name="CoverImage" Stretch="UniformToFill" ClipToBounds="True" Source="{Binding AudioTrack.ImageSource}">
+                        <Image.Style>
+                            <Style TargetType="Image">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding AudioTrack.ImageSource}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Image.Style>
+                        <Image.OpacityMask>
+                            <VisualBrush>
+                                <VisualBrush.Visual>
+                                    <Rectangle Width="84" Height="84" Fill="White" RadiusX="6" RadiusY="6"/>
+                                </VisualBrush.Visual>
+                            </VisualBrush>
+                        </Image.OpacityMask>
+                    </Image>
+                </Grid>
+            </Border>
+
+            <!-- Title, waveform, scrubber -->
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
+                <TextBlock
+                    x:Name="AudioTitle"
+                    TextTrimming="CharacterEllipsis"
+                    HorizontalAlignment="Left"
+                    Margin="0,0,0,6"
+                    FontWeight="Bold"
+                    FontSize="14"
+                    Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"
+                    IsHitTestVisible="{Binding TrackLoaded, UpdateSourceTrigger=PropertyChanged}"
+                    Text="{Binding AudioTrack.Name}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Opacity" Value="0"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding TrackLoaded, UpdateSourceTrigger=PropertyChanged}" Value="True">
+                                    <DataTrigger.EnterActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation
+                                                Storyboard.TargetProperty="Opacity"
+                                                From="0"
+                                                To="1"
+                                                BeginTime="00:00:00"
+                                                Duration="00:00:00.50" />
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </DataTrigger.EnterActions>
+                                    <DataTrigger.ExitActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation
+                                                Storyboard.TargetProperty="Opacity"
+                                                From="1"
+                                                To="0"
+                                                BeginTime="00:00:00"
+                                                Duration="00:00:00.50" />
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </DataTrigger.ExitActions>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+
+                <!-- Realtime audio visualizer waveform (populated programmatically in AudioControls.xaml.cs). -->
+                <StackPanel x:Name="WaveformDisplay" Orientation="Horizontal" Height="28" Margin="0,0,0,6" Focusable="False" VerticalAlignment="Center"/>
+
+                <!-- Scrubber: elapsed/total flank a thin fill-track slider with a round thumb —
+                     same visual language as the channel strip's fader (a groove + solid cap),
+                     see DawScrubSliderStyle in Theme/Controls.xaml. -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Style="{StaticResource MonoTimeText}" FontSize="11" Margin="0,0,8,0"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               Text="{Binding ElapsedText, UpdateSourceTrigger=PropertyChanged}"/>
+                    <Slider Grid.Column="1"
+                            x:Name="PlaybackProgressSlider"
+                            Style="{StaticResource DawScrubSliderStyle}"
+                            Minimum="0"
+                            Maximum="{Binding Duration, Converter={StaticResource TimeSpanToDoubleConverter}}"
+                            Value="{Binding SeekPosition, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource TimeSpanToDoubleConverter}}"
+                            IsEnabled="{Binding TrackLoaded, UpdateSourceTrigger=PropertyChanged}"
+                            PreviewMouseLeftButtonDown="PlaybackProgressSlider_PreviewMouseLeftButtonDown"
+                            PreviewMouseLeftButtonUp="PlaybackProgressSlider_PreviewMouseLeftButtonUp" />
+                    <TextBlock Grid.Column="2" Style="{StaticResource MonoTimeText}" FontSize="11" Margin="8,0,0,0"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               Text="{Binding TotalText}"/>
+                </Grid>
+            </StackPanel>
+
+            <!-- Transport: repeat, previous, play/pause (the one circular "hero" control),
+                 next, shuffle — then a thin separator and the secondary stop/settings actions,
+                 which don't appear in the reference look but are real existing functionality
+                 this control already had, so they're kept, just visually de-emphasized.
+                 x:Name + public field modifier (and staying a direct child of the outer Grid)
+                 are load-bearing, not decorative: AudioView.xaml.cs moves this exact panel out
+                 to MainWindow's AudioControlPresenter when the page is navigated away from
+                 mid-playback, then back again on return (see PageUnloaded/PageLoaded) — a
+                 "keep transport controls reachable while playback continues elsewhere"
+                 feature that predates this restyle. -->
+            <StackPanel x:Name="RightControls" x:FieldModifier="public" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                <ToggleButton Width="26" Height="26" Style="{StaticResource ToggleIconStyle}" Margin="0,0,4,0"
+                              ToolTip="Repeat current track" IsChecked="{Binding IsRepeatEnabled, Mode=TwoWay}">
+                    <Path Stretch="Uniform" Width="14" Height="14" Data="{StaticResource RepeatIconData}">
+                        <Path.Style>
+                            <Style TargetType="Path">
+                                <Setter Property="Fill" Value="{StaticResource TextSecondaryBrush}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsChecked, RelativeSource={RelativeSource AncestorType=ToggleButton}}" Value="True">
+                                        <Setter Property="Fill" Value="{StaticResource AccentBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Path.Style>
+                    </Path>
+                </ToggleButton>
+
+                <Button Width="26" Height="26" Style="{StaticResource HoverIconStyle}" Margin="0,0,4,0"
+                        ToolTip="Previous track" Command="{Binding PlayPreviousTrackCommand}">
+                    <Path Stretch="Uniform" Width="13" Height="13" Data="{StaticResource SkipPreviousIconData}" Fill="{StaticResource TextPrimaryBrush}"/>
+                </Button>
+
+                <!-- The one circular button — CircleIconButtonStyle only renders the ring
+                     (see its own doc comment), so the icon is layered on top via a Grid rather
+                     than as the button's Content. -->
+                <Grid Margin="0,0,4,0">
+                    <Button x:Name="TopPlayPauseBtn" Style="{StaticResource CircleIconButtonStyle}"
+                            Command="{Binding PlayAudioCommand}" ToolTip="Play/Pause" IsEnabled="{Binding CanPlayPause, UpdateSourceTrigger=PropertyChanged}"/>
+                    <Path Stretch="Uniform" Fill="{StaticResource TextPrimaryBrush}" x:Name="PlayAudioTrackIcon"
+                          Data="{Binding IsActivelyPlaying, Converter={StaticResource BooleanToResourceConverter}, UpdateSourceTrigger=PropertyChanged}"
+                          Width="15" Height="15" IsHitTestVisible="False"/>
+                </Grid>
+
+                <Button Width="26" Height="26" Style="{StaticResource HoverIconStyle}" Margin="0,0,10,0"
+                        ToolTip="Next track" Command="{Binding PlayNextTrackCommand}">
+                    <Path Stretch="Uniform" Width="13" Height="13" Data="{StaticResource SkipNextIconData}" Fill="{StaticResource TextPrimaryBrush}"/>
+                </Button>
+
+                <ToggleButton Width="26" Height="26" Style="{StaticResource ToggleIconStyle}" Margin="0,0,10,0"
+                              ToolTip="Shuffle" IsChecked="{Binding IsShuffleEnabled, Mode=TwoWay}">
+                    <Path Stretch="Uniform" Width="14" Height="14" Data="{StaticResource ShuffleIconData}">
+                        <Path.Style>
+                            <Style TargetType="Path">
+                                <Setter Property="Fill" Value="{StaticResource TextSecondaryBrush}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsChecked, RelativeSource={RelativeSource AncestorType=ToggleButton}}" Value="True">
+                                        <Setter Property="Fill" Value="{StaticResource AccentBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Path.Style>
+                    </Path>
+                </ToggleButton>
+
+                <Rectangle Width="1" Height="22" Fill="{DynamicResource {x:Static adonisUi:Brushes.Layer2BorderBrush}}" Margin="0,0,10,0"/>
+
+                <Button Width="20" Height="20" Padding="0" Style="{StaticResource HoverIconStyle}" ToolTip="Stop"
+                        IsEnabled="{Binding CanStop, UpdateSourceTrigger=PropertyChanged}" Command="{Binding StopAudioCommand}" Margin="0,0,6,0">
+                    <Path Stretch="Uniform" Fill="{StaticResource TextSecondaryBrush}" Data="{StaticResource StopIconData}" Width="12" Height="12"/>
+                </Button>
+
+                <!--<Button x:Name="SettingsButton" Width="20" Height="20" Padding="0" BorderThickness="0" Background="Transparent"
+                        Style="{StaticResource HoverIconStyle}" Click="SettingsButton_Click"
+                        IsEnabled="{Binding CanStop, UpdateSourceTrigger=PropertyChanged}">
+                    <Button.Content>
+                        <Path Stretch="Uniform" Fill="{StaticResource TextSecondaryBrush}" Data="{StaticResource SettingsIconData}" Width="12" Height="12"/>
+                    </Button.Content>
+                    <Button.ContextMenu>
+                        <ContextMenu x:Name="SettingsMenu">
+                            <Label Content="Speed" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <Slider Minimum="0.01" Maximum="2.1" Value="{Binding PlaybackSpeed, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanStop, UpdateSourceTrigger=PropertyChanged}" Width="100" Height="20" MouseDoubleClick="Slider_MouseDoubleClick">
+                                <Slider.ToolTip>
+                                    <ToolTip Content="Set the playback speed. Double click to reset to 1.0x"/>
+                                </Slider.ToolTip>
+                            </Slider>
+                            <Label Content="Panning" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <Slider Minimum="0.0" Maximum="1" Value="{Binding Panning, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanStop, UpdateSourceTrigger=PropertyChanged}" Width="100" Height="20" MouseDoubleClick="Slider_MouseDoubleClick_1">
+                                <Slider.ToolTip>
+                                    <ToolTip Content="Set the panning. 0.0 = Left, 0.5 = Center, 1.0 = Right. Double click to reset to 0.5 (Center)"/>
+                                </Slider.ToolTip>
+                            </Slider>
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>-->
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>

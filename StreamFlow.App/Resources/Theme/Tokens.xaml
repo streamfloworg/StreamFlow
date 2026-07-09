@@ -1,0 +1,48 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Color tokens -->
+
+
+    <!-- Subtle lavender accent (was a brighter magenta-purple, #B427CC/#8232A9) — same
+         alpha/lightness relationships preserved between the bright vs. "faded"/dim pairs
+         below, just recolored. -->
+    <Color x:Key="PrimaryFade1">#A99575CD</Color>
+    <Color x:Key="PrimaryFade2">#899575CD</Color>
+    <Color x:Key="PrimaryFade3">#599575CD</Color>
+    <Color x:Key="PrimaryFade4">#299575CD</Color>
+
+    <SolidColorBrush x:Key="Surface0Brush" Color="#080B11" />
+    <SolidColorBrush x:Key="Surface1Brush" Color="#0F1624" />
+    <SolidColorBrush x:Key="Surface2Brush" Color="#161F30" />
+
+    <SolidColorBrush x:Key="LineBrush" Color="#202D45" />
+
+    <SolidColorBrush x:Key="Transparent" Color="#00000000" />
+
+    <SolidColorBrush x:Key="AccentBrush" Color="#007880" />
+    <SolidColorBrush x:Key="AccentDimBrush" Color="#CC007880" />
+    <SolidColorBrush x:Key="AccentFadedBrush" Color="#FF9D4EDD" />
+    <SolidColorBrush x:Key="AccentDimFadedBrush" Color="#889D4EDD" />
+
+    <!-- On-air / tally-light red, for live broadcast state -->
+    <SolidColorBrush x:Key="LiveBrush" Color="#E5484D" />
+    <SolidColorBrush x:Key="StandbyBrush" Color="#5A5A5F" />
+
+    
+    <SolidColorBrush x:Key="TextPrimaryBrush" Color="#FFF0F0F0" />
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="#FFA0A0A0" />
+
+    <SolidColorBrush x:Key="OverlayLowBrush" Color="#14FFFFFF" />
+    <SolidColorBrush x:Key="OverlayHighBrush" Color="#22FFFFFF" />
+
+    <!-- Control tokens -->
+    <!-- Slightly lighter than Surface brushes for contrast against dark backdrops -->
+    <SolidColorBrush x:Key="ProgressTrackBrush" Color="#343438" />
+    <SolidColorBrush x:Key="ProgressFillBrush" Color="#007880" />
+    
+
+    <!-- Typography tokens -->
+    <FontFamily x:Key="FontUi">Segoe UI</FontFamily>
+    <FontFamily x:Key="FontMono">Consolas</FontFamily>
+
+</ResourceDictionary>

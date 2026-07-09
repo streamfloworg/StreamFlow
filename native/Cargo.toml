@@ -1,0 +1,103 @@
+﻿[workspace]
+members = [
+    "crates/core",
+    "crates/ipc",
+]
+resolver = "2"
+
+[patch.crates-io]
+ffmpeg-sys-next = { path = "patches/ffmpeg-sys-next" }
+
+[workspace.package]
+version     = "0.1.0"
+edition     = "2021"
+authors     = ["nomad <voiddreamer@gmail.com>"]
+license     = "MIT"
+repository  = "https://github.com/streamflow/maker"
+
+# ── Shared dependency versions ────────────────────────────────────────────────
+[workspace.dependencies]
+# Async runtime
+tokio            = { version = "1",    features = ["full"] }
+# Serialization
+serde            = { version = "1",    features = ["derive"] }
+serde_json       = "1"
+# File watching (encoder config live-reload)
+notify           = "6"
+# Logging / tracing
+tracing          = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+# Error handling
+thiserror        = "2"
+anyhow           = "1"
+# Internal crates
+streamflow-ipc   = { path = "crates/ipc" }
+# FFmpeg raw FFI bindings — bindgen generates them at build time from the
+# headers pointed to by FFMPEG_DIR (set in .cargo/config.toml).
+ffmpeg-sys-next  = "8"
+# Audio capture and lock-free ringbuffers
+cpal             = "0.15"
+ringbuf          = "0.4"
+# Windows API — required for WGC capture, DXGI, D3D11.
+# MSVC toolchain only (pinned in rust-toolchain.toml).
+windows          = { version = "0.61", features = [
+    "Graphics_Capture",
+    "Graphics_DirectX",
+    "Graphics_DirectX_Direct3D11",
+    "Win32_Foundation",
+    "Win32_Graphics_Direct3D",
+    "Win32_Media_Audio",
+    "Win32_Media_Audio_Endpoints",
+    "Win32_Media_KernelStreaming",
+    "Win32_Media_MediaFoundation",
+    "Win32_Media_Multimedia",
+    "Win32_Graphics_Direct2D",
+    "Win32_Graphics_Direct2D_Common",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Gdi",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Variant",
+    "Win32_System_WinRT_Direct3D11",
+    "Win32_System_WinRT_Graphics_Capture",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_PropertiesSystem",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Graphics_Dwm",
+    "Win32_Security",
+    "Win32_System_Memory",
+    "Win32_System_Threading",
+    "Win32_System_ProcessStatus",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Registry",
+    "Win32_System_Diagnostics_ToolHelp",
+] }
+
+# ── Dev / test dependencies ───────────────────────────────────────────────────
+# property-based testing
+proptest         = "1"
+# trait mocking
+mockall          = "0.13"
+# snapshot testing (use insta::assert_json_snapshot! for IPC messages)
+insta            = { version = "1", features = ["json"] }
+# parametrized tests & fixtures
+rstest           = "0.24"
+
+# ── Workspace-level lint config ───────────────────────────────────────────────
+[workspace.lints.rust]
+# "warn" so native platform crates can use #![allow(unsafe_code)] where Win32
+# calls require it. streamflow-ipc adds its own #![forbid(unsafe_code)].
+unsafe_code      = "warn"
+unused_imports   = "warn"
+dead_code        = "warn"
+
+[workspace.lints.clippy]
+all              = { level = "warn", priority = -1 }
+pedantic         = { level = "warn", priority = -1 }
+# Allow the common patterns that pedantic flags unnecessarily
+module_name_repetitions = "allow"
+must_use_candidate      = "allow"
+missing_errors_doc      = "allow"
+missing_panics_doc      = "allow"

@@ -1,0 +1,31 @@
+<Application
+    x:Class="StreamFlow.App.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:converters="clr-namespace:StreamFlow.App.Converter"
+    DispatcherUnhandledException="OnDispatcherUnhandledException"
+    Exit="OnExit"
+    Startup="OnStartup">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- Custom theme foundation -->
+                <ResourceDictionary Source="Resources/Theme/Tokens.xaml" />
+                <ResourceDictionary Source="Resources/Theme/Controls.xaml" />
+                <!-- Existing resources -->
+                <ResourceDictionary Source="Resources/Converters.xaml" />
+                <ResourceDictionary Source="Resources/AppStyles.xaml" />
+                <ResourceDictionary Source="Resources/PlotTheme.xaml" />
+                <ResourceDictionary Source="Resources/DialogStyles.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/AdonisUI;component/ColorSchemes/Dark.xaml"/>
+                <ResourceDictionary Source="pack://application:,,,/AdonisUI.ClassicTheme;component/Resources.xaml"/>
+                <!-- Global theme overrides for AdonisUI colors -->
+                <ResourceDictionary Source="Resources/Theme/ThemeOverrides.xaml" />
+                <!-- Merged last so it overrides whatever, if anything, AdonisUI's own theme
+                     provides for these implicit styles — see the file for why this exists. -->
+                <ResourceDictionary Source="Resources/Theme/DefaultTextStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <converters:BooleanToResourceConverter x:Key="BooleanToResourceConverter" />
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

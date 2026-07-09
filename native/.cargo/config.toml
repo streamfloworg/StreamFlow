@@ -1,0 +1,41 @@
+﻿# ── Build profiles ────────────────────────────────────────────────────────────
+
+[profile.dev]
+opt-level  = 0
+debug      = true
+# Split debug info into a separate .pdb / dSYM to keep the binary small in dev
+split-debuginfo = "unpacked"
+
+[profile.release]
+opt-level       = 3
+lto             = "thin"       # thin LTO: good balance of link time vs perf
+codegen-units   = 1            # single CGU maximises inlining across modules
+strip           = "symbols"    # drop debug symbols → smaller binary
+panic           = "abort"      # no unwinding machinery in the binary
+
+# ── Windows target ────────────────────────────────────────────────────────────
+# The MSVC toolchain is required for the `windows` crate (WGC, DXGI, WASAPI).
+# Prerequisite: Visual Studio Build Tools with "Desktop development with C++"
+#   winget install Microsoft.VisualStudio.2022.BuildTools
+# Then: rustup target add x86_64-pc-windows-msvc
+
+[target.x86_64-pc-windows-msvc]
+# Uncomment once `cargo-binutils` is installed for faster incremental links:
+# linker = "rust-lld"
+rustflags = []
+
+# ── Environment ───────────────────────────────────────────────────────────────
+[env]
+# Makes the binary name consistent across debug/release when spawned by Electron
+STREAMFLOW_CORE_VERSION = { value = "0.1.0" }
+# bindgen needs libclang.dll; set LIBCLANG_PATH if not already in system PATH.
+LIBCLANG_PATH = { value = "C:\\Program Files\\LLVM\\bin" }
+# Pass MSVC/UCRT include dirs to bindgen's clang invocation.
+# The bindgen 0.70.x/0.71.x bug that zeroed these structs is fixed in 0.72
+# (via patches/ffmpeg-sys-next), but correct include paths are still needed.
+BINDGEN_EXTRA_CLANG_ARGS = { value = "--target=x86_64-pc-windows-msvc -IC:/PROGRA~1/MICROS~2/18/Community/VC/Tools/MSVC/14.51.36231/include -IC:/PROGRA~2/WI3CF2~1/10/Include/10.0.26100.0/ucrt" }
+# Point ffmpeg-sys-next at the FFmpeg 8.1 shared dev package.
+# Download: https://github.com/BtbN/FFmpeg-Builds/releases
+#   → ffmpeg-n8.1-latest-win64-gpl-shared-8.1.zip → extract to C:\ffmpeg-dev\
+# Then set this to the extracted folder (the one containing include\ and lib\).
+FFMPEG_DIR = { value = "C:\\ffmpeg-dev\\ffmpeg-n8.1-latest-win64-gpl-shared-8.1", force = true }

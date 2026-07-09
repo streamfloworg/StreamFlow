@@ -1,0 +1,44 @@
+﻿name: CI
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "**" ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build StreamFlow.sln -c Release --no-restore
+
+      - name: Test with coverage threshold
+        run: >
+          dotnet test -c Release --no-build
+          /p:CollectCoverage=true
+          /p:CoverletOutput=TestResults/coverage/
+          /p:CoverletOutputFormat=cobertura
+          /p:ExcludeByFile="**/Views/**;**/Controls/**;**/Images/**;**/Assets/**;**/Resources/**;**/bin/**;**/obj/**"
+          /p:Threshold=15 /p:ThresholdType=line /p:ThresholdStat=total
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            TestResults
+            **/TestResults/*.trx
+            **/coverage.cobertura.xml

@@ -1,0 +1,16 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace StreamFlow.Core.Data
+{
+    static class SonicDebugger
+    {
+        // These are to aid in debugging
+        public static bool s_TestModeOn = false;
+        public static int s_TestPlace = 2;
+        public static int s_TestChannel = 23;
+    }
+}

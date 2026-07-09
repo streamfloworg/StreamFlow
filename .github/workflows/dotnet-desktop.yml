@@ -1,0 +1,234 @@
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+
+# This workflow will build, test, sign and package a WPF or Windows Forms desktop application
+# built on .NET Core.
+# To learn how to migrate your existing application to .NET Core,
+# refer to https://docs.microsoft.com/en-us/dotnet/desktop-wpf/migration/convert-project-from-net-framework
+#
+# To configure this workflow:
+#
+# 1. Configure environment variables
+# GitHub sets default environment variables for every workflow run.
+# Replace the variables relative to your project in the "env" section below.
+#
+# 2. Signing
+# Generate a signing certificate in the Windows Application
+# Packaging Project or add an existing signing certificate to the project.
+# Next, use PowerShell to encode the .pfx file using Base64 encoding
+# by running the following Powershell script to generate the output string:
+#
+# $pfx_cert = Get-Content '.\SigningCertificate.pfx' -Encoding Byte
+# [System.Convert]::ToBase64String($pfx_cert) | Out-File 'SigningCertificate_Encoded.txt'
+#
+# Open the output file, SigningCertificate_Encoded.txt, and copy the
+# string inside. Then, add the string to the repo as a GitHub secret
+# and name it "Base64_Encoded_Pfx."
+# For more information on how to configure your signing certificate for
+# this workflow, refer to https://github.com/microsoft/github-actions-for-desktop-apps#signing
+#
+# Finally, add the signing certificate password to the repo as a secret and name it "Pfx_Key".
+# See "Build the Windows Application Packaging project" below to see how the secret is used.
+#
+# For more information on GitHub Actions, refer to https://github.com/features/actions
+# For a complete CI/CD sample to get started with GitHub Action workflows for Desktop Applications,
+# refer to https://github.com/microsoft/github-actions-for-desktop-apps
+
+name: .NET Core Desktop
+
+# Every push/PR to main runs the full build+test+MSIX-artifact matrix below - that's cheap CI
+# hygiene and should happen constantly. Publishing a Velopack release (the part that's actually
+# visible to users via the self-update feed) is deliberately NOT tied to that: it only fires when
+# a "vX.Y.Z" tag is pushed, or when someone manually runs this workflow and supplies a version.
+# That keeps every routine merge to main from silently cutting a public release.
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ "v[0-9]+.[0-9]+.[0-9]+" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. 1.4.0) - only needed for a manual release run"
+        required: false
+        type: string
+
+jobs:
+
+  build:
+
+    strategy:
+      matrix:
+        configuration: [Debug, Release]
+
+    runs-on: windows-latest  # For a list of available runner types, refer to
+                             # https://help.github.com/en/actions/reference/workflow-syntax-for-github-actions#jobsjob_idruns-on
+
+    env:
+      Solution_Name: StreamFlow.sln                                            # Replace with your solution name, i.e. MyWpfApp.sln.
+      Test_Project_Path: StreamFlow.Tests\StreamFlow.Tests.csproj              # Replace with the path to your test project, i.e. MyWpfApp.Tests\MyWpfApp.Tests.csproj.
+      Wap_Project_Directory: StreamFlow.App.Package                            # Replace with the Wap project directory relative to the solution, i.e. MyWpfApp.Package.
+      Wap_Project_Path: StreamFlow.App.Package\StreamFlow.App.Package.wapproj  # Replace with the path to your Wap project, i.e. MyWpf.App.Package\MyWpfApp.Package.wapproj.
+      # Must match native/.cargo/config.toml's FFMPEG_DIR — that's what the Rust core's build
+      # script (ffmpeg-sys-next) actually reads, this just controls where this workflow puts it.
+      Ffmpeg_Dev_Dir: C:\ffmpeg-dev\ffmpeg-n8.1-latest-win64-gpl-shared-8.1
+      Ffmpeg_Dev_Url: https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-n8.1-latest-win64-gpl-shared-8.1.zip
+      # Velopack app id — must match whatever UpdateService/GithubSource expects consumers to
+      # look up on the release feed.
+      Velopack_App_Id: StreamFlow
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
+    # Install the .NET Core workload
+    - name: Install .NET Core
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+
+    # Add  MSBuild to the PATH: https://github.com/microsoft/setup-msbuild
+    - name: Setup MSBuild.exe
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Restore Submodules
+      run: git submodule update --init --recursive
+
+    # A tag push (refs/tags/v1.2.3) or a manually-supplied workflow_dispatch input is what makes
+    # this a real release build; a plain push to main or a PR is not, and gets the Directory.
+    # Build.props placeholder version instead. is_release gates the Velopack publish steps below.
+    - name: Determine version
+      id: version
+      shell: pwsh
+      run: |
+        $version = ""
+        if ($env:GITHUB_REF -like "refs/tags/v*") {
+          $version = $env:GITHUB_REF -replace "^refs/tags/v", ""
+        } elseif ("${{ github.event.inputs.version }}" -ne "") {
+          $version = "${{ github.event.inputs.version }}"
+        }
+        $isRelease = $version -ne ""
+        if (-not $isRelease) { $version = "0.0.1-dev" }
+        echo "version=$version" >> $env:GITHUB_OUTPUT
+        echo "is_release=$isRelease" >> $env:GITHUB_OUTPUT
+        echo "Resolved version: $version (release: $isRelease)"
+
+    # windows-latest ships Rust/cargo already, but not necessarily the MSVC target — cheap and
+    # idempotent to make sure it's there before the native core ever tries to build.
+    - name: Ensure Rust MSVC target
+      run: rustup target add x86_64-pc-windows-msvc
+
+    # The native core's build script (ffmpeg-sys-next) needs FFmpeg's dev headers/libs at
+    # FFMPEG_DIR (see native/.cargo/config.toml) — nothing on the stock runner image provides
+    # this, so it has to be fetched explicitly. Cached by URL so this only actually downloads
+    # once across runs rather than on every single build.
+    - name: Cache FFmpeg dev package
+      id: cache-ffmpeg
+      uses: actions/cache@v4
+      with:
+        path: C:\ffmpeg-dev
+        key: ffmpeg-dev-${{ env.Ffmpeg_Dev_Url }}
+
+    - name: Download FFmpeg dev package
+      if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
+      run: |
+        New-Item -ItemType Directory -Force -Path C:\ffmpeg-dev | Out-Null
+        Invoke-WebRequest -Uri $env:Ffmpeg_Dev_Url -OutFile "$env:TEMP\ffmpeg-dev.zip"
+        Expand-Archive -Path "$env:TEMP\ffmpeg-dev.zip" -DestinationPath C:\ffmpeg-dev -Force
+
+    # Explicit, separately-labeled step so a native build failure shows up as its own red X
+    # instead of being buried in "Execute unit tests" (StreamFlow.Tests references
+    # StreamFlow.App, whose csproj already runs this exact `cargo build` via a
+    # BeforeTargets="Build" MSBuild target — this step just surfaces it earlier and more
+    # clearly, it doesn't duplicate work since cargo no-ops on an already-current build).
+    - name: Build Rust core
+      run: cargo build --release
+      working-directory: native
+
+    # Execute all unit tests in the solution
+    - name: Execute unit tests
+      run: dotnet test
+
+    # Restore the application to populate the obj folder with RuntimeIdentifiers
+    - name: Restore the application
+      run: msbuild $env:Solution_Name /t:Restore /p:Configuration=$env:Configuration
+      env:
+        Configuration: ${{ matrix.configuration }}
+
+    # MSIX's Package.appxmanifest needs a strict 4-part numeric version - the tag/dispatch
+    # version resolved above is a plain semver triple, so pad it. Skipped for non-release builds:
+    # the manifest keeps its committed placeholder version, which is fine since that artifact
+    # isn't what gets distributed for those runs.
+    - name: Stamp app package manifest version
+      if: steps.version.outputs.is_release == 'true'
+      shell: pwsh
+      run: |
+        $manifestVersion = "${{ steps.version.outputs.version }}.0"
+        $path = "$env:Wap_Project_Directory\Package.appxmanifest"
+        (Get-Content $path -Raw) -replace 'Version="[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+"', "Version=`"$manifestVersion`"" | Set-Content $path -NoNewline
+
+    # Decode the base 64 encoded pfx and save the Signing_Certificate
+    - name: Decode the pfx
+      run: |
+        $pfx_cert_byte = [System.Convert]::FromBase64String("${{ secrets.Base64_Encoded_Pfx }}")
+        $certificatePath = Join-Path -Path $env:Wap_Project_Directory -ChildPath GitHubActionsWorkflow.pfx
+        [IO.File]::WriteAllBytes("$certificatePath", $pfx_cert_byte)
+
+    # Create the app package by building and packaging the Windows Application Packaging project
+    - name: Create the app package
+      run: msbuild $env:Wap_Project_Path /p:Configuration=$env:Configuration /p:UapAppxPackageBuildMode=$env:Appx_Package_Build_Mode /p:AppxBundle=$env:Appx_Bundle /p:PackageCertificateKeyFile=GitHubActionsWorkflow.pfx /p:PackageCertificatePassword=${{ secrets.Pfx_Key }} /p:Version=${{ steps.version.outputs.version }}
+      env:
+        Appx_Bundle: Always
+        Appx_Bundle_Platforms: x86|x64
+        Appx_Package_Build_Mode: StoreUpload
+        Configuration: ${{ matrix.configuration }}
+
+    # Remove the pfx
+    - name: Remove the pfx
+      run: Remove-Item -path $env:Wap_Project_Directory\GitHubActionsWorkflow.pfx
+
+    # Upload the MSIX package: https://github.com/marketplace/actions/upload-a-build-artifact
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: MSIX Package (${{ matrix.configuration }})
+        path: ${{ env.Wap_Project_Directory }}\AppPackages
+
+    # ── Velopack (unpackaged/self-updating distribution) ──────────────────────────
+    # Separate from the MSIX build above — per UpdateService's own doc comment, MSIX manages
+    # its own updates via the Store, Velopack is specifically for the unpackaged build that
+    # self-updates from GitHub Releases (see UpdateService's GithubSource). Gated on both
+    # Release config AND is_release (a "vX.Y.Z" tag push or manual dispatch with a version) - a
+    # Debug build never qualifies, and neither does a routine push/PR against main.
+    - name: Publish for Velopack (win-x64)
+      if: matrix.configuration == 'Release' && steps.version.outputs.is_release == 'true'
+      run: dotnet publish StreamFlow.App\StreamFlow.App.csproj -c Release -r win-x64 --self-contained -o publish -p:Version=${{ steps.version.outputs.version }}
+      env:
+        Configuration: ${{ matrix.configuration }}
+
+    - name: Install Velopack CLI
+      if: matrix.configuration == 'Release' && steps.version.outputs.is_release == 'true'
+      run: dotnet tool install --global vpk
+
+    - name: Pack Velopack release
+      if: matrix.configuration == 'Release' && steps.version.outputs.is_release == 'true'
+      run: vpk pack -u $env:Velopack_App_Id -v "${{ steps.version.outputs.version }}" -p publish -e StreamFlow.App.exe
+
+    - name: Upload Velopack release artifacts
+      if: matrix.configuration == 'Release' && steps.version.outputs.is_release == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: Velopack Release
+        path: Releases
+
+    # Publishes to GitHub Releases on the app's own update feed. Tag pushes and manual dispatch
+    # both carry a real is_release version, so this can't fire from a pull_request build or a
+    # routine push to main.
+    - name: Publish Velopack release to GitHub
+      if: matrix.configuration == 'Release' && steps.version.outputs.is_release == 'true'
+      run: vpk upload github --repoUrl https://github.com/nomadamo/StreamFlow --token ${{ secrets.GITHUB_TOKEN }} --publish --releaseName "StreamFlow ${{ steps.version.outputs.version }}"

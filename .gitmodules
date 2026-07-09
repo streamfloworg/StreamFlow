@@ -1,0 +1,9 @@
+[submodule "SoundFlow"]
+	path = SoundFlow
+	url = https://github.com/LSXPrime/SoundFlow
+[submodule "libxmpBindings"]
+	path = libxmpBindings
+	url = https://github.com/nomadamo/csharp-libxmp-bindings
+[submodule "atldotnet"]
+	path = atldotnet
+	url = https://github.com/Zeugma440/atldotnet

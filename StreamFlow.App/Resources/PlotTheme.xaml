@@ -1,0 +1,9 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- Plot brushes referencing theme tokens -->
+  <SolidColorBrush x:Key="PlotFigureBackgroundBrush" Color="{Binding Color, Source={StaticResource Surface0Brush}}" />
+  <SolidColorBrush x:Key="PlotDataBackgroundBrush" Color="{Binding Color, Source={StaticResource Surface0Brush}}" />
+  <SolidColorBrush x:Key="PlotAxisBrush" Color="{Binding Color, Source={StaticResource TextSecondaryBrush}}" />
+  <SolidColorBrush x:Key="PlotGridBrush" Color="#00000000" />
+  <SolidColorBrush x:Key="PlotLineBrush" Color="{Binding Color, Source={StaticResource AccentBrush}}" />
+</ResourceDictionary>

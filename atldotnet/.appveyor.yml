@@ -1,0 +1,28 @@
+image: Visual Studio 2022
+init :
+# - cd c:\ && dir /s CodeCoverage.exe
+ - ps: dotnet tool install --global coverlet.console
+before_build:
+ - nuget restore
+ - choco install "sonarscanner-msbuild-net46" -y
+ - ps: echo SonarScanner
+ - SonarScanner.MSBuild.exe begin /k:"Zeugma440_atldotnet" /o:"zeugma440-github" /d:"sonar.host.url=https://sonarcloud.io" /d:"sonar.login=__"  /d:sonar.sourceEncoding="UTF-8" /d:sonar.cs.opencover.reportsPaths="%CD%\coverage.opencover.xml"
+build:
+  project: ATL.sln
+  verbosity: minimal
+test_script:
+# - vstest.console /Logger:Appveyor .\ATL.test\bin\Debug\net48\ATL.test.dll /TestCaseFilter:TestCategory!=snippets /Enablecodecoverage /Settings:runsettings.runsettings /Parallel
+# - ps: Get-ChildItem ".\" -Recurse -file -Filter *.coverage | Copy-Item -Destination ".\" -Force
+# - dotnet test /p:AltCover=true
+#  - dotnet test --collect:"XPlat Code Coverage" --settings coverlet.runsettings
+# - dotnet test --no-build /p:CollectCoverage=true /p:CoverletOutputFormat=opencover
+  - ps: coverlet .\ATL.test\bin\Debug\net6.0\ATL.test.dll --target "dotnet" --targetargs "test --no-build" --format "opencover"
+after_test:
+# - appveyor PushArtifact "testResults.txt"
+# c:\Program Files (x86)\Microsoft SDKs\NuGetPackages\microsoft.codecoverage\16.11.0\build\netstandard1.0\CodeCoverage
+# - appveyor PushArtifact "atl.coverage"
+ - "SET JAVA_HOME=C:\\Progra~1\\Java\\jdk16"
+ - "SET PATH=C:\\Python38;%JAVA_HOME%\\bin;C:\\Python38\\Scripts;%PATH%"
+ - pip install codecov
+ - codecov -f "coverage.opencover.xml" -t a0fbc5d9-c210-40a1-a823-a4a62b1f1c01
+ - SonarScanner.MSBuild.exe end /d:"sonar.login=__"

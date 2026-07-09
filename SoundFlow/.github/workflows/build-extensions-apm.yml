@@ -1,0 +1,311 @@
+name: Build WebRTC Audio Processing
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Windows builds
+          - os: windows-latest
+            rid: win-x64
+            platform: Windows
+            arch: x64
+            toolchain: mingw
+            cross_file: "windows-x64.crossfile"
+
+          - os: windows-latest
+            rid: win-x86
+            platform: Windows
+            arch: x86
+            toolchain: mingw
+            cross_file: "windows-x86.crossfile"
+
+          # Linux builds
+          - os: ubuntu-latest
+            rid: linux-x64
+            platform: Linux
+            arch: x86_64
+            toolchain: gcc
+            cross_file: ""
+
+          - os: ubuntu-latest
+            rid: linux-arm
+            platform: Linux
+            arch: armv7l
+            toolchain: gcc
+            cross_file: "linux-arm.crossfile"
+
+          - os: ubuntu-latest
+            rid: linux-arm64
+            platform: Linux
+            arch: aarch64
+            toolchain: gcc
+            cross_file: "linux-arm64.crossfile"
+
+          # macOS builds
+          - os: macos-15-intel
+            rid: osx-x64
+            platform: macOS
+            arch: x86_64
+            toolchain: clang
+            cross_file: "osx-x64.crossfile"
+
+          - os: macos-latest
+            rid: osx-arm64
+            platform: macOS
+            arch: arm64
+            toolchain: clang
+            cross_file: ""
+
+          # iOS builds
+          - os: macos-latest
+            rid: ios-arm64
+            platform: iOS
+            arch: arm64
+            toolchain: clang
+            cross_file: "ios.crossfile"
+
+          # Android builds
+          #- os: ubuntu-latest
+          #  rid: android-arm
+          #  platform: Android
+          #  arch: armeabi-v7a
+          #  toolchain: clang
+          #  cross_file: "android-arm.crossfile"
+          #  compiler_prefix: "armv7a-linux-androideabi"
+
+          - os: ubuntu-latest
+            rid: android-arm64
+            platform: Android
+            arch: arm64-v8a
+            toolchain: clang
+            cross_file: "android-arm64.crossfile"
+            compiler_prefix: "aarch64-linux-android"
+
+          - os: ubuntu-latest
+            rid: android-x64
+            platform: Android
+            arch: x86_64
+            toolchain: clang
+            cross_file: "android-x64.crossfile"
+            compiler_prefix: "x86_64-linux-android"
+
+    name: Build for ${{ matrix.platform }} - ${{ matrix.arch }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # Setup Python and Meson
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install Meson and Ninja
+        run: pip install meson ninja --upgrade
+
+      # Install MinGW for Windows builds
+      - name: Set up MinGW (Windows - x64)
+        if: matrix.platform == 'Windows' && matrix.arch == 'x64'
+        uses: deevroman/setup-mingw@0.0.1
+        with:
+          platform: x64
+          static: any
+
+      - name: Set up MinGW (Windows - x86)
+        if: matrix.platform == 'Windows' && matrix.arch == 'x86'
+        uses: deevroman/setup-mingw@0.0.1
+        with:
+          platform: any
+          static: any
+
+      # Linux dependencies
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-latest' && matrix.platform == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config file binutils
+          
+          # For cross-compilation
+          if [ "${{ matrix.rid }}" == "linux-arm" ]; then
+            sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf binutils-arm-linux-gnueabihf
+          elif [ "${{ matrix.rid }}" == "linux-arm64" ]; then
+            sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu binutils-aarch64-linux-gnu
+          fi
+      # Android setup
+      - name: Set up Android NDK
+        if: matrix.platform == 'Android'
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r26d
+          add-to-path: false
+
+      - name: Configure environment for Android
+        if: matrix.platform == 'Android'
+        shell: bash
+        run: |
+          echo "NDK_ROOT=${{ steps.setup-ndk.outputs.ndk-path }}" >> $GITHUB_ENV
+          echo "TOOLCHAIN_ROOT=${NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64" >> $GITHUB_ENV
+      # Print the NDK Root
+      - name: Print NDK Root
+        if: matrix.platform == 'Android'
+        shell: bash
+        run: |
+          echo "The NDK Root is: $NDK_ROOT"
+          echo "The Toolchain Root is: $TOOLCHAIN_ROOT"
+          # List contents of the build directory before copying
+          echo "Listing contents of Toolchain: $TOOLCHAIN_ROOT"
+          ls -l "/opt/hostedtoolcache/ndk/r26d/x64/toolchains/llvm/prebuilt/linux-x86_64/bin/"
+      - name: Install Xcode Command Line Tools (iOS)
+        if: matrix.platform == 'iOS'
+        run: |
+          xcode-select --install || true
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+      # Install Homebrew LLVM for iOS builds
+      - name: Install Homebrew LLVM (IOS)
+        if: matrix.platform == 'iOS'
+        run: |
+          brew update
+          brew install llvm
+          echo "/opt/homebrew/opt/llvm/bin" >> $GITHUB_PATH
+          echo "/opt/homebrew/opt/llvm/lib" >> $GITHUB_PATH
+          echo 'export PATH="/opt/homebrew/opt/llvm/bin:$PATH"' >> /Users/runner/.bash_profile
+      # Configure Meson
+      - name: Configure Meson
+        shell: bash
+        run: |
+          cd Native/webrtc-audio-processing/
+          BUILD_DIR="build_${{ matrix.rid }}"
+          EXTRA_ARGS="--buildtype=release"
+          
+          if [ -n "${{ matrix.cross_file }}" ]; then
+            meson setup $BUILD_DIR --cross-file crossfiles/${{ matrix.cross_file }} $EXTRA_ARGS
+          else
+            meson setup $BUILD_DIR $EXTRA_ARGS
+          fi
+      - name: Build with Ninja
+        shell: bash
+        run: |
+          cd Native/webrtc-audio-processing/
+          BUILD_DIR="build_${{ matrix.rid }}"
+          ninja -C $BUILD_DIR
+      # Package the artifacts
+      - name: Copy and rename artifacts
+        shell: bash
+        run: |
+          cd Native/webrtc-audio-processing/
+          BUILD_DIR="build_${{ matrix.rid }}/webrtc/modules/audio_processing"
+          OUTPUT_DIR="runtimes/${{ matrix.rid }}/native"
+          
+          echo "Listing contents of BUILD_DIR: $BUILD_DIR"
+          ls -l "$BUILD_DIR"
+          
+          mkdir -p "$OUTPUT_DIR"
+          
+          if [ "${{ matrix.platform }}" == "Windows" ]; then
+            cp "$BUILD_DIR"/*.dll "$OUTPUT_DIR/webrtc-apm.dll"
+          elif [ "${{ matrix.platform }}" == "iOS" ] || [ "${{ matrix.platform }}" == "macOS" ]; then
+            cp "$BUILD_DIR/libwebrtc-audio-processing-2.1.dylib" "$OUTPUT_DIR/libwebrtc-apm.dylib"
+          else
+            cp "$BUILD_DIR"/*.so "$OUTPUT_DIR/libwebrtc-apm.so"
+          fi
+          
+          echo "Copied artifact to:"
+          ls -l "$OUTPUT_DIR"
+      # Dependency analysis
+      - name: Analyze Dependencies (Windows)
+        if: matrix.platform == 'Windows'
+        shell: bash
+        run: |
+          cd Native/webrtc-audio-processing/
+          echo "Dependencies for Windows (MinGW):"
+          objdump -p "runtimes/${{ matrix.rid }}/native/webrtc-apm.dll" | grep "DLL Name:"
+          echo "Imported symbols:"
+          nm -g "runtimes/${{ matrix.rid }}/native/webrtc-apm.dll" | grep " T "
+      - name: Analyze Dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest' && matrix.platform == 'Linux'
+        shell: bash
+        run: |
+          cd Native/webrtc-audio-processing/
+          LIB_PATH="runtimes/${{ matrix.rid }}/native/libwebrtc-apm.so"
+          echo "=== Library Information ==="
+          file "$LIB_PATH"
+          echo -e "\n=== Dependencies ==="
+          if [[ "${{ matrix.arch }}" == "x86_64" ]]; then
+            ldd "$LIB_PATH" || true
+          else
+            # For ARM architectures, use readelf instead of ldd
+            readelf -d "$LIB_PATH" | grep "NEEDED" || true
+          fi
+          echo -e "\n=== Symbols ==="
+          if [[ "${{ matrix.arch }}" == "x86_64" || "${{ matrix.arch }}" == "aarch64" ]]; then
+            nm -g "$LIB_PATH" | grep " T " || true
+          else
+            # For armv7l, use the correct cross-arch nm
+            arm-linux-gnueabihf-nm -g "$LIB_PATH" | grep " T " || true
+          fi
+          echo -e "\n=== SONAME ==="
+          readelf -d "$LIB_PATH" | grep "SONAME" || true
+      - name: Analyze Dependencies (Android)
+        if: matrix.platform == 'Android'
+        shell: bash
+        run: |
+          cd Native/webrtc-audio-processing/
+          LIB_PATH="runtimes/${{ matrix.rid }}/native/libwebrtc-apm.so"
+          echo "Dependencies for Android:"
+          readelf -d "$LIB_PATH"
+          echo "Symbols:"
+          nm -g "$LIB_PATH" | grep " T "
+      - name: Analyze Dependencies (macOS)
+        if: matrix.os == 'macos-latest' && matrix.platform == 'macOS'
+        shell: bash
+        run: |
+          cd Native/webrtc-audio-processing/
+          LIB_PATH="runtimes/${{ matrix.rid }}/native/libwebrtc-apm.dylib"
+          echo "Dependencies for macOS:"
+          otool -L "$LIB_PATH"
+          echo "Symbols:"
+          nm -g "$LIB_PATH" | grep " T "
+      - name: Analyze Dependencies (iOS)
+        if: matrix.platform == 'iOS'
+        shell: bash
+        run: |
+          cd Native/webrtc-audio-processing/
+          LIB_PATH="runtimes/${{ matrix.rid }}/native/libwebrtc-apm.dylib"
+          echo "Dependencies for iOS:"
+          otool -L "$LIB_PATH"
+          echo "Symbols:"
+          nm -g "$LIB_PATH" | grep " T "
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.rid }}
+          path: Native/webrtc-audio-processing/runtimes/${{ matrix.rid }}
+
+  package:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create final package
+        run: |
+          mkdir -p runtimes
+          cp -r artifacts/* runtimes/
+          zip -r webrtc-audio-processing.zip runtimes
+      - name: Upload final package
+        uses: actions/upload-artifact@v4
+        with:
+          name: webrtc-audio-processing
+          path: webrtc-audio-processing.zip

@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+	<TargetFramework>net9.0-windows10.0.17763.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+	  <UseWPF>true</UseWPF>
+	<UseWindowsForms>true</UseWindowsForms>
+	<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="LibXml\**" />
+    <EmbeddedResource Remove="LibXml\**" />
+    <None Remove="LibXml\**" />
+    <Page Remove="LibXml\**" />
+  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="FluentValidation" Version="12.1.1" />
+		<PackageReference Include="Humanizer" Version="3.0.1" />
+		<PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.1.3" />
+		<PackageReference Include="Mime-Detective.Definitions.Exhaustive" Version="25.8.1" />
+		<PackageReference Include="morelinq" Version="4.4.0" />
+		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0 " />
+		<PackageReference Include="Serilog" Version="4.3.1" />
+		<PackageReference Include="Serilog.Extensions.Logging" Version="10.0.0" />
+		<PackageReference Include="Serilog.Settings.Configuration" Version="10.0.0" />
+		<PackageReference Include="Serilog.Sinks.Async" Version="2.1.0" />
+		<PackageReference Include="Serilog.Sinks.Debug" Version="3.0.0" />
+		<PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+		<PackageReference Include="System.Drawing.Common" Version="9.0.10" />
+		<PackageReference Include="System.Reactive" Version="6.1.0" />
+		<PackageReference Include="System.Runtime.Numerics" Version="4.3.0" />
+	</ItemGroup>
+	<ItemGroup>
+	  <ProjectReference Include="..\libxmpBindings\libxmpBindings\libxmpBindings.csproj" />
+	  <ProjectReference Include="..\SoundFlow\Src\SoundFlow.csproj" />
+	</ItemGroup>
+	<!--
+	<ItemGroup>
+	  <Reference Include="libxmpBindings">
+		<HintPath>..\..\LibXmlBindings\libxmpBindings\bin\Release\net8.0\libxmpBindings.dll</HintPath>
+	  </Reference>
+	</ItemGroup>
+	-->
+</Project>

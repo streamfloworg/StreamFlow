@@ -1,0 +1,9 @@
+{
+  "triggers": [
+    {
+      "name": "OnClaudeComplete",
+      "watch": ".agents/.pending-review",
+      "action": "antigravity run-review --file=.agents/agents.md && rm .agents/.pending-review"
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+<UserControl
+    x:Class="StreamFlow.App.Controls.SectionPanel"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:conv="clr-namespace:StreamFlow.App.Converter"
+    xmlns:adonisUi="clr-namespace:AdonisUI;assembly=AdonisUI"
+    x:Name="ParentRoot">
+
+    <UserControl.Resources>
+            <conv:NullVisibilityConverter x:Key="NullToVisibility"/>
+    </UserControl.Resources>
+
+    <Border
+        Background="{Binding Background, ElementName=ParentRoot}"
+        BorderBrush="{Binding BorderBrush, ElementName=ParentRoot}"
+        BorderThickness="{Binding BorderThickness, ElementName=ParentRoot}"
+        Padding="{Binding Padding, ElementName=ParentRoot}"
+        CornerRadius="8">
+
+        <!-- Simple clean drop shadow styling effect -->
+        <Border.Effect>
+            <DropShadowEffect
+                BlurRadius="15"
+                Color="#000000"
+                Opacity="0.1"
+                ShadowDepth="3"/>
+        </Border.Effect>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Simulated Header Text Block -->
+            <Border
+                Grid.Row="0"
+                BorderThickness="0,0,0,1"
+                BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}">
+                <TextBlock
+                    Text="{Binding HeaderText, ElementName=ParentRoot}"
+                    Style="{StaticResource PanelHeaderStyle}"/>
+            </Border>
+
+            <!-- ContentPresenter dynamically loads whatever children you pass in later -->
+            <ContentPresenter
+                Grid.Row="1"
+                HorizontalAlignment="{Binding HorizontalContentAlignment, ElementName=ParentRoot}"
+                VerticalAlignment="{Binding VerticalContentAlignment, ElementName=ParentRoot}"/>
+        </Grid>
+    </Border>
+</UserControl>

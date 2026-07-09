@@ -1,0 +1,19 @@
+﻿<UserControl
+    x:Class="StreamFlow.App.Controls.Compose.CompositionSegment"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+    xmlns:local="clr-namespace:StreamFlow.App.Controls.Compose"
+    mc:Ignorable="d"
+    MinHeight="76"
+    MinWidth="10"
+    AllowDrop="True"
+    d:DesignHeight="76"
+    d:DesignWidth="120">
+    <!--<Border CornerRadius="3" BorderThickness="1" BorderBrush="{StaticResource PlotAxisBrush}" Background="{StaticResource VisualizationBackgroundCustom}" Opacity="0.8">
+        <Path>
+            
+        </Path>
+    </Border>-->
+</UserControl>

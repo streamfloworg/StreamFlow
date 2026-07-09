@@ -1,0 +1,44 @@
+﻿<Window x:Class="StreamFlow.App.ViewModels.Windows.DebugWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:local="clr-namespace:StreamFlow.App.ViewModels.Windows"
+    xmlns:data="clr-namespace:StreamFlow.Core.Data;assembly=StreamFlow.Core"
+    x:Name="Window"
+    Title="StreamFlow Debug"
+    MaxWidth="650"
+    MaxHeight="800"
+    MinWidth="450"
+    MinHeight="500"
+    d:DataContext="{Binding ViewModel, RelativeSource={RelativeSource Self}}"
+    DataContext="{Binding ViewModel, RelativeSource={RelativeSource Self}}"
+    mc:Ignorable="d">
+    <ScrollViewer
+        VerticalAlignment="Stretch"
+        CanContentScroll="True">
+        <DataGrid
+            x:Name="DebugDataGrid"
+            ItemsSource="{Binding ItemsViewSource.Source}"
+            AutoGenerateColumns="False"
+            CanUserSortColumns="False"
+            CanUserResizeRows="False"
+            CanUserResizeColumns="True"
+            CanUserDeleteRows="False"
+            CanUserReorderColumns="False"
+            CanUserAddRows="False"
+            HeadersVisibility="Column"
+            EnableColumnVirtualization="True"
+            IsReadOnly="True"
+            GridLinesVisibility="All"
+            RowHeaderWidth="0"
+            SelectionMode="Single"
+            SelectionUnit="FullRow">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Property" Binding="{Binding Name}" Width="*" />
+                <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="2*" />
+                <DataGridTextColumn Header="Type" Binding="{Binding PropertyType}" Width="*" />
+            </DataGrid.Columns>
+        </DataGrid>
+    </ScrollViewer>
+</Window>

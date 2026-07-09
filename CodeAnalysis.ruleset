@@ -1,0 +1,4 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<RuleSet Name="StreamFlow Code Analysis Rule Set" Description=" " ToolsVersion="17.0">
+  <Include Path="allrules.ruleset" Action="Default" />
+</RuleSet>

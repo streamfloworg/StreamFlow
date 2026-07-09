@@ -1,0 +1,871 @@
+﻿<Page
+    x:Class="StreamFlow.App.Views.Pages.ScenesView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:adonisUi="clr-namespace:AdonisUI;assembly=AdonisUI"
+    xmlns:adonisControls="clr-namespace:AdonisUI.Controls;assembly=AdonisUI"
+    xmlns:adonisExtensions="clr-namespace:AdonisUI.Extensions;assembly=AdonisUI"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="clr-namespace:StreamFlow.App.Views.Pages"
+    xmlns:vm="clr-namespace:StreamFlow.App.ViewModels.Pages"
+    xmlns:conv="clr-namespace:StreamFlow.App.Converter"
+    xmlns:services="clr-namespace:StreamFlow.App.Services"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:behaviors="clr-namespace:StreamFlow.App.Helpers.Behaviors"
+    Title="ScenesPage"
+    d:DataContext="{d:DesignInstance local:ScenesView, IsDesignTimeCreatable=False}"
+    d:DesignHeight="650"
+    d:Design.Background="{DynamicResource {x:Static adonisUi:Brushes.Layer0BackgroundBrush}}"
+    d:Design.Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"
+    Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"
+    Loaded="ScenesView_Loaded"
+    Unloaded="ScenesView_Unloaded"
+    mc:Ignorable="d">
+
+    <Page.Resources>
+        <conv:PercentToPixelConverter x:Key="PercentToPixel"/>
+        <conv:PercentToDynamicPixelConverter x:Key="PercentToDynamicPixel"/>
+        <conv:SlotRoleBrushConverter x:Key="SlotRoleBrush"/>
+        <conv:AspectRatioTextConverter x:Key="AspectRatioText"/>
+        <conv:BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+        <conv:BoolToFontWeightConverter x:Key="BoolToFontWeight"/>
+        <conv:NullVisibilityConverter x:Key="NullToVisibility"/>
+        <conv:InvertedNullVisibilityConverter x:Key="InvertedNullToVisibility"/>
+        <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
+        <conv:CornerClipConverter x:Key="CornerClip"/>
+        <conv:ColorToBrushConverter x:Key="ColorToBrush"/>
+        <conv:PercentToFractionConverter x:Key="PercentToFraction"/>
+        <conv:RotationDegreesToIndexConverter x:Key="RotationDegreesToIndex"/>
+        <conv:TimerModeToIndexConverter x:Key="TimerModeToIndex"/>
+        <conv:TimerModeToVisibilityConverter x:Key="CountDownToVisibility"/>
+        <conv:SceneTransitionKindToIndexConverter x:Key="SceneTransitionKindToIndex"/>
+        <conv:CollectionCountToVisibilityConverter x:Key="CollectionCountToVisibility"/>
+
+        <Style x:Key="FieldLabelStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+        <SolidColorBrush x:Key="TextSecondaryBrush" Color="#99FFFFFF"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="#4FC3F7"/>
+        <Style x:Key="RowSplitterStyle" TargetType="GridSplitter">
+            <Setter Property="Height" Value="4"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style x:Key="PanelSplitterStyle" TargetType="GridSplitter">
+            <Setter Property="Width" Value="4"/>
+            <Setter Property="VerticalAlignment" Value="Stretch"/>
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+    </Page.Resources>
+
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Toolbar: only shown once a Scene Set is loaded for editing on this page. -->
+        <Border Grid.Row="0" Margin="0,0,0,12" Padding="12,8" CornerRadius="6"
+                BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="1"
+                Background="{DynamicResource {x:Static adonisUi:Brushes.Layer1BackgroundBrush}}"
+                Visibility="{Binding ViewModel.IsSceneSetLoaded, Converter={StaticResource BoolToVisibility}}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="8"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" MinWidth="160">
+                    <TextBlock Text="Scene Set Name" Style="{StaticResource FieldLabelStyle}" Margin="0"/>
+                    <TextBox Text="{Binding ViewModel.SceneEditor.SceneSetName, UpdateSourceTrigger=PropertyChanged}"/>
+                </StackPanel>
+                <StackPanel Grid.Column="2" MinWidth="160">
+                    <TextBlock Text="Author" Style="{StaticResource FieldLabelStyle}" Margin="0"/>
+                    <TextBox Text="{Binding ViewModel.SceneEditor.SceneSetAuthor, UpdateSourceTrigger=PropertyChanged}"/>
+                </StackPanel>
+                <!-- Session-wide, not per-scene: how switching ActiveScene animates in the actual
+                     composited/streamed output (see SceneEditorViewModel.ActivateSceneAsync). -->
+                <StackPanel Grid.Column="3" MinWidth="220" Margin="16,0,0,0" HorizontalAlignment="Left">
+                    <TextBlock Text="Scene Transition" Style="{StaticResource FieldLabelStyle}" Margin="0"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="6"/>
+                            <ColumnDefinition Width="60"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <ComboBox Grid.Column="0" SelectedIndex="{Binding ViewModel.SceneEditor.TransitionKind, Converter={StaticResource SceneTransitionKindToIndex}}">
+                            <ComboBoxItem Content="Cut"/>
+                            <ComboBoxItem Content="Fade"/>
+                            <ComboBoxItem Content="Slide Left"/>
+                            <ComboBoxItem Content="Slide Right"/>
+                            <ComboBoxItem Content="Slide Up"/>
+                            <ComboBoxItem Content="Slide Down"/>
+                        </ComboBox>
+                        <TextBox Grid.Column="2" Text="{Binding ViewModel.SceneEditor.TransitionDurationMs, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Grid.Column="3" Text="ms" VerticalAlignment="Center" Margin="4,0,0,0"
+                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                    </Grid>
+                </StackPanel>
+                <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Bottom">
+                    <Button Content="💾 Save" Padding="10,4" Margin="0,0,8,0"
+                            ToolTip="Overwrite the loaded Scene Set's own files"
+                            Command="{Binding ViewModel.SceneEditor.SaveActiveSceneSetCommand}"/>
+                    <Button Content="Save to disk (.sfset)…" Padding="10,4" Margin="0,0,8,0"
+                            ToolTip="Export the current layout to a .sfset file you choose"
+                            Command="{Binding ViewModel.SaveSceneSetToDiskCommand}"/>
+                </StackPanel>
+                <Button Grid.Column="5" Content="Close" Padding="10,4" VerticalAlignment="Bottom"
+                        ToolTip="Close this page's editor — Go Live's own state is unaffected"
+                        Command="{Binding ViewModel.CloseSceneSetCommand}"/>
+            </Grid>
+        </Border>
+
+        <!-- Blank-state prompt: shown until the user explicitly loads a Scene Set here — even
+             though SceneEditor's Scenes/ActiveScene may already be populated (Go Live loads them
+             eagerly at app startup), this page never shows/edits them without an explicit
+             opt-in. -->
+        <Border Grid.Row="1" Visibility="{Binding ViewModel.IsSceneSetLoaded, Converter={StaticResource InverseBoolToVisibility}}"
+                CornerRadius="6" BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="1"
+                Background="{DynamicResource {x:Static adonisUi:Brushes.Layer1BackgroundBrush}}">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="520">
+                <TextBlock Text="No Scene Set loaded" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,0,0,6"/>
+                <TextBlock Text="Load one to start positioning layers — edits here show up live on the Go Live page too."
+                           Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" TextWrapping="Wrap"
+                           TextAlignment="Center" Margin="0,0,0,16"/>
+
+                <!-- Library browser: every Scene Set already imported (see SceneEditorViewModel.
+                     RegisteredSceneSets) — absent entirely when empty rather than showing a
+                     placeholder, since "Load from disk"/"Create New" below already cover getting
+                     started from nothing. -->
+                <StackPanel Visibility="{Binding ViewModel.SceneEditor.RegisteredSceneSets, Converter={StaticResource CollectionCountToVisibility}}"
+                            Margin="0,0,0,16">
+                    <TextBlock Text="My Scene Sets" Style="{StaticResource FieldLabelStyle}" Margin="0,0,0,6"/>
+                    <Border BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="1" CornerRadius="4">
+                        <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding ViewModel.SceneEditor.RegisteredSceneSets}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="10,6">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0">
+                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock Text="{Binding Author}" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           Visibility="{Binding Author, Converter={StaticResource NullToVisibility}}"/>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                                <Button Content="Load" Padding="10,4" Margin="0,0,4,0"
+                                                        Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.LoadRegisteredSceneSetCommand}"
+                                                        CommandParameter="{Binding}"/>
+                                                <Button Content="📤" ToolTip="Export to .sfset" Padding="8,4" Margin="0,0,4,0"
+                                                        Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.ExportRegisteredSceneSetCommand}"
+                                                        CommandParameter="{Binding}"/>
+                                                <Button Content="✕" ToolTip="Delete" Padding="8,4"
+                                                        Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.DeleteRegisteredSceneSetCommand}"
+                                                        CommandParameter="{Binding}"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Border>
+                </StackPanel>
+
+                <Button Content="Load Go Live's Active Scene Set" Padding="0,8" Margin="0,0,0,12" HorizontalAlignment="Stretch"
+                        Command="{Binding ViewModel.LoadActiveSceneSetCommand}"
+                        Visibility="{Binding ViewModel.SceneEditor.ActiveSceneSet, Converter={StaticResource NullToVisibility}}"/>
+
+                <Separator Margin="0,0,0,12" Background="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}"/>
+
+                <Button Content="Load Scene Set from disk (.sfset)…" Padding="0,8" Margin="0,0,0,8" HorizontalAlignment="Stretch"
+                        Command="{Binding ViewModel.LoadSceneSetFromDiskCommand}"/>
+                <Button Content="Create New Scene Set" Padding="0,8" HorizontalAlignment="Stretch"
+                        Command="{Binding ViewModel.CreateNewSceneSetCommand}"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Editor: the existing 3-column layout, shown once a Scene Set is loaded. -->
+        <Grid Grid.Row="1" Visibility="{Binding ViewModel.IsSceneSetLoaded, Converter={StaticResource BoolToVisibility}}">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="340"/>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Left column: scene picker/setup, layers list, selected-slot properties.
+             No "Save Layout" button/HasUnsavedChanges anywhere here — persisting to disk stays
+             a Go-Live-only action, see SceneEditorViewModel's own doc comment. -->
+        <Border Grid.Column="0" CornerRadius="6" Padding="0" BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}"
+                BorderThickness="1" Background="{DynamicResource {x:Static adonisUi:Brushes.Layer1BackgroundBrush}}">
+            <Grid Margin="12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="2*"/>
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0" Margin="0,0,0,8">
+                    <TextBlock Text="Scenes" Style="{StaticResource FieldLabelStyle}"/>
+                    <!-- Each scene is its own tab — selecting one drives ActiveScene exactly like
+                         the old picker did. Content is deliberately blank (empty ContentTemplate):
+                         the actual editor below (Layers/properties/canvas) already reacts to
+                         ActiveScene on its own, so the tab strip only needs to act as a selector,
+                         not host per-scene content itself. -->
+                    <TabControl ItemsSource="{Binding ViewModel.SceneEditor.Scenes}"
+                                SelectedItem="{Binding ViewModel.SceneEditor.ActiveScene, Mode=TwoWay}"
+                                Padding="0" Margin="0,0,0,6">
+                        <TabControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Name}" Padding="2,0" MaxWidth="120" TextTrimming="CharacterEllipsis"/>
+                            </DataTemplate>
+                        </TabControl.ItemTemplate>
+                        <TabControl.ContentTemplate>
+                            <DataTemplate/>
+                        </TabControl.ContentTemplate>
+                    </TabControl>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button Content="+ Add" Padding="10,4" Margin="0,0,6,0"
+                                ToolTip="Add scene" Command="{Binding ViewModel.SceneEditor.AddSceneCommand}"/>
+                        <Button Content="📑 Duplicate" Padding="8,4" Margin="0,0,6,0"
+                                ToolTip="Duplicate active scene" Command="{Binding ViewModel.SceneEditor.DuplicateActiveSceneCommand}"/>
+                        <Button Content="✕ Remove" Padding="10,4" Margin="0,0,6,0"
+                                ToolTip="Remove active scene" Command="{Binding ViewModel.SceneEditor.RemoveActiveSceneCommand}"/>
+                        <Button Content="★ Default" Padding="8,4"
+                                ToolTip="Set as default on launch"
+                                Command="{Binding ViewModel.SceneEditor.SetActiveSceneAsDefaultCommand}"/>
+                    </StackPanel>
+
+                    <TextBlock Text="Scene Name" Style="{StaticResource FieldLabelStyle}"/>
+                    <TextBox Text="{Binding ViewModel.SceneEditor.ActiveScene.Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
+
+                    <!-- Only relevant for a primary-less scene — a capture source's own real
+                         resolution is always authoritative once one exists. -->
+                    <StackPanel Visibility="{Binding ViewModel.SceneEditor.PrimarySlot, Converter={StaticResource InvertedNullToVisibility}}">
+                        <TextBlock Text="Canvas Resolution" Style="{StaticResource FieldLabelStyle}"/>
+                        <TextBlock Text="No capture source in this scene — set a resolution to render overlays at."
+                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="6"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0" Text="{Binding ViewModel.SceneEditor.ManualCanvasWidth, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBlock Grid.Column="1" Text="×" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <TextBox Grid.Column="2" Text="{Binding ViewModel.SceneEditor.ManualCanvasHeight, UpdateSourceTrigger=PropertyChanged}"/>
+                            <Button Grid.Column="3" Content="Set" Margin="6,0,0,0" Padding="8,4"
+                                    Command="{Binding ViewModel.SceneEditor.ApplyManualCanvasResolutionCommand}"/>
+                        </Grid>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <ComboBox x:Name="CanvasResolutionDeviceCombo" Grid.Column="0"
+                                      ItemsSource="{Binding ViewModel.SceneEditor.AvailableSources}"
+                                      DisplayMemberPath="Name"
+                                      adonisExtensions:WatermarkExtension.Watermark="Or match a device…"/>
+                            <Button Grid.Column="1" Content="Use" Margin="6,0,0,0" Padding="8,4"
+                                    Command="{Binding ViewModel.SceneEditor.SetCanvasResolutionFromDeviceCommand}"
+                                    CommandParameter="{Binding ElementName=CanvasResolutionDeviceCombo, Path=SelectedItem}"/>
+                        </Grid>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Layers List (unifies captures and overlays) -->
+                <Grid Grid.Row="1" MinHeight="120">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <Grid Grid.Row="0" Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Layers" Style="{StaticResource FieldLabelStyle}" VerticalAlignment="Center"/>
+                        <Button Grid.Column="1" Content="+ Add Layer" Padding="10,3" FontSize="11" Click="AddLayer_Click">
+                            <Button.ContextMenu>
+                                <ContextMenu x:Name="AddLayerMenu" DataContext="{Binding Path=PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                    <MenuItem Header="Capture Source" Command="{Binding ViewModel.SceneEditor.AddCaptureSourceCommand}"/>
+                                    <Separator/>
+                                    <MenuItem Header="Image Overlay" Command="{Binding ViewModel.SceneEditor.AddImageOverlayCommand}"/>
+                                    <MenuItem Header="Text Overlay" Command="{Binding ViewModel.SceneEditor.AddTextOverlayCommand}"/>
+                                    <MenuItem Header="Color Overlay" Command="{Binding ViewModel.SceneEditor.AddColorOverlayCommand}"/>
+                                    <MenuItem Header="Video Overlay" Command="{Binding ViewModel.SceneEditor.AddVideoOverlayCommand}"/>
+                                    <MenuItem Header="Chat Overlay" Command="{Binding ViewModel.SceneEditor.AddChatOverlayCommand}"/>
+                                    <MenuItem Header="Timer Overlay" Command="{Binding ViewModel.SceneEditor.AddTimerOverlayCommand}"/>
+                                    <MenuItem Header="Blur Layer" Command="{Binding ViewModel.SceneEditor.AddBlurOverlayCommand}"/>
+                                </ContextMenu>
+                            </Button.ContextMenu>
+                        </Button>
+                    </Grid>
+
+                    <Border Grid.Row="1" CornerRadius="4" BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer2BorderBrush}}" BorderThickness="1" Background="{DynamicResource {x:Static adonisUi:Brushes.Layer2BackgroundBrush}}">
+                        <ListBox ItemsSource="{Binding ViewModel.SceneEditor.Slots}"
+                                 SelectedItem="{Binding ViewModel.SceneEditor.SelectedSlot, Mode=TwoWay}"
+                                 behaviors:SlotReorderBehavior.OnReordered="{Binding ViewModel.SceneEditor.NotifySlotsReorderedCommand}"
+                                 Background="Transparent" BorderThickness="0">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                                    <Setter Property="AllowDrop" Value="True"/>
+                                    <Setter Property="behaviors:SlotReorderBehavior.IsDropTarget" Value="True"/>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:SourceSlot}">
+                                    <Grid Margin="4,2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="30"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="⠿" FontFamily="Segoe UI Symbol" FontSize="14"
+                                                   Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0"
+                                                   Cursor="SizeAll" behaviors:SlotReorderBehavior.IsGrip="True"/>
+                                        <TextBlock x:Name="IconText" Grid.Column="1" Margin="0,0,8,0" FontSize="12" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding DisplayName}" VerticalAlignment="Center" FontWeight="SemiBold"/>
+
+                                        <!-- Hover Delete Button -->
+                                        <Button Grid.Column="3" Content="✕" Padding="6,2" FontSize="10"
+                                                Background="#44ff0000" Foreground="White" BorderThickness="0"
+                                                Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.RemoveSlotCommand}"
+                                                CommandParameter="{Binding}"
+                                                x:Name="RowDeleteButton" VerticalAlignment="Center" Visibility="Collapsed"/>
+                                    </Grid>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=IsMouseOver}" Value="True">
+                                            <Setter TargetName="RowDeleteButton" Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsPrimary}" Value="True">
+                                            <Setter TargetName="IconText" Property="Text" Value="🖥️"/>
+                                        </DataTrigger>
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding IsPrimary}" Value="False"/>
+                                                <Condition Binding="{Binding IsOverlay}" Value="False"/>
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter TargetName="IconText" Property="Text" Value="🖼️"/>
+                                        </MultiDataTrigger>
+                                        <DataTrigger Binding="{Binding OverlayKind}" Value="Image">
+                                            <Setter TargetName="IconText" Property="Text" Value="📷"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding OverlayKind}" Value="Text">
+                                            <Setter TargetName="IconText" Property="Text" Value="📝"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding OverlayKind}" Value="Color">
+                                            <Setter TargetName="IconText" Property="Text" Value="🎨"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding OverlayKind}" Value="Video">
+                                            <Setter TargetName="IconText" Property="Text" Value="🎬"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding OverlayKind}" Value="Chat">
+                                            <Setter TargetName="IconText" Property="Text" Value="💬"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding OverlayKind}" Value="Blur">
+                                            <Setter TargetName="IconText" Property="Text" Value="🌫️"/>
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Border>
+                </Grid>
+
+                <GridSplitter Grid.Row="2" Style="{StaticResource RowSplitterStyle}"/>
+
+                <!-- Layer Properties -->
+                <Border Grid.Row="3" BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="0,1,0,0">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="0,12,0,0" DataContext="{Binding ViewModel.SceneEditor.SelectedSlot}">
+                            <TextBlock Text="Layer Properties" Style="{StaticResource FieldLabelStyle}"
+                                       Visibility="{Binding Converter={StaticResource NullToVisibility}}"/>
+
+                            <TextBlock Text="Select a layer above to configure its properties." Foreground="{StaticResource TextSecondaryBrush}"
+                                       FontSize="12" TextWrapping="Wrap">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding}" Value="{x:Null}">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+
+                            <StackPanel Visibility="{Binding Converter={StaticResource NullToVisibility}}">
+                                <!-- Capture Source selector (Primary/PiPs) -->
+                                <StackPanel Visibility="{Binding IsOverlay, Converter={StaticResource InverseBoolToVisibility}}">
+                                    <TextBlock Text="Capture Target" Style="{StaticResource FieldLabelStyle}"/>
+                                    <ComboBox ItemsSource="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.AvailableSources}"
+                                              SelectedValue="{Binding SourceId, Mode=TwoWay}"
+                                              SelectedValuePath="Id"
+                                              DisplayMemberPath="Name"
+                                              Margin="0,0,0,8"/>
+                                </StackPanel>
+
+                                <!-- Image Overlay -->
+                                <StackPanel Visibility="{Binding IsImageOverlay, Converter={StaticResource BoolToVisibility}}">
+                                    <TextBlock Text="Image" Style="{StaticResource FieldLabelStyle}"/>
+                                    <TextBlock Text="{Binding Content.ImagePath}" TextTrimming="CharacterEllipsis" Margin="0,0,0,6"
+                                               Foreground="{StaticResource TextSecondaryBrush}" FontSize="12"/>
+                                    <Button Content="Browse…" HorizontalAlignment="Stretch"
+                                            Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.BrowseOverlayImageCommand}"
+                                            CommandParameter="{Binding}"
+                                            Margin="0,0,0,8"/>
+                                </StackPanel>
+
+                                <!-- Text Overlay -->
+                                <StackPanel Visibility="{Binding IsTextOverlay, Converter={StaticResource BoolToVisibility}}">
+                                    <TextBlock Text="Text Content" Style="{StaticResource FieldLabelStyle}"/>
+                                    <TextBox Text="{Binding Content.OverlayText, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap"
+                                             AcceptsReturn="True" MinHeight="60" Margin="0,0,0,8"/>
+                                    <!-- Font size renders the text at this exact point size regardless of
+                                         the box's own W/H — independent of the overlay's position/scaling. -->
+                                    <Grid Margin="0,0,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Font Size" VerticalAlignment="Center"
+                                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="0,0,8,0"/>
+                                        <Slider Grid.Column="1" Minimum="8" Maximum="200" VerticalAlignment="Center"
+                                                Value="{Binding Content.FontSize, Mode=TwoWay}"/>
+                                        <TextBlock Grid.Column="2" Width="28" VerticalAlignment="Center" TextAlignment="Right"
+                                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"
+                                                   Text="{Binding Content.FontSize, StringFormat={}{0:F0}}"/>
+                                    </Grid>
+                                    <Grid Margin="0,0,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" Width="24" Height="24" CornerRadius="4" Margin="0,0,8,0"
+                                                BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="1"
+                                                Background="{Binding Content.FontColor, Converter={StaticResource ColorToBrush}}"/>
+                                        <Button Grid.Column="1" Content="Text color…" HorizontalAlignment="Stretch"
+                                                Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.ChangeTextColorCommand}"
+                                                CommandParameter="{Binding}"/>
+                                    </Grid>
+                                    <CheckBox Content="Bold" IsChecked="{Binding Content.IsBold, Mode=TwoWay}" Margin="0,0,0,8"/>
+                                </StackPanel>
+
+                                <!-- Color Overlay -->
+                                <StackPanel Visibility="{Binding IsColorOverlay, Converter={StaticResource BoolToVisibility}}">
+                                    <TextBlock Text="Color" Style="{StaticResource FieldLabelStyle}"/>
+                                    <Grid Margin="0,0,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" Width="24" Height="24" CornerRadius="4" Margin="0,0,8,0"
+                                                BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="1"
+                                                Background="{Binding Content.OverlayColor, Converter={StaticResource ColorToBrush}}"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Content.OverlayColor}" VerticalAlignment="Center"
+                                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="12"/>
+                                    </Grid>
+                                    <Button Content="Change color…" HorizontalAlignment="Stretch"
+                                            Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.ChangeOverlayColorCommand}"
+                                            CommandParameter="{Binding}"
+                                            Margin="0,0,0,8"/>
+                                </StackPanel>
+
+                                <!-- Video Overlay -->
+                                <StackPanel Visibility="{Binding IsVideoOverlay, Converter={StaticResource BoolToVisibility}}">
+                                    <TextBlock Text="Video File" Style="{StaticResource FieldLabelStyle}"/>
+                                    <TextBlock Text="{Binding Content.VideoPath}" TextTrimming="CharacterEllipsis" Margin="0,0,0,6"
+                                               Foreground="{StaticResource TextSecondaryBrush}" FontSize="12"/>
+                                    <Button Content="Browse…" HorizontalAlignment="Stretch"
+                                            Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.BrowseOverlayVideoCommand}"
+                                            CommandParameter="{Binding}"
+                                            Margin="0,0,0,8"/>
+                                </StackPanel>
+
+                                <!-- Chroma Key — image/video overlays only; color-key transparency
+                                     (e.g. green-screen removal) applied by the compositor. -->
+                                <StackPanel Visibility="{Binding SupportsChromaKey, Converter={StaticResource BoolToVisibility}}">
+                                    <CheckBox Content="Chroma Key" IsChecked="{Binding Content.ChromaKeyEnabled, Mode=TwoWay}" Margin="0,0,0,6"/>
+                                    <StackPanel Visibility="{Binding Content.ChromaKeyEnabled, Converter={StaticResource BoolToVisibility}}">
+                                        <Grid Margin="0,0,0,6">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Width="24" Height="24" CornerRadius="4" Margin="0,0,8,0"
+                                                    BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="1"
+                                                    Background="{Binding Content.ChromaKeyColor, Converter={StaticResource ColorToBrush}}"/>
+                                            <Button Grid.Column="1" Content="Pick color…" HorizontalAlignment="Stretch"
+                                                    Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.ChangeChromaKeyColorCommand}"
+                                                    CommandParameter="{Binding}"/>
+                                            <Button Grid.Column="2" Content="💧" Padding="8,4" Margin="6,0,0,0"
+                                                    ToolTip="Pick color from screen (eyedropper)"
+                                                    Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.PickChromaKeyColorFromScreenCommand}"
+                                                    CommandParameter="{Binding}"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="Similarity" VerticalAlignment="Center"
+                                                       Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="0,0,8,0"/>
+                                            <Slider Grid.Column="1" Minimum="0" Maximum="100" VerticalAlignment="Center"
+                                                    Value="{Binding Content.ChromaKeySimilarity, Mode=TwoWay}"/>
+                                            <TextBlock Grid.Column="2" Width="28" VerticalAlignment="Center" TextAlignment="Right"
+                                                       Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"
+                                                       Text="{Binding Content.ChromaKeySimilarity, StringFormat={}{0:F0}}"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <!-- Chat Overlay Info -->
+                                <StackPanel Visibility="{Binding IsChatOverlay, Converter={StaticResource BoolToVisibility}}">
+                                    <TextBlock Text="Chat Overlay" Style="{StaticResource FieldLabelStyle}"/>
+                                    <TextBlock Text="Displays live messages from active chat connection (started from the Go Live page)."
+                                               Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                </StackPanel>
+
+                                <!-- Timer Overlay -->
+                                <StackPanel Visibility="{Binding IsTimerOverlay, Converter={StaticResource BoolToVisibility}}">
+                                    <TextBlock Text="Timer Overlay" Style="{StaticResource FieldLabelStyle}"/>
+                                    <ComboBox Margin="0,0,0,8" SelectedIndex="{Binding Content.TimerMode, Converter={StaticResource TimerModeToIndex}}">
+                                        <ComboBoxItem Content="Count Down"/>
+                                        <ComboBoxItem Content="Count Up"/>
+                                    </ComboBox>
+                                    <StackPanel Visibility="{Binding Content.TimerMode, Converter={StaticResource CountDownToVisibility}}">
+                                        <TextBlock Text="Duration (seconds)" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                        <TextBox Text="{Binding Content.TimerDurationSeconds, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Content="▶ Start" Padding="10,4" Margin="0,0,6,0"
+                                                IsEnabled="{Binding Content.IsTimerRunning, Converter={StaticResource BooleanInvertConverter}}"
+                                                Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.StartTimerCommand}"
+                                                CommandParameter="{Binding}"/>
+                                        <Button Content="⏸ Pause" Padding="10,4" Margin="0,0,6,0"
+                                                IsEnabled="{Binding Content.IsTimerRunning}"
+                                                Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.PauseTimerCommand}"
+                                                CommandParameter="{Binding}"/>
+                                        <Button Content="⟲ Reset" Padding="10,4"
+                                                Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.ResetTimerCommand}"
+                                                CommandParameter="{Binding}"/>
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <!-- Blur Layer -->
+                                <StackPanel Visibility="{Binding IsBlurOverlay, Converter={StaticResource BoolToVisibility}}">
+                                    <TextBlock Text="Blur Layer" Style="{StaticResource FieldLabelStyle}"/>
+                                    <TextBlock Text="Blurs layers below this one in the list, within this box's area — move/resize it like any overlay, and reorder it in the layer list to change what's affected."
+                                               Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Strength" VerticalAlignment="Center"
+                                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="0,0,8,0"/>
+                                        <Slider Grid.Column="1" Minimum="1" Maximum="100" VerticalAlignment="Center"
+                                                Value="{Binding Content.BlurRadius, Mode=TwoWay}"/>
+                                        <TextBlock Grid.Column="2" Width="28" VerticalAlignment="Center" TextAlignment="Right"
+                                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"
+                                                   Text="{Binding Content.BlurRadius, StringFormat={}{0:F0}}"/>
+                                    </Grid>
+                                </StackPanel>
+
+                                <!-- Precision Layout — a primary slot gets the same layout
+                                     controls as any other layer now (no longer forced full-
+                                     screen), so this is no longer hidden for IsPrimary. -->
+                                <StackPanel>
+                                    <TextBlock Text="Layout Settings" Style="{StaticResource FieldLabelStyle}" Margin="0,8,0,4"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="6"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="4"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <StackPanel Grid.Row="0" Grid.Column="0">
+                                            <TextBlock Text="X (%)" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                            <TextBox Text="{Binding XPercent, StringFormat={}{0:F1}}"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Row="0" Grid.Column="2">
+                                            <TextBlock Text="Y (%)" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                            <TextBox Text="{Binding YPercent, StringFormat={}{0:F1}}"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Row="2" Grid.Column="0">
+                                            <TextBlock Text="Width (%)" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                            <TextBox Text="{Binding WPercent, StringFormat={}{0:F1}}"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Row="2" Grid.Column="2">
+                                            <TextBlock Text="Height (%)" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                            <TextBox Text="{Binding HPercent, StringFormat={}{0:F1}}"/>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <!-- Corner rounding isn't supported for blur regions (the compositor's
+                                         blur path is a plain rect), so don't show a slider that does nothing. -->
+                                    <Grid Margin="0,10,0,0" Visibility="{Binding IsBlurOverlay, Converter={StaticResource InverseBoolToVisibility}}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Corners" VerticalAlignment="Center"
+                                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="0,0,8,0"/>
+                                        <Slider Grid.Column="1" Minimum="0" Maximum="100" VerticalAlignment="Center"
+                                                Value="{Binding CornerRadiusPercent, Mode=TwoWay}"/>
+                                        <TextBlock Grid.Column="2" Width="28" VerticalAlignment="Center" TextAlignment="Right"
+                                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"
+                                                   Text="{Binding CornerRadiusPercent, StringFormat={}{0:F0}}"/>
+                                    </Grid>
+
+                                    <!-- A blur layer has no pixel content of its own to fade — its Strength
+                                         slider already covers its one knob — so hide this alongside Corners. -->
+                                    <Grid Margin="0,10,0,0" Visibility="{Binding IsBlurOverlay, Converter={StaticResource InverseBoolToVisibility}}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Opacity" VerticalAlignment="Center"
+                                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="0,0,8,0"/>
+                                        <Slider Grid.Column="1" Minimum="0" Maximum="100" VerticalAlignment="Center"
+                                                Value="{Binding OpacityPercent, Mode=TwoWay}"/>
+                                        <TextBlock Grid.Column="2" Width="28" VerticalAlignment="Center" TextAlignment="Right"
+                                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"
+                                                   Text="{Binding OpacityPercent, StringFormat={}{0:F0}}"/>
+                                    </Grid>
+
+                                    <!-- Rotation is a discrete 90-degree step, not a continuous value, so this
+                                         uses a ComboBox rather than a slider like Corners/Opacity. Hidden for
+                                         blur layers for the same reason as those two. -->
+                                    <Grid Margin="0,10,0,0" Visibility="{Binding IsBlurOverlay, Converter={StaticResource InverseBoolToVisibility}}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Rotation" VerticalAlignment="Center"
+                                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="0,0,8,0"/>
+                                        <ComboBox Grid.Column="1" SelectedIndex="{Binding RotationDegrees, Converter={StaticResource RotationDegreesToIndex}}">
+                                            <ComboBoxItem Content="0°"/>
+                                            <ComboBoxItem Content="90°"/>
+                                            <ComboBoxItem Content="180°"/>
+                                            <ComboBoxItem Content="270°"/>
+                                        </ComboBox>
+                                    </Grid>
+                                </StackPanel>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+            </Grid>
+        </Border>
+
+        <GridSplitter Grid.Column="1" Style="{StaticResource PanelSplitterStyle}"/>
+
+        <!-- Right column: placement canvas — a static aspect-ratio backdrop stands in for the
+             live preview (no captured frame is ever bound here), positioning/resizing/snapping
+             works identically to Go Live via the same SlotPlacementBehavior. -->
+        <Border Grid.Column="2" Padding="0" Background="{DynamicResource {x:Static adonisUi:Brushes.Layer1BackgroundBrush}}" BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}"
+                BorderThickness="1" CornerRadius="6" MinWidth="400">
+            <Viewbox Stretch="Uniform" Margin="8" HorizontalAlignment="Center" VerticalAlignment="Top">
+                <Canvas Width="640" Height="{Binding ViewModel.SceneEditor.ActiveScene.CanvasHeight}" Background="Transparent"
+                        behaviors:SlotPlacementBehavior.IsEnabled="True"
+                        behaviors:SlotPlacementBehavior.SelectedSlot="{Binding ViewModel.SceneEditor.SelectedSlot, Mode=TwoWay}">
+                    <!-- Static aspect-ratio backdrop standing in for the live composited output —
+                         always fills the whole canvas exactly (it's not any one layer's own view,
+                         a primary no longer implies "the whole frame") — no Source binding, just a
+                         plain fill sized/positioned the same way the real preview image would be. -->
+                    <Border Background="#22FFFFFF" IsHitTestVisible="False" Width="640" Canvas.Left="0" Canvas.Top="0"
+                            Height="{Binding ViewModel.SceneEditor.ActiveScene.CanvasHeight}"/>
+                    <ItemsControl ItemsSource="{Binding ViewModel.SceneEditor.Slots}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <Canvas Width="640" Height="{Binding ViewModel.SceneEditor.ActiveScene.CanvasHeight}"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemContainerStyle>
+                            <Style TargetType="ContentPresenter">
+                                <Setter Property="Canvas.Left" Value="{Binding XPercent, Converter={StaticResource PercentToPixel}, ConverterParameter=640}"/>
+                                <Setter Property="Canvas.Top">
+                                    <Setter.Value>
+                                        <MultiBinding Converter="{StaticResource PercentToDynamicPixel}">
+                                            <Binding Path="YPercent"/>
+                                            <Binding Path="CanvasHeight"/>
+                                        </MultiBinding>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ItemsControl.ItemContainerStyle>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:SourceSlot}">
+                                <Grid Width="{Binding WPercent, Converter={StaticResource PercentToPixel}, ConverterParameter=640}">
+                                    <Grid.Height>
+                                        <MultiBinding Converter="{StaticResource PercentToDynamicPixel}">
+                                            <Binding Path="HPercent"/>
+                                            <Binding Path="CanvasHeight"/>
+                                        </MultiBinding>
+                                    </Grid.Height>
+                                    <!-- Content is clipped to the corner radius and faded by Opacity
+                                         separately from the drag handles below, so a large radius never
+                                         eats the resize handle and a faded layer stays easy to select. -->
+                                    <Grid Opacity="{Binding OpacityPercent, Converter={StaticResource PercentToFraction}}"
+                                          RenderTransformOrigin="0.5,0.5">
+                                        <Grid.RenderTransform>
+                                            <RotateTransform Angle="{Binding RotationDegrees}"/>
+                                        </Grid.RenderTransform>
+                                        <Grid.Clip>
+                                            <MultiBinding Converter="{StaticResource CornerClip}">
+                                                <Binding Path="WPercent" Converter="{StaticResource PercentToPixel}" ConverterParameter="640"/>
+                                                <Binding Path="HPercent"/>
+                                                <Binding Path="CanvasHeight"/>
+                                                <Binding Path="CornerRadiusPercent"/>
+                                            </MultiBinding>
+                                        </Grid.Clip>
+                                        <!-- Image overlays are static, so they're rendered directly from the
+                                             file (client-side) rather than waiting on composited frames. Hidden
+                                             in favor of the chroma-keyed preview below while that's enabled. -->
+                                        <Image Source="{Binding Content.ImagePath}" Stretch="Fill">
+                                            <Image.Style>
+                                                <Style TargetType="Image">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <MultiDataTrigger>
+                                                            <MultiDataTrigger.Conditions>
+                                                                <Condition Binding="{Binding IsImageOverlay}" Value="True"/>
+                                                                <Condition Binding="{Binding Content.ChromaKeyEnabled}" Value="False"/>
+                                                            </MultiDataTrigger.Conditions>
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </MultiDataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Image.Style>
+                                        </Image>
+                                        <!-- Locally chroma-keyed render of the same file (see
+                                             SceneEditorViewModel.ScheduleChromaKeyPreviewUpdate) — a WYSIWYG
+                                             preview of what the real composited/stream output already shows. -->
+                                        <Image Source="{Binding Content.KeyedPreviewSource}" Stretch="Fill">
+                                            <Image.Style>
+                                                <Style TargetType="Image">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <MultiDataTrigger>
+                                                            <MultiDataTrigger.Conditions>
+                                                                <Condition Binding="{Binding IsImageOverlay}" Value="True"/>
+                                                                <Condition Binding="{Binding Content.ChromaKeyEnabled}" Value="True"/>
+                                                            </MultiDataTrigger.Conditions>
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </MultiDataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Image.Style>
+                                        </Image>
+                                        <!-- Text overlays likewise render locally via WPF's own text layout — a
+                                             close approximation of the rasterized bitmap actually sent to the core. -->
+                                        <Viewbox Stretch="Fill" Visibility="{Binding IsTextOverlay, Converter={StaticResource BoolToVisibility}}">
+                                            <TextBlock Text="{Binding Content.OverlayText}" FontFamily="Segoe UI"
+                                                       FontWeight="{Binding Content.IsBold, Converter={StaticResource BoolToFontWeight}}"
+                                                       Foreground="{Binding Content.FontColor, Converter={StaticResource ColorToBrush}}"/>
+                                        </Viewbox>
+                                        <!-- Timer overlays render the same live-ticking text locally (see
+                                             SceneEditorViewModel.FormatTimerDisplay/TickTimerOverlaysAsync). -->
+                                        <Viewbox Stretch="Fill" Visibility="{Binding IsTimerOverlay, Converter={StaticResource BoolToVisibility}}">
+                                            <TextBlock Text="{Binding Content.TimerDisplayText}" FontFamily="Segoe UI" FontWeight="Bold" Foreground="White"/>
+                                        </Viewbox>
+                                        <!-- Color overlays are a flat fill — no image/text content to render. -->
+                                        <Border Background="{Binding Content.OverlayColor, Converter={StaticResource ColorToBrush}}"
+                                                Visibility="{Binding IsColorOverlay, Converter={StaticResource BoolToVisibility}}"/>
+                                        <!-- Chat overlays render recent chat messages locally — populated only
+                                             if the Go Live page's chat connection is currently active, since
+                                             this page has no chat connection of its own. -->
+                                        <Border Background="#40000000" ClipToBounds="True" Visibility="{Binding IsChatOverlay, Converter={StaticResource BoolToVisibility}}">
+                                            <ItemsControl ItemsSource="{Binding Content.ChatMessages}" VerticalAlignment="Bottom">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate DataType="{x:Type services:ChatMessage}">
+                                                        <TextBlock TextWrapping="Wrap" Margin="4,2" FontSize="9">
+                                                            <Run Text="{Binding Username, StringFormat={}{0}:}" FontWeight="Bold"
+                                                                 Foreground="{Binding ColorHex, FallbackValue=Cyan, TargetNullValue=Cyan}"/>
+                                                            <Run Text="{Binding Text}" Foreground="White"/>
+                                                        </TextBlock>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </Border>
+                                    </Grid>
+                                    <Thumb x:Name="MoveThumb" behaviors:SlotPlacementBehavior.Mode="Move">
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Grid>
+                                                    <!-- Selection outline: thin dashed rect, only shown while this
+                                                         slot is the one selected (see SourceSlot.IsSelected). -->
+                                                    <Rectangle x:Name="MoveThumbBorder" Stroke="{Binding IsPrimary, Converter={StaticResource SlotRoleBrush}}"
+                                                               StrokeThickness="1" StrokeDashArray="4 2" Fill="Transparent"
+                                                               Visibility="{Binding IsSelected, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                                    <Border Background="{Binding IsPrimary, Converter={StaticResource SlotRoleBrush}}"
+                                                            Opacity="0.85" CornerRadius="0,0,4,0" HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                            Padding="6,3">
+                                                        <TextBlock Text="{Binding DisplayName}" Foreground="White" FontSize="11" FontWeight="SemiBold"/>
+                                                    </Border>
+                                                </Grid>
+                                                <ControlTemplate.Triggers>
+                                                    <!-- Hovering shows the outline too (not just selection) so users can
+                                                         see what's clickable on the canvas without selecting it first. -->
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="MoveThumbBorder" Property="Visibility" Value="Visible"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                    <Thumb x:Name="ResizeThumb" behaviors:SlotPlacementBehavior.Mode="Resize"
+                                           Width="14" Height="14" Cursor="SizeNWSE"
+                                           HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                           Visibility="{Binding IsSelected, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Rectangle x:Name="ResizeThumbBorder" Fill="Transparent"
+                                                           Stroke="{Binding IsPrimary, Converter={StaticResource SlotRoleBrush}}"
+                                                           StrokeThickness="1" StrokeDashArray="4 2"/>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- Alignment guides: shown only while a drag/resize is currently
+                         snapped to the canvas bounds/center or another item's edges. -->
+                    <Line x:Name="VerticalGuide" behaviors:SlotPlacementBehavior.GuideRole="Vertical" Y1="0" Y2="{Binding ViewModel.SceneEditor.ActiveScene.CanvasHeight}" Stroke="{StaticResource AccentBrush}"
+                          StrokeThickness="1" StrokeDashArray="4,2" IsHitTestVisible="False" Visibility="Collapsed"/>
+                    <Line x:Name="HorizontalGuide" behaviors:SlotPlacementBehavior.GuideRole="Horizontal" X1="0" X2="640" Stroke="{StaticResource AccentBrush}"
+                          StrokeThickness="1" StrokeDashArray="4,2" IsHitTestVisible="False" Visibility="Collapsed"/>
+                </Canvas>
+            </Viewbox>
+        </Border>
+        </Grid>
+    </Grid>
+</Page>
