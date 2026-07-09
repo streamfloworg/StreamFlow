@@ -72,6 +72,7 @@ jobs:
       Test_Project_Path: StreamFlow.Tests\StreamFlow.Tests.csproj              # Replace with the path to your test project, i.e. MyWpfApp.Tests\MyWpfApp.Tests.csproj.
       Wap_Project_Directory: StreamFlow.App.Package                            # Replace with the Wap project directory relative to the solution, i.e. MyWpfApp.Package.
       Wap_Project_Path: StreamFlow.App.Package\StreamFlow.App.Package.wapproj  # Replace with the path to your Wap project, i.e. MyWpf.App.Package\MyWpfApp.Package.wapproj.
+      Base64_Pfx: ${{ secrets.Base64_Encoded_Pfx }}
       # Must match native/.cargo/config.toml's FFMPEG_DIR — that's what the Rust core's build
       # script (ffmpeg-sys-next) actually reads, this just controls where this workflow puts it.
       Ffmpeg_Dev_Dir: C:\ffmpeg-dev\ffmpeg-n8.1-latest-win64-gpl-shared-8.1
@@ -165,7 +166,7 @@ jobs:
     # the manifest keeps its committed placeholder version, which is fine since that artifact
     # isn't what gets distributed for those runs.
     - name: Stamp app package manifest version
-      if: steps.version.outputs.is_release == 'true' && secrets.Base64_Encoded_Pfx != ''
+      if: ${{ steps.version.outputs.is_release == 'true' && env.Base64_Pfx != '' }}
       shell: pwsh
       run: |
         $manifestVersion = "${{ steps.version.outputs.version }}.0"
@@ -174,7 +175,7 @@ jobs:
 
     # Decode the base 64 encoded pfx and save the Signing_Certificate
     - name: Decode the pfx
-      if: secrets.Base64_Encoded_Pfx != ''
+      if: ${{ env.Base64_Pfx != '' }}
       run: |
         $pfx_cert_byte = [System.Convert]::FromBase64String("${{ secrets.Base64_Encoded_Pfx }}")
         $certificatePath = Join-Path -Path $env:Wap_Project_Directory -ChildPath GitHubActionsWorkflow.pfx
@@ -182,7 +183,7 @@ jobs:
 
     # Create the app package by building and packaging the Windows Application Packaging project
     - name: Create the app package
-      if: secrets.Base64_Encoded_Pfx != ''
+      if: ${{ env.Base64_Pfx != '' }}
       run: msbuild $env:Wap_Project_Path /p:Configuration=$env:Configuration /p:UapAppxPackageBuildMode=$env:Appx_Package_Build_Mode /p:AppxBundle=$env:Appx_Bundle /p:PackageCertificateKeyFile=GitHubActionsWorkflow.pfx /p:PackageCertificatePassword=${{ secrets.Pfx_Key }} /p:Version=${{ steps.version.outputs.version }}
       env:
         Appx_Bundle: Always
@@ -192,12 +193,12 @@ jobs:
 
     # Remove the pfx
     - name: Remove the pfx
-      if: secrets.Base64_Encoded_Pfx != ''
+      if: ${{ env.Base64_Pfx != '' }}
       run: Remove-Item -path $env:Wap_Project_Directory\GitHubActionsWorkflow.pfx
 
     # Upload the MSIX package: https://github.com/marketplace/actions/upload-a-build-artifact
     - name: Upload build artifacts
-      if: secrets.Base64_Encoded_Pfx != ''
+      if: ${{ env.Base64_Pfx != '' }}
       uses: actions/upload-artifact@v4
       with:
         name: MSIX Package (${{ matrix.configuration }})
