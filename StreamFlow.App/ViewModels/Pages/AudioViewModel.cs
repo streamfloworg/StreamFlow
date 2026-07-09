@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
@@ -388,7 +388,7 @@ public partial class AudioViewModel : ViewModel
     //    Logger.DebugLog(GetType(), $"VisualizationDimension changed: {value}");
     //}
 
-    private readonly Geometry MusicIconData = App.Current.FindResource("MusicIconData") as Geometry;
+    private readonly Geometry? MusicIconData = App.Current?.FindResource("MusicIconData") as Geometry;
 
     public Style? GridViewStyle { get; private set; }
 
@@ -419,8 +419,8 @@ public partial class AudioViewModel : ViewModel
         };
 
         AudioListCollectionView.Filter += FilterAudio;
-        GridViewStyle ??= App.Current.FindResource("AudioGridView") as Style;
-        ListViewStyle ??= App.Current.FindResource("AudioListView") as Style;
+        GridViewStyle ??= App.Current?.FindResource("AudioGridView") as Style;
+        ListViewStyle ??= App.Current?.FindResource("AudioListView") as Style;
     }
 
     /// <summary>
@@ -1223,7 +1223,7 @@ public partial class AudioViewModel : ViewModel
                 VerticalAlignment = VerticalAlignment.Bottom,
                 HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
                 IsClosable = true,
-                IconSource = new DrawingImage(new GeometryDrawing(App.Current.TryFindResource(AdonisUI.Brushes.ForegroundBrush) as SolidColorBrush, null, MusicIconData)),
+                IconSource = new DrawingImage(new GeometryDrawing(App.Current?.TryFindResource(AdonisUI.Brushes.ForegroundBrush) as SolidColorBrush, null, MusicIconData)),
                 Title = "Up Next",
                 CornerRadius = new CornerRadius(6),
                 Background = new LinearGradientBrush
@@ -1657,7 +1657,7 @@ public partial class AudioViewModel : ViewModel
             Width = 270,
             VerticalAlignment = VerticalAlignment.Bottom,
             HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
-            IconSource = new DrawingImage(new GeometryDrawing(App.Current.TryFindResource(AdonisUI.Brushes.ForegroundBrush) as SolidColorBrush, null, MusicIconData)),
+            IconSource = new DrawingImage(new GeometryDrawing(App.Current?.TryFindResource(AdonisUI.Brushes.ForegroundBrush) as SolidColorBrush, null, MusicIconData)),
             IsClosable = true,
             Title = "Now Playing",
             CornerRadius = new CornerRadius(6),
@@ -1816,6 +1816,7 @@ public partial class AudioViewModel : ViewModel
     /// <summary>
     /// Test method to increment the counter property. Present only for testing purposes.
     /// </summary>
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
     public void IncrementCounter()
     {
         Count++;

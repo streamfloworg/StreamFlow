@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Formats.Tar;
 using System.Reflection.PortableExecutable;
@@ -28,6 +28,7 @@ namespace StreamFlow.Core.Data;
 public partial class AppModel : ObservableObject, INotifyPropertyChanged
 {
     private static AppModel? instance;
+    private static readonly object _lock = new();
 
     /// <summary>
     /// Instance of the Singleton Implementation
@@ -38,8 +39,14 @@ public partial class AppModel : ObservableObject, INotifyPropertyChanged
         {
             if (instance == null)
             {
-                instance ??= new AppModel();
-                instance.LoadData();
+                lock (_lock)
+                {
+                    if (instance == null)
+                    {
+                        instance = new AppModel();
+                        instance.LoadData();
+                    }
+                }
             }
             return instance;
         }
