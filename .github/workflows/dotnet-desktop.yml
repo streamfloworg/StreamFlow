@@ -122,6 +122,13 @@ jobs:
         echo "is_release=$isRelease" >> $env:GITHUB_OUTPUT
         echo "Resolved version: $version (release: $isRelease)"
 
+    - name: Stamp Directory.Build.props version
+      shell: pwsh
+      run: |
+        $xml = [xml](Get-Content Directory.Build.props)
+        $xml.Project.PropertyGroup.Version.InnerText = "${{ steps.version.outputs.version }}"
+        $xml.Save("Directory.Build.props")
+
     # windows-latest ships Rust/cargo already, but not necessarily the MSVC target — cheap and
     # idempotent to make sure it's there before the native core ever tries to build.
     - name: Ensure Rust MSVC target
