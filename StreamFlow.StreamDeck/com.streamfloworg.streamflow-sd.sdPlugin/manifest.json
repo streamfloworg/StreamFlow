@@ -1,0 +1,95 @@
+{
+	"Name": "StreamFlow.SD",
+	"Version": "0.1.0.0",
+	"Author": "streamfloworg",
+	"Actions": [
+		{
+			"Name": "Stream Control",
+			"UUID": "com.streamfloworg.streamflow-sd.streamcontrol",
+			"Icon": "imgs/actions/streamcontrol/icon",
+			"Tooltip": "Control streaming and recording status for StreamFlow.Maker.",
+			"PropertyInspectorPath": "ui/stream-control.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/actions/streamcontrol/key",
+					"TitleAlignment": "middle"
+				}
+			]
+		},
+		{
+			"Name": "Audio Control",
+			"UUID": "com.streamfloworg.streamflow-sd.audiocontrol",
+			"Icon": "imgs/actions/audiocontrol/icon",
+			"Tooltip": "Control volume and mute states for StreamFlow.Maker.",
+			"PropertyInspectorPath": "ui/audio-control.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/actions/audiocontrol/key",
+					"TitleAlignment": "middle"
+				}
+			]
+		},
+		{
+			"Name": "Media Playback",
+			"UUID": "com.streamfloworg.streamflow-sd.mediaplayback",
+			"Icon": "imgs/actions/mediaplayback/icon",
+			"Tooltip": "Control media playback and soundboard for StreamFlow.Maker.",
+			"PropertyInspectorPath": "ui/media-playback.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/actions/mediaplayback/key",
+					"TitleAlignment": "middle"
+				}
+			]
+		},
+		{
+			"Name": "Scene Control",
+			"UUID": "com.streamfloworg.streamflow-sd.scenecontrol",
+			"Icon": "imgs/actions/scenecontrol/icon",
+			"Tooltip": "Control scenes for StreamFlow.Maker.",
+			"PropertyInspectorPath": "ui/scene-control.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/actions/scenecontrol/key",
+					"TitleAlignment": "middle"
+				}
+			]
+		}
+	],
+	"Category": "StreamFlow.SD",
+	"CategoryIcon": "imgs/plugin/category-icon",
+	"CodePath": "bin/plugin.js",
+	"Description": "Integration with StreamFlow.Maker",
+	"Icon": "imgs/plugin/marketplace",
+	"SDKVersion": 3,
+	"Software": {
+		"MinimumVersion": "7.1"
+	},
+	"OS": [
+		{
+			"Platform": "mac",
+			"MinimumVersion": "12"
+		},
+		{
+			"Platform": "windows",
+			"MinimumVersion": "10"
+		}
+	],
+	"Nodejs": {
+		"Version": "24",
+		"Debug": "enabled"
+	},
+	"UUID": "com.streamfloworg.streamflow-sd"
+}

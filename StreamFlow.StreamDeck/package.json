@@ -1,0 +1,23 @@
+{
+    "scripts": {
+        "build": "rollup -c",
+        "watch": "rollup -c -w --watch.onEnd=\"streamdeck restart com.streamfloworg.streamflow-sd\"",
+        "dev": "node -e \"const fs = require('fs'); const path = require('path'); const dest = path.join(process.env.APPDATA, 'Elgato/StreamDeck/Plugins/com.streamfloworg.streamflow-sd.sdPlugin'); fs.rmSync(dest, { recursive: true, force: true }); fs.cpSync('com.streamfloworg.streamflow-sd.sdPlugin', dest, { recursive: true });\" && npm run watch"
+    },
+    "type": "module",
+    "devDependencies": {
+        "@elgato/cli": "^1.7.4",
+        "@rollup/plugin-commonjs": "^29.0.2",
+        "@rollup/plugin-node-resolve": "^15.2.2",
+        "@rollup/plugin-terser": "^1.0.0",
+        "@rollup/plugin-typescript": "^12.1.0",
+        "@tsconfig/node20": "^20.1.2",
+        "@types/node": "~24.1.0",
+        "rollup": "^4.0.2",
+        "tslib": "^2.6.2",
+        "typescript": "^5.2.2"
+    },
+    "dependencies": {
+        "@elgato/streamdeck": "^2.0.0"
+    }
+}

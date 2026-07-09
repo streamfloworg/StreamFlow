@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+
+<head lang="en">
+    <title>Stream Control Settings</title>
+    <meta charset="utf-8" />
+    <script src="https://sdpi-components.dev/releases/v4/sdpi-components.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: #9f9f9f;
+            background-color: #2d2d2d;
+            font-size: 11px;
+            margin: 0;
+            padding: 10px;
+        }
+        .sdpi-heading {
+            font-size: 11px;
+            font-weight: bold;
+            color: #e2e2e2;
+            margin: 15px 0 10px 0;
+            text-transform: uppercase;
+            border-bottom: 1px solid #444;
+            padding-bottom: 4px;
+            letter-spacing: 0.5px;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Global Settings Group -->
+    <div class="sdpi-heading">Global Settings</div>
+    <sdpi-item label="Host URL">
+        <sdpi-textfield setting="hostUrl" global placeholder="http://localhost:8080" default="http://localhost:8080"></sdpi-textfield>
+    </sdpi-item>
+    <sdpi-item label="API Key">
+        <sdpi-textfield setting="apiKey" global password placeholder="Enter API Key if required"></sdpi-textfield>
+    </sdpi-item>
+
+    <!-- Action Specific Settings -->
+    <div class="sdpi-heading">Action Settings</div>
+    <sdpi-item label="Action Type">
+        <sdpi-select setting="actionType" default="stream">
+            <option value="stream">Toggle Streaming</option>
+            <option value="record">Toggle Recording</option>
+        </sdpi-select>
+    </sdpi-item>
+
+    <sdpi-item label="Target Platform">
+        <sdpi-select setting="platform" default="all">
+            <option value="all">All Connected</option>
+            <option value="twitch">Twitch</option>
+            <option value="youtube">YouTube</option>
+            <option value="tiktok">TikTok</option>
+        </sdpi-select>
+    </sdpi-item>
+
+    <sdpi-item label="Recording Type">
+        <sdpi-select setting="recordingType" default="stream">
+            <option value="stream">Full Stream Recording</option>
+            <option value="clip">Short Video Clip</option>
+        </sdpi-select>
+    </sdpi-item>
+</body>
+
+</html>

@@ -1,9 +1,9 @@
-﻿import { action, KeyDownEvent, SingletonAction, WillAppearEvent } from "@elgato/streamdeck";
+import { action, KeyDownEvent, SingletonAction, WillAppearEvent } from "@elgato/streamdeck";
 
 /**
  * An example action class that displays a count that increments by one each time the button is pressed.
  */
-@action({ UUID: "com.voiddreamer.streamflow-sd.increment" })
+@action({ UUID: "com.streamfloworg.streamflow-sd.increment" })
 export class IncrementCounter extends SingletonAction<CounterSettings> {
 	/**
 	 * The {@link SingletonAction.onWillAppear} event is useful for setting the visual representation of an action when it becomes visible. This could be due to the Stream Deck first
