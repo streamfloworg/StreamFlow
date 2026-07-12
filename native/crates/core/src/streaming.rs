@@ -875,8 +875,8 @@ unsafe fn run_encoder_unsafe(
                 let mut total: u64 = 0;
                 while let Ok(owned) = rx.recv() {
                     unsafe {
-                        if av_write_frame(rctx, owned.0) < 0 {
-                            tracing::warn!("[Recording] av_write_frame failed");
+                        if av_interleaved_write_frame(rctx, owned.0) < 0 {
+                            tracing::warn!("[Recording] av_interleaved_write_frame failed");
                         }
                     }
                     total += 1;
@@ -951,8 +951,8 @@ unsafe fn run_encoder_unsafe(
                 // timing evidence to diagnose from, instead of guessing at a fix again.
                 let t = Instant::now();
                 unsafe {
-                    if av_write_frame(ofmt_ctx, owned.0) < 0 {
-                        tracing::error!("av_write_frame error (pkt #{}) - aborting RTMP writer", total_pkts);
+                    if av_interleaved_write_frame(ofmt_ctx, owned.0) < 0 {
+                        tracing::error!("av_interleaved_write_frame error (pkt #{}) - aborting RTMP writer", total_pkts);
                         break;
                     }
                 }
