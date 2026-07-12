@@ -27,6 +27,61 @@ public interface IChromaKeyable : IOverlayContent
     double ChromaKeySimilarity { get; set; }
 }
 
+public enum TextHorizontalAlignment { Left, Center, Right }
+
+/// <summary>Shared text formatting for every overlay kind that renders text — Text, Chat, and
+/// Timer. A composed object (each content class exposes its own <c>Style</c> property) rather
+/// than a shared base class, since every overlay content class already derives from
+/// ObservableObject directly and C# doesn't allow a second base class to be inserted there
+/// without restructuring the whole hierarchy. See <see cref="IHasTextStyle"/> for the marker
+/// interface the properties panel and renderer use to find it generically.</summary>
+public partial class TextStyle : ObservableObject
+{
+    [ObservableProperty]
+    private string _fontFamily = "Segoe UI";
+
+    /// <summary>Point size text renders at — independent of the containing slot's own W/H box
+    /// (which only controls where the rendered text sits, via the aspect-locked auto-resize, not
+    /// the font size itself).</summary>
+    [ObservableProperty]
+    private double _fontSize = 48;
+
+    [ObservableProperty]
+    private System.Windows.Media.Color _fontColor = System.Windows.Media.Colors.White;
+
+    [ObservableProperty]
+    private bool _isBold = true;
+
+    [ObservableProperty]
+    private bool _isItalic;
+
+    /// <summary>Only visibly matters for multi-line text (an embedded newline) — a single line
+    /// already renders tightly cropped to its own width, so alignment has nothing to align
+    /// against.</summary>
+    [ObservableProperty]
+    private TextHorizontalAlignment _alignment = TextHorizontalAlignment.Left;
+
+    [ObservableProperty]
+    private bool _outlineEnabled;
+
+    [ObservableProperty]
+    private System.Windows.Media.Color _outlineColor = System.Windows.Media.Colors.Black;
+
+    /// <summary>Same point-size scale as FontSize (not pre-multiplied by the renderer's
+    /// supersampling factor) — OverlayContentRenderer scales both together.</summary>
+    [ObservableProperty]
+    private double _outlineThickness = 2;
+}
+
+/// <summary>Marker for an overlay content kind that renders text and exposes shared formatting
+/// via <see cref="TextStyle"/> — implemented by Text, Chat, and Timer. The properties panel shows
+/// one shared "Text Style" section whenever <c>Content is IHasTextStyle</c> instead of a
+/// per-kind duplicate.</summary>
+public interface IHasTextStyle : IOverlayContent
+{
+    TextStyle Style { get; }
+}
+
 public partial class ImageOverlayContent : ObservableObject, IChromaKeyable
 {
     public OverlayKind Kind => OverlayKind.Image;
@@ -59,7 +114,7 @@ public partial class ImageOverlayContent : ObservableObject, IChromaKeyable
     private double _chromaKeySimilarity = 40;
 }
 
-public partial class TextOverlayContent : ObservableObject, IOverlayContent
+public partial class TextOverlayContent : ObservableObject, IHasTextStyle
 {
     public OverlayKind Kind => OverlayKind.Text;
 
@@ -68,18 +123,7 @@ public partial class TextOverlayContent : ObservableObject, IOverlayContent
     [ObservableProperty]
     private string? _overlayText;
 
-    /// <summary>Point size the text renders at — independent of the containing slot's own
-    /// W/H box (which only controls where the rendered text sits and how large a box it's
-    /// placed in via the aspect-locked auto-resize, not the font size itself). Matches the
-    /// pre-refactor hardcoded default in OverlayContentRenderer.RenderTextToBgra.</summary>
-    [ObservableProperty]
-    private double _fontSize = 48;
-
-    [ObservableProperty]
-    private System.Windows.Media.Color _fontColor = System.Windows.Media.Colors.White;
-
-    [ObservableProperty]
-    private bool _isBold = true;
+    public TextStyle Style { get; } = new();
 }
 
 public partial class ColorOverlayContent : ObservableObject, IOverlayContent
@@ -119,14 +163,70 @@ public partial class VideoOverlayContent : ObservableObject, IChromaKeyable
 /// <summary>Renders recent chat messages for whichever stream service is currently selected —
 /// re-rendered to pixels and re-registered (like image/text) each time new messages arrive,
 /// rather than needing an ongoing core-side session.</summary>
-public partial class ChatOverlayContent : ObservableObject, IOverlayContent
+public partial class ChatOverlayContent : ObservableObject, IHasTextStyle
 {
     public OverlayKind Kind => OverlayKind.Chat;
 
     /// <summary>Trimmed to a fixed backlog by GoLiveViewModel as new messages arrive — this is
-    /// what both the local editor preview (bound directly) and the re-rendered pixels sent to
-    /// the core are built from.</summary>
+    /// what the re-rendered pixels sent to the core are built from (see
+    /// OverlayContentRenderer.RenderChatToBgra, which does its own precise fit/truncation against
+    /// the box's real size). May hold PlaceholderMessages instead of real ones while idle — see
+    /// IsShowingPlaceholder. The local WPF preview binds to DisplayMessages instead of this
+    /// directly — see its own doc comment for why.</summary>
     public ObservableCollection<ChatMessage> ChatMessages { get; } = [];
+
+    /// <summary>A capped, always-most-recent window over ChatMessages, kept in sync automatically
+    /// via ChatMessages.CollectionChanged — what the local editor's placement-canvas preview binds
+    /// to instead of ChatMessages directly. Exists because WPF's ItemsControl overflow/clipping
+    /// behavior for an oversized, VerticalAlignment="Bottom"-anchored message stack turned out not
+    /// to reliably discard the *oldest* messages first the way OverlayContentRenderer.
+    /// RenderChatToBgra's own explicit fit calculation does — capping the bound collection itself
+    /// sidesteps depending on that layout behavior at all, at the cost of not pixel-matching the
+    /// renderer's exact per-box-size cutoff (a much smaller, more acceptable gap than possibly
+    /// showing messages in the wrong priority entirely).</summary>
+    public ObservableCollection<ChatMessage> DisplayMessages { get; } = [];
+
+    private const int DisplayMessageCap = 6;
+
+    public ChatOverlayContent()
+    {
+        ChatMessages.CollectionChanged += (_, _) => RefreshDisplayMessages();
+    }
+
+    private void RefreshDisplayMessages()
+    {
+        DisplayMessages.Clear();
+        foreach (var message in ChatMessages.Skip(Math.Max(0, ChatMessages.Count - DisplayMessageCap)))
+            DisplayMessages.Add(message);
+    }
+
+    /// <summary>True while ChatMessages holds PlaceholderMessages rather than anything a real
+    /// chat connection produced — lets SceneEditorViewModel (which populates/clears placeholder
+    /// content around GoLiveStartedEvent/GoLiveStoppedEvent) and GoLiveViewModel.Chat.cs (which
+    /// needs to wipe placeholders the moment a genuine message arrives, rather than appending
+    /// after them) tell the difference without re-deriving it from content.</summary>
+    [ObservableProperty]
+    private bool _isShowingPlaceholder;
+
+    /// <summary>Shown in ChatMessages while idle (not live) and no real messages have arrived
+    /// yet, so the properties panel's text-style controls and the placement canvas actually have
+    /// something to preview instead of an empty box — see SceneEditorViewModel's
+    /// GoLiveStartedEvent/GoLiveStoppedEvent subscriptions. Never sent while actually
+    /// streaming/recording (cleared the instant GoLiveStartedEvent fires), so viewers never see
+    /// fake chat activity.</summary>
+    public static readonly IReadOnlyList<ChatMessage> PlaceholderMessages =
+    [
+        new ChatMessage("Username1", "Great stream today!", "#FF6B6B"),
+        new ChatMessage("ChatterBox", "LOL that was awesome", "#4ECDC4"),
+        new ChatMessage("StreamFan22", "PogChamp", "#FFD93D"),
+        new ChatMessage("Username1", "Sample chat message text", "#FF6B6B"),
+    ];
+
+    /// <summary>Applies to message text only — see OverlayContentRenderer.RenderChatToBgra.
+    /// Username coloring stays per-user (Twitch/YouTube's own chat color) regardless of Style,
+    /// since that's what distinguishes speakers; OutlineEnabled isn't applied to chat at all
+    /// (a per-message outline pass wasn't judged worth the added rendering complexity for now).</summary>
+    public TextStyle Style { get; } = new();
 }
 
 /// <summary>A full-frame effect layer, not pixel content: everything below it in z-order gets
@@ -147,12 +247,21 @@ public partial class BlurOverlayContent : ObservableObject, IOverlayContent
 /// configured duration) — registered once and re-registered every second while running, same
 /// mechanism as Chat's message-driven re-renders, just driven by a timer instead of incoming
 /// messages.</summary>
-public partial class TimerOverlayContent : ObservableObject, IOverlayContent
+public partial class TimerOverlayContent : ObservableObject, IHasTextStyle
 {
     public OverlayKind Kind => OverlayKind.Timer;
 
+    public TextStyle Style { get; } = new();
+
     [ObservableProperty]
     private TimerMode _timerMode = TimerMode.CountDown;
+
+    /// <summary>When set, this timer starts automatically the moment the core confirms the
+    /// stream went live (see EventBus.GoLiveStartedEvent / SceneEditorViewModel's constructor) —
+    /// the Event System/Triggers backlog item's example use case. Only takes effect if the timer
+    /// isn't already running; doesn't reset an in-progress run.</summary>
+    [ObservableProperty]
+    private bool _autoStartOnGoLive;
 
     /// <summary>Countdown target in seconds; meaningless for CountUp mode. Settable via the
     /// properties panel — a duration edit while running takes effect on the next tick.</summary>

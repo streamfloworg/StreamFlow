@@ -170,6 +170,14 @@ public partial class SourceSlot : ObservableObject
     [ObservableProperty]
     private double? _aspectRatio = 16.0 / 9.0;
 
+    /// <summary>Rendered content width (pixels, whatever native resolution the renderer produced
+    /// it at) from the previous OverlayContentRenderer.ApplyRenderedAspectRatio call — lets that
+    /// method tell "the aspect ratio changed because the content got bigger/smaller" apart from
+    /// "the aspect ratio changed but the content is roughly the same size" for Text/Timer
+    /// overlays specifically, whose FontSize slider should visibly grow/shrink the box, not just
+    /// avoid distorting it. Internal bookkeeping only, not user-facing.</summary>
+    internal double? LastRenderedContentWidth { get; set; }
+
     private bool _isSettingDimensions;
 
     /// <summary>When true, resizing this slot preserves <see cref="AspectRatio"/> instead

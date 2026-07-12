@@ -34,6 +34,8 @@ public partial class MainWindow : AdonisWindow, INotifyPropertyChanged, IDisposa
 
     public AudioViewModel AudioViewModel { get; }
 
+    private readonly SceneEditorViewModel SceneEditor;
+
     public MainWindowViewModel ViewModel { get; }
 
     private readonly object audioLock = new();
@@ -102,11 +104,13 @@ public partial class MainWindow : AdonisWindow, INotifyPropertyChanged, IDisposa
 
     public MainWindow(
         MainWindowViewModel viewModel,
-        AudioViewModel aViewModel
+        AudioViewModel aViewModel,
+        SceneEditorViewModel sceneEditor
     )
     {
         ViewModel = viewModel;
         AudioViewModel = aViewModel;
+        SceneEditor = sceneEditor;
         Current = this;
         // Theme initialization done via ApplyChosenTheme
         // Subscribe to ApplicationSettings changes for UI updates
@@ -189,6 +193,18 @@ public partial class MainWindow : AdonisWindow, INotifyPropertyChanged, IDisposa
                 if (audio is not null && audio.Hotkey is not null && audio.Hotkey.Key.Equals(e.Key) && Keyboard.Modifiers.HasFlag(audio.Hotkey.Modifiers))
                 {
                     await Current!.AudioViewModel.PlayAudioCommand.ExecuteAsync(audio);
+                    e.Handled = true;
+                }
+            }
+
+            // Scene Switching Hotkeys — same dispatch shape as the audio-clip loop above, just a
+            // second independent source of assignable combos (see HotkeyConflictService, which
+            // checks both together when either is being assigned).
+            foreach (var scene in SceneEditor.Scenes)
+            {
+                if (scene.SwitchHotkey is not null && scene.SwitchHotkey.Key.Equals(e.Key) && Keyboard.Modifiers.HasFlag(scene.SwitchHotkey.Modifiers))
+                {
+                    SceneEditor.ActiveScene = scene;
                     e.Handled = true;
                 }
             }

@@ -144,7 +144,7 @@ public partial class PropertiesEditor : UserControl, INotifyPropertyChanged
         }
     }
 
-    public void HotkeyTextBoxPreviewKeyDown(object sender, KeyEventArgs e)
+    public async void HotkeyTextBoxPreviewKeyDown(object sender, KeyEventArgs e)
     {
 
         if (Audio != null && e.Key != Key.Tab)
@@ -187,10 +187,25 @@ public partial class PropertiesEditor : UserControl, INotifyPropertyChanged
                 return;
             }
 
-            //Key k;
+            var candidate = new Hotkey(key, modifiers);
+
+            // Scenes are a second, independent source of hotkeys now (see
+            // HotkeyConflictService/ScenesView.SceneHotkeyTextBoxPreviewKeyDown) — checked
+            // together with soundboard clips here rather than each surface only knowing about
+            // its own kind.
+            var conflicts = App.Services.GetService(typeof(Services.HotkeyConflictService)) as Services.HotkeyConflictService;
+            var conflict = conflicts?.FindConflict(candidate, excludingOwner: Audio);
+            if (conflict is not null)
+            {
+                var dlg = App.Services.GetService(typeof(Services.IDialogService)) as Services.IDialogService;
+                var proceed = dlg is null || await dlg.ConfirmAsync("Hotkey Conflict",
+                    $"{candidate} is already assigned to {conflict}. Assign it here too?\n\nBoth will trigger whenever this combo is pressed.",
+                    primaryText: "Assign Anyway", secondaryText: "Cancel");
+                if (!proceed) return;
+            }
 
             // Update the value
-            Audio.Hotkey = new Hotkey(key, modifiers);
+            Audio.Hotkey = candidate;
         }
     }
 }

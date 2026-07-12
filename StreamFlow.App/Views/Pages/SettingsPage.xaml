@@ -97,6 +97,53 @@
                     </Grid>
                 </Border>
 
+                <!-- Stream Deck Server Card -->
+                <Border Background="{DynamicResource {x:Static adonisUi:Brushes.Layer1BackgroundBrush}}" BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="1" CornerRadius="4" Padding="16,12" Margin="0,0,0,4">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Path Grid.Column="0" Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="18" Height="18" Margin="0,0,16,0" VerticalAlignment="Center" Data="{StaticResource SettingsIconData}" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="Stream Deck Server" FontWeight="SemiBold" FontSize="13" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"/>
+                                <TextBlock Text="Lets the StreamFlow Stream Deck plugin control streaming, scenes, and audio" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="2" Content="Enabled" VerticalAlignment="Center"
+                                      IsChecked="{Binding ViewModel.IsStreamDeckServerEnabled, Mode=TwoWay}"/>
+                        </Grid>
+                        <StackPanel Margin="0,12,0,0" Visibility="{Binding ViewModel.IsStreamDeckServerEnabled, Converter={StaticResource BoolToVisibility}}">
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Port" VerticalAlignment="Center" Margin="0,0,12,0" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"/>
+                                <TextBox Grid.Column="1" Width="100" HorizontalAlignment="Left"
+                                         Text="{Binding ViewModel.StreamDeckServerPort, Mode=TwoWay}"/>
+                            </Grid>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="API Key" VerticalAlignment="Center" Margin="0,0,12,0" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"/>
+                                <TextBox Grid.Column="1" IsReadOnly="True" VerticalAlignment="Center"
+                                         Text="{Binding ViewModel.StreamDeckApiKey, Mode=OneWay}"/>
+                                <Button Grid.Column="2" Content="Copy" Padding="8,4" Margin="6,0,0,0"
+                                        Command="{Binding ViewModel.CopyStreamDeckApiKeyCommand}"/>
+                                <Button Grid.Column="3" Content="Regenerate" Padding="8,4" Margin="6,0,0,0"
+                                        Command="{Binding ViewModel.RegenerateStreamDeckApiKeyCommand}"/>
+                            </Grid>
+                            <TextBlock Text="{Binding ViewModel.StreamDeckServerStatusText}" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
                 <!-- Cache Settings Expander -->
                 <Expander Background="{DynamicResource {x:Static adonisUi:Brushes.Layer1BackgroundBrush}}" BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="1" Padding="0" Margin="0,0,0,4" IsExpanded="False">
                     <Expander.Header>

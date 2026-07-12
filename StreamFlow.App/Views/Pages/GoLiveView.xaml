@@ -32,6 +32,7 @@
         <conv:AspectRatioTextConverter x:Key="AspectRatioText"/>
         <conv:BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
         <conv:BoolToFontWeightConverter x:Key="BoolToFontWeight"/>
+        <conv:BoolToFontStyleConverter x:Key="BoolToFontStyle"/>
         <conv:NullVisibilityConverter x:Key="NullToVisibility"/>
         <conv:InvertedNullVisibilityConverter x:Key="InvertedNullToVisibility"/>
         <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
@@ -42,6 +43,100 @@
         <conv:SceneTransitionKindToIndexConverter x:Key="SceneTransitionKindToIndex"/>
         <conv:TimerModeToIndexConverter x:Key="TimerModeToIndex"/>
         <conv:TimerModeToVisibilityConverter x:Key="CountDownToVisibility"/>
+        <conv:TextHorizontalAlignmentToIndexConverter x:Key="TextAlignmentToIndex"/>
+        <conv:TextHorizontalAlignmentToTextAlignmentConverter x:Key="TextAlignmentToWpf"/>
+        <conv:HotkeyConverter x:Key="HotkeyConverter"/>
+        <conv:DoubleScaleConverter x:Key="DoubleScale"/>
+        <conv:FontSizeToMessageSpacingMarginConverter x:Key="MessageSpacingMargin"/>
+
+        <!-- Shared text-formatting editor for every IHasTextStyle overlay kind (Text/Chat/Timer)
+             — one template reused via ContentControl instead of duplicating this block three
+             times; DataContext inside is the SourceSlot, same as everywhere else in this panel. -->
+        <DataTemplate x:Key="TextStyleEditorTemplate" DataType="{x:Type vm:SourceSlot}">
+            <StackPanel>
+                <TextBlock Text="Font" Style="{StaticResource FieldLabelStyle}"/>
+                <ComboBox IsEditable="True" Text="{Binding Content.Style.FontFamily, Mode=TwoWay}" Margin="0,0,0,6">
+                    <ComboBoxItem Content="Segoe UI"/>
+                    <ComboBoxItem Content="Arial"/>
+                    <ComboBoxItem Content="Impact"/>
+                    <ComboBoxItem Content="Consolas"/>
+                    <ComboBoxItem Content="Georgia"/>
+                    <ComboBoxItem Content="Verdana"/>
+                </ComboBox>
+                <!-- Font size renders the text at this exact point size regardless of the box's
+                     own W/H — independent of the overlay's position/scaling. -->
+                <Grid Margin="0,0,0,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Font Size" VerticalAlignment="Center"
+                               Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="0,0,8,0"/>
+                    <Slider Grid.Column="1" Minimum="8" Maximum="200" VerticalAlignment="Center"
+                            Value="{Binding Content.Style.FontSize, Mode=TwoWay}"/>
+                    <TextBlock Grid.Column="2" Width="28" VerticalAlignment="Center" TextAlignment="Right"
+                               Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"
+                               Text="{Binding Content.Style.FontSize, StringFormat={}{0:F0}}"/>
+                </Grid>
+                <Grid Margin="0,0,0,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Width="24" Height="24" CornerRadius="4" Margin="0,0,8,0"
+                            BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="1"
+                            Background="{Binding Content.Style.FontColor, Converter={StaticResource ColorToBrush}}"/>
+                    <Button Grid.Column="1" Content="Text color…" HorizontalAlignment="Stretch"
+                            Command="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.SceneEditor.ChangeTextColorCommand}"
+                            CommandParameter="{Binding}"/>
+                </Grid>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                    <CheckBox Content="Bold" IsChecked="{Binding Content.Style.IsBold, Mode=TwoWay}" Margin="0,0,16,0"/>
+                    <CheckBox Content="Italic" IsChecked="{Binding Content.Style.IsItalic, Mode=TwoWay}"/>
+                </StackPanel>
+                <TextBlock Text="Alignment" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"/>
+                <ComboBox Margin="0,0,0,6" SelectedIndex="{Binding Content.Style.Alignment, Converter={StaticResource TextAlignmentToIndex}}">
+                    <ComboBoxItem Content="Left"/>
+                    <ComboBoxItem Content="Center"/>
+                    <ComboBoxItem Content="Right"/>
+                </ComboBox>
+                <!-- Not rendered for Chat (OverlayContentRenderer.RenderChatToBgra doesn't apply
+                     outline — see ChatOverlayContent.Style's own doc comment for why), so hidden
+                     there rather than showing a control with no visible effect. -->
+                <StackPanel Visibility="{Binding IsChatOverlay, Converter={StaticResource InverseBoolToVisibility}}">
+                    <CheckBox Content="Outline" IsChecked="{Binding Content.Style.OutlineEnabled, Mode=TwoWay}" Margin="0,0,0,6"/>
+                    <StackPanel Visibility="{Binding Content.Style.OutlineEnabled, Converter={StaticResource BoolToVisibility}}">
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Width="24" Height="24" CornerRadius="4" Margin="0,0,8,0"
+                                    BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="1"
+                                    Background="{Binding Content.Style.OutlineColor, Converter={StaticResource ColorToBrush}}"/>
+                            <Button Grid.Column="1" Content="Outline color…" HorizontalAlignment="Stretch"
+                                    Command="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.SceneEditor.ChangeTextOutlineColorCommand}"
+                                    CommandParameter="{Binding}"/>
+                        </Grid>
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Thickness" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="0,0,8,0"/>
+                            <Slider Grid.Column="1" Minimum="0.5" Maximum="12" VerticalAlignment="Center"
+                                    Value="{Binding Content.Style.OutlineThickness, Mode=TwoWay}"/>
+                            <TextBlock Grid.Column="2" Width="28" VerticalAlignment="Center" TextAlignment="Right"
+                                       Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"
+                                       Text="{Binding Content.Style.OutlineThickness, StringFormat={}{0:F1}}"/>
+                        </Grid>
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+        </DataTemplate>
 
         <!-- Tally-pill status dot: gray/standby by default, pulses red while live -->
         <Style x:Key="TallyDotStyle" TargetType="Ellipse">
@@ -412,6 +507,12 @@
                         <TextBlock Text="Scene Name" Style="{StaticResource FieldLabelStyle}"/>
                         <TextBox Text="{Binding ViewModel.SceneEditor.ActiveScene.Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,12"/>
 
+                        <TextBlock Text="Switch Hotkey" Style="{StaticResource FieldLabelStyle}"/>
+                        <TextBox Height="24" Padding="6,2" Margin="0,0,0,12"
+                                 IsReadOnly="True" IsReadOnlyCaretVisible="False" IsUndoEnabled="False"
+                                 PreviewKeyDown="SceneHotkeyTextBoxPreviewKeyDown"
+                                 Text="{Binding ViewModel.SceneEditor.ActiveScene.SwitchHotkey, Converter={StaticResource HotkeyConverter}, Mode=OneWay, TargetNullValue='Click to set...'}"/>
+
                         <!-- Session-wide, not per-scene: how switching ActiveScene animates in the
                              actual composited/streamed output (see SceneEditorViewModel.ActivateSceneAsync). -->
                         <TextBlock Text="Scene Transition" Style="{StaticResource FieldLabelStyle}"/>
@@ -660,35 +761,7 @@
                                         <TextBlock Text="Text Content" Style="{StaticResource FieldLabelStyle}"/>
                                         <TextBox Text="{Binding Content.OverlayText, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap"
                                                  AcceptsReturn="True" MinHeight="60" Margin="0,0,0,8"/>
-                                        <!-- Font size renders the text at this exact point size regardless of
-                                             the box's own W/H — independent of the overlay's position/scaling. -->
-                                        <Grid Margin="0,0,0,6">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" Text="Font Size" VerticalAlignment="Center"
-                                                       Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="0,0,8,0"/>
-                                            <Slider Grid.Column="1" Minimum="8" Maximum="200" VerticalAlignment="Center"
-                                                    Value="{Binding Content.FontSize, Mode=TwoWay}"/>
-                                            <TextBlock Grid.Column="2" Width="28" VerticalAlignment="Center" TextAlignment="Right"
-                                                       Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"
-                                                       Text="{Binding Content.FontSize, StringFormat={}{0:F0}}"/>
-                                        </Grid>
-                                        <Grid Margin="0,0,0,6">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto"/>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
-                                            <Border Grid.Column="0" Width="24" Height="24" CornerRadius="4" Margin="0,0,8,0"
-                                                    BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="1"
-                                                    Background="{Binding Content.FontColor, Converter={StaticResource ColorToBrush}}"/>
-                                            <Button Grid.Column="1" Content="Text color…" HorizontalAlignment="Stretch"
-                                                    Command="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.SceneEditor.ChangeTextColorCommand}"
-                                                    CommandParameter="{Binding}"/>
-                                        </Grid>
-                                        <CheckBox Content="Bold" IsChecked="{Binding Content.IsBold, Mode=TwoWay}" Margin="0,0,0,8"/>
+                                        <ContentControl Content="{Binding}" ContentTemplate="{StaticResource TextStyleEditorTemplate}"/>
                                     </StackPanel>
 
                                     <!-- Color Overlay -->
@@ -766,6 +839,9 @@
                                         <TextBlock Text="Chat Overlay" Style="{StaticResource FieldLabelStyle}"/>
                                         <TextBlock Text="Displays live messages from active chat connection."
                                                    Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,8"/>
+                                        <!-- Applies to message text only — username keeps its own per-user
+                                             color regardless of Style; outline isn't rendered for chat. -->
+                                        <ContentControl Content="{Binding}" ContentTemplate="{StaticResource TextStyleEditorTemplate}"/>
                                     </StackPanel>
 
                                     <!-- Timer Overlay -->
@@ -779,7 +855,8 @@
                                             <TextBlock Text="Duration (seconds)" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"/>
                                             <TextBox Text="{Binding Content.TimerDurationSeconds, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
                                         </StackPanel>
-                                        <StackPanel Orientation="Horizontal">
+                                        <CheckBox Content="Auto-start on Go Live" IsChecked="{Binding Content.AutoStartOnGoLive, Mode=TwoWay}" Margin="0,0,0,8"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                                             <Button Content="▶ Start" Padding="10,4" Margin="0,0,6,0"
                                                     IsEnabled="{Binding Content.IsTimerRunning, Converter={StaticResource BooleanInvertConverter}}"
                                                     Command="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.SceneEditor.StartTimerCommand}"
@@ -792,6 +869,7 @@
                                                     Command="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.SceneEditor.ResetTimerCommand}"
                                                     CommandParameter="{Binding}"/>
                                         </StackPanel>
+                                        <ContentControl Content="{Binding}" ContentTemplate="{StaticResource TextStyleEditorTemplate}"/>
                                     </StackPanel>
 
                                     <!-- Blur Layer -->
@@ -972,16 +1050,31 @@
                          editor that didn't correspond to where the real composited picture actually
                          was. Reading it at the scene level (not indexed into any particular slot)
                          means this still works for an overlay-only scene with no primary at all. -->
-                    <Canvas Width="640" Height="{Binding ViewModel.SceneEditor.ActiveScene.CanvasHeight}" Background="Transparent"
+                    <Grid Width="640" Height="{Binding ViewModel.SceneEditor.ActiveScene.CanvasHeight}">
+                        <!-- Show Preview (Spout/D3DImage) renders here, as its own layer beneath the
+                             slot-editing Canvas, rather than as a child of it. The editing Canvas below
+                             hosts per-slot RotateTransform/Opacity/Clip-bound visuals and an ItemsControl,
+                             which are real WPF triggers for intermediate offscreen-surface compositing —
+                             keeping the D3DImage out of that subtree means its content is always sampled
+                             straight from the native-resolution shared texture in one pass instead of
+                             potentially riding along with whatever cached surface the editing overlay
+                             ends up rasterized to. See GoLiveView.xaml.cs's OnCoreEventReceived. -->
+                        <Image x:Name="SpoutPreviewImage" Stretch="Fill"
+                               RenderOptions.BitmapScalingMode="HighQuality"
+                               Visibility="{Binding ViewModel.IsSpoutOutputEnabled, Converter={StaticResource BoolToVisibility}}"/>
+                        <Canvas Width="640" Height="{Binding ViewModel.SceneEditor.ActiveScene.CanvasHeight}" Background="Transparent"
                             behaviors:SlotPlacementBehavior.IsEnabled="True"
                             behaviors:SlotPlacementBehavior.SelectedSlot="{Binding ViewModel.SceneEditor.SelectedSlot, Mode=TwoWay}">
                         <!-- The composited preview always fills the whole canvas exactly — it's the
                              fully composited output (every layer already blended in), not any one
                              layer's own view, so this no longer tracks any particular slot's rect
                              (a primary no longer implies "the whole frame" — see
-                             SourceSlot.HasLiveThumbnail). -->
+                             SourceSlot.HasLiveThumbnail). CPU pipe path only — hidden while Show
+                             Preview (SpoutPreviewImage above) is active. -->
                         <Image x:Name="PreviewImage" Stretch="Fill" Width="640" Canvas.Left="0" Canvas.Top="0"
-                               Height="{Binding ViewModel.SceneEditor.ActiveScene.CanvasHeight}"/>
+                               Height="{Binding ViewModel.SceneEditor.ActiveScene.CanvasHeight}"
+                               RenderOptions.BitmapScalingMode="HighQuality"
+                               Visibility="{Binding ViewModel.IsSpoutOutputEnabled, Converter={StaticResource InverseBoolToVisibility}}"/>
                         <ItemsControl ItemsSource="{Binding ViewModel.SceneEditor.Slots}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
@@ -1067,37 +1160,128 @@
                                             <!-- Text overlays likewise render locally via WPF's own text layout — a
                                                  close approximation of the rasterized bitmap actually sent to the core. -->
                                             <Viewbox Stretch="Fill" Visibility="{Binding IsTextOverlay, Converter={StaticResource BoolToVisibility}}">
-                                                <TextBlock Text="{Binding Content.OverlayText}" FontFamily="Segoe UI"
-                                                           FontWeight="{Binding Content.IsBold, Converter={StaticResource BoolToFontWeight}}"
-                                                           Foreground="{Binding Content.FontColor, Converter={StaticResource ColorToBrush}}"/>
+                                                <TextBlock Text="{Binding Content.OverlayText}" FontFamily="{Binding Content.Style.FontFamily}"
+                                                           FontWeight="{Binding Content.Style.IsBold, Converter={StaticResource BoolToFontWeight}}"
+                                                           FontStyle="{Binding Content.Style.IsItalic, Converter={StaticResource BoolToFontStyle}}"
+                                                           TextAlignment="{Binding Content.Style.Alignment, Converter={StaticResource TextAlignmentToWpf}}"
+                                                           Foreground="{Binding Content.Style.FontColor, Converter={StaticResource ColorToBrush}}"/>
                                             </Viewbox>
                                             <!-- Timer overlays render the same live-ticking text locally (see
                                                  SceneEditorViewModel.FormatTimerDisplay/TickTimerOverlaysAsync). -->
                                             <Viewbox Stretch="Fill" Visibility="{Binding IsTimerOverlay, Converter={StaticResource BoolToVisibility}}">
-                                                <TextBlock Text="{Binding Content.TimerDisplayText}" FontFamily="Segoe UI" FontWeight="Bold" Foreground="White"/>
+                                                <TextBlock Text="{Binding Content.TimerDisplayText}" FontFamily="{Binding Content.Style.FontFamily}"
+                                                           FontWeight="{Binding Content.Style.IsBold, Converter={StaticResource BoolToFontWeight}}"
+                                                           FontStyle="{Binding Content.Style.IsItalic, Converter={StaticResource BoolToFontStyle}}"
+                                                           Foreground="{Binding Content.Style.FontColor, Converter={StaticResource ColorToBrush}}"/>
                                             </Viewbox>
                                             <!-- Color overlays are a flat fill — no image/text content to render. -->
                                             <Border Background="{Binding Content.OverlayColor, Converter={StaticResource ColorToBrush}}"
                                                     Visibility="{Binding IsColorOverlay, Converter={StaticResource BoolToVisibility}}"/>
-                                            <!-- Chat overlays render recent chat messages locally -->
+                                            <!-- Chat overlays render recent chat messages locally — kept in
+                                                 proportion with OverlayContentRenderer.RenderChatToBgra's own
+                                                 scaling (Style.FontSize / 3) via DoubleScale below, rather than
+                                                 this preview silently drifting from what's actually composited/
+                                                 streamed (previously a hardcoded FontSize="9" with no connection
+                                                 to Style at all). Username stays bold in its own per-user color
+                                                 regardless of Style, matching the renderer. -->
                                             <Border Background="#40000000" ClipToBounds="True" Visibility="{Binding IsChatOverlay, Converter={StaticResource BoolToVisibility}}">
-                                                <ItemsControl ItemsSource="{Binding Content.ChatMessages}" VerticalAlignment="Bottom">
+                                                <!-- ScrollViewer + explicit scroll-to-bottom (ChatScrollViewer_
+                                                     ScrollChanged in code-behind), not VerticalAlignment="Bottom"
+                                                     relying on ItemsControl/Border overflow-clip semantics — that
+                                                     turned out not to reliably discard the *oldest* message first
+                                                     when the rendered content is taller than the box, which
+                                                     RenderChatToBgra's own explicit fit calculation always does.
+                                                     A ScrollViewer scrolled to its end has unambiguous, well-defined
+                                                     behavior: whatever's at the bottom of the content is what's in
+                                                     the viewport, full stop. -->
+                                                <!-- Style="{x:Null}" bypasses AdonisUI's themed ScrollViewer
+                                                     template entirely — no visible chrome is needed here anyway
+                                                     (Hidden scrollbar, IsHitTestVisible=False, purely code-driven
+                                                     scrolling), and a themed template's own Padding/BorderThickness/
+                                                     scrollbar-gutter reservation is a plausible source of a small,
+                                                     constant pixel offset the renderer's own coordinate space has
+                                                     no equivalent concept of. Explicit zero Padding/BorderThickness/
+                                                     Margin rules out the same regardless of style. -->
+                                                <ScrollViewer Style="{x:Null}" Padding="0" BorderThickness="0" Margin="0"
+                                                              VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled"
+                                                              IsHitTestVisible="False" ScrollChanged="ChatScrollViewer_ScrollChanged">
+                                                <!-- x:Name + ElementName bindings below (not RelativeSource
+                                                     AncestorType=ItemsControl) — this ItemsControl is nested
+                                                     inside the outer Slots ItemsControl, and AncestorType is a
+                                                     known footgun for picking the wrong one of two nested
+                                                     matches; ElementName removes the ambiguity entirely. -->
+                                                <!-- DisplayMessages (a capped, most-recent-first window), not
+                                                     ChatMessages directly — see ChatOverlayContent.
+                                                     DisplayMessages' own doc comment for why. -->
+                                                <!-- VerticalAlignment="Bottom" here is safe/reliable now, unlike
+                                                     the earlier bare-Border attempt — ScrollViewer's content
+                                                     presenter well-definedly honors it for content SMALLER than
+                                                     the viewport (bottom-anchors it, matching RenderChatToBgra's
+                                                     own always-bottom-anchored behavior even when the box has lots
+                                                     of slack); for content LARGER than the viewport, alignment is
+                                                     moot and the ScrollChanged handler's ScrollToEnd() takes over
+                                                     instead. Without this, an oversized/underfull box showed the
+                                                     local preview top-anchored while the real composited render
+                                                     stayed bottom-anchored — two visibly separate blocks. -->
+                                                <ItemsControl x:Name="ChatMessagesItemsControl" ItemsSource="{Binding Content.DisplayMessages}" VerticalAlignment="Bottom">
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate DataType="{x:Type services:ChatMessage}">
-                                                            <TextBlock TextWrapping="Wrap" Margin="4,2" FontSize="9">
+                                                            <!-- Top-only margin, not "4,2" on every side, and scaled
+                                                                 by FontSize (via MessageSpacingMargin) rather than a
+                                                                 flat constant — matches RenderChatToBgra's own model
+                                                                 exactly: FontSize/6 gap between messages (nothing
+                                                                 before the first, nothing after the last) and zero
+                                                                 left inset. Since the ScrollViewer above is always
+                                                                 scrolled to its end, the newest (bottom-most, always-
+                                                                 visible) message has no trailing margin either way —
+                                                                 matching the renderer's flush bottom edge — while the
+                                                                 oldest (topmost) message picking up a leading gap it
+                                                                 doesn't strictly need only matters if it's even still
+                                                                 in the scrolled-into-view range. Previously a per-side
+                                                                 "4,2" margin gave an effective ~half-sized gap
+                                                                 (adjacent messages' margins don't collapse in WPF)
+                                                                 plus an X/Y offset the renderer never had, both
+                                                                 compounding into the mismatch this replaces. -->
+                                                            <TextBlock TextWrapping="Wrap"
+                                                                       Margin="{Binding ElementName=ChatMessagesItemsControl, Path=DataContext.Content.Style.FontSize, Converter={StaticResource MessageSpacingMargin}}"
+                                                                       FontFamily="{Binding ElementName=ChatMessagesItemsControl, Path=DataContext.Content.Style.FontFamily}"
+                                                                       FontSize="{Binding ElementName=ChatMessagesItemsControl, Path=DataContext.Content.Style.FontSize, Converter={StaticResource DoubleScale}, ConverterParameter=0.333333}"
+                                                                       FontStyle="{Binding ElementName=ChatMessagesItemsControl, Path=DataContext.Content.Style.IsItalic, Converter={StaticResource BoolToFontStyle}}">
                                                                 <Run Text="{Binding Username, StringFormat={}{0}:}" FontWeight="Bold"
                                                                      Foreground="{Binding ColorHex, FallbackValue=Cyan, TargetNullValue=Cyan}"/>
-                                                                <Run Text="{Binding Text}" Foreground="White"/>
+                                                                <Run Text="{Binding Text}"
+                                                                     FontWeight="{Binding ElementName=ChatMessagesItemsControl, Path=DataContext.Content.Style.IsBold, Converter={StaticResource BoolToFontWeight}}"
+                                                                     Foreground="{Binding ElementName=ChatMessagesItemsControl, Path=DataContext.Content.Style.FontColor, Converter={StaticResource ColorToBrush}}"/>
                                                             </TextBlock>
                                                         </DataTemplate>
                                                     </ItemsControl.ItemTemplate>
                                                 </ItemsControl>
+                                                </ScrollViewer>
                                             </Border>
                                             <!-- PiP capture sources and video overlays both get their own live
-                                                 thumbnail (the primary renders via the dedicated PreviewImage
-                                                 element instead, and the other overlay kinds render above). -->
-                                            <Image Source="{Binding LiveThumbnail}" Stretch="Fill"
-                                                   Visibility="{Binding HasLiveThumbnail, Converter={StaticResource BoolToVisibility}}"/>
+                                                 thumbnail; the primary gets one too (HasLiveThumbnail is true
+                                                 for it as well) EXCEPT while Show Preview is active — in that
+                                                 mode SpoutPreviewImage (rendered underneath the whole editing
+                                                 Canvas, see the Grid above) is the authoritative, full-quality
+                                                 picture for the primary, and this box defaults to covering the
+                                                 entire canvas, so leaving its own lower-quality raw thumbnail
+                                                 visible here just paints over it. -->
+                                            <Image Source="{Binding LiveThumbnail}" Stretch="Fill">
+                                                <Image.Style>
+                                                    <Style TargetType="Image">
+                                                        <Setter Property="Visibility" Value="{Binding HasLiveThumbnail, Converter={StaticResource BoolToVisibility}}"/>
+                                                        <Style.Triggers>
+                                                            <MultiDataTrigger>
+                                                                <MultiDataTrigger.Conditions>
+                                                                    <Condition Binding="{Binding IsPrimary}" Value="True"/>
+                                                                    <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsSpoutOutputEnabled}" Value="True"/>
+                                                                </MultiDataTrigger.Conditions>
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                            </MultiDataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Image.Style>
+                                            </Image>
                                         </Grid>
                                         <Thumb x:Name="MoveThumb" behaviors:SlotPlacementBehavior.Mode="Move"
                                                IsEnabled="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.CanEditSlots}">
@@ -1164,6 +1348,7 @@
                         <Line x:Name="HorizontalGuide" behaviors:SlotPlacementBehavior.GuideRole="Horizontal" X1="0" X2="640" Stroke="{StaticResource AccentBrush}"
                               StrokeThickness="1" StrokeDashArray="4,2" IsHitTestVisible="False" Visibility="Collapsed"/>
                     </Canvas>
+                    </Grid>
                 </Viewbox>
 
                 <!-- Master fader (always visible, controls overall stream-mix gain) + one
@@ -1363,7 +1548,42 @@
 
                                 <TextBlock Text="Encoder" Style="{StaticResource FieldLabelStyle}"/>
                                 <ComboBox ItemsSource="{x:Static vm:GoLiveViewModel.EncoderOptions}"
-                                          SelectedItem="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.Encoder, Mode=TwoWay}"/>
+                                          SelectedItem="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.Encoder, Mode=TwoWay}" Margin="0,0,0,12"/>
+
+                                <!-- Drives both halves of the Spout2 Integration Plan under one switch: publishes the
+                                     composited output as a named GPU-shared source for other apps on this machine (OBS +
+                                     obs-spout2-plugin, TouchDesigner, Resolume, the SpoutReceiver demo) to pick up directly
+                                     (Option A), AND replaces the primary preview's CPU pipe+WriteableBitmap path with that
+                                     same shared texture rendered straight into a D3DImage (Option B) — see
+                                     SpoutPreviewRenderer/GoLiveView.xaml.cs. PiP thumbnails are unaffected either way. -->
+                                <CheckBox Content="Show Preview" Margin="0,4,0,8"
+                                          ToolTip="Also publishes the composited output as a named Spout2 source other apps (OBS, TouchDesigner, Resolume) can pick up directly"
+                                          IsChecked="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsSpoutOutputEnabled, Mode=TwoWay}"/>
+                                <StackPanel Visibility="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsSpoutOutputEnabled, Converter={StaticResource BoolToVisibility}}">
+                                    <TextBlock Text="Spout Sender Name" Style="{StaticResource FieldLabelStyle}"/>
+                                    <TextBox Text="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.SpoutSenderName, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"/>
+                                </StackPanel>
+
+                                <!-- Local MP4 recording, always alongside an active stream, not standalone —
+                                     see GoLiveSettingsService.IsRecordingEnabled's own doc comment for why
+                                     (the native encoder currently requires a real RTMP target to start at all). -->
+                                <CheckBox Content="Record while live" Margin="0,4,0,8"
+                                          ToolTip="Also writes a local MP4 (same encoded packets sent to the stream) while streaming — requires a folder below"
+                                          IsChecked="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsRecordingEnabled, Mode=TwoWay}"/>
+                                <StackPanel Visibility="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsRecordingEnabled, Converter={StaticResource BoolToVisibility}}">
+                                    <TextBlock Text="Recording Folder" Style="{StaticResource FieldLabelStyle}"/>
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.RecordFolderPath, FallbackValue='(none selected)', TargetNullValue='(none selected)'}"
+                                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,8,0"/>
+                                        <Button Grid.Column="1" Content="Browse…" Padding="8,4"
+                                                Command="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.BrowseRecordFolderCommand}"/>
+                                    </Grid>
+                                </StackPanel>
                             </StackPanel>
                         </StackPanel>
                     </ScrollViewer>

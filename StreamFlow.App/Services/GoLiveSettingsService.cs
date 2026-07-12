@@ -42,14 +42,30 @@ public sealed class SlotSettings
     /// restores paused, avoiding resume-after-restart drift.</summary>
     public TimerMode TimerMode { get; set; } = TimerMode.CountDown;
     public int TimerDurationSeconds { get; set; } = 300;
+    /// <summary>See TimerOverlayContent.AutoStartOnGoLive — unlike the running-state fields
+    /// above, this is a configuration choice, not transient session state, so it does persist.</summary>
+    public bool TimerAutoStartOnGoLive { get; set; }
 
-    /// <summary>Only meaningful for a Text overlay slot — see TextOverlayContent.FontSize/
-    /// FontColor/IsBold. Nullable so settings files predating these fields fall back to their
-    /// defaults (48pt, white, bold) rather than needing a migration.</summary>
+    /// <summary>Shared text formatting (see TextStyle/IHasTextStyle) for any of Text/Chat/Timer —
+    /// these three fields predate TextStyle and were Text-overlay-only, kept under their original
+    /// names for backward compatibility with already-saved scene files. Nullable so settings
+    /// files predating these fields fall back to TextStyle's own defaults (48pt, white, bold)
+    /// rather than needing a migration.</summary>
     public double? TextFontSize { get; set; }
     /// <summary>Stored as "#AARRGGBB", same convention as <see cref="OverlayColorHex"/>.</summary>
     public string? TextFontColorHex { get; set; }
     public bool? TextIsBold { get; set; }
+
+    /// <summary>Added alongside the rest of TextStyle — nullable/omittable the same way as the
+    /// three fields above, for the same reason.</summary>
+    public string? TextFontFamily { get; set; }
+    public bool? TextIsItalic { get; set; }
+    /// <summary>Stored as the TextHorizontalAlignment enum's own name ("Left"/"Center"/"Right").</summary>
+    public string? TextAlignment { get; set; }
+    public bool? TextOutlineEnabled { get; set; }
+    /// <summary>Stored as "#AARRGGBB", same convention as <see cref="OverlayColorHex"/>.</summary>
+    public string? TextOutlineColorHex { get; set; }
+    public double? TextOutlineThickness { get; set; }
 }
 
 public sealed class SceneSettings
@@ -63,6 +79,12 @@ public sealed class SceneSettings
     /// manually/pre-selected).</summary>
     public uint? CanvasResolutionWidth { get; set; }
     public uint? CanvasResolutionHeight { get; set; }
+
+    /// <summary>See GoLiveSceneViewModel.SwitchHotkey. Stored as the Key/ModifierKeys enums' own
+    /// names (via ToString()/Enum.Parse) rather than Hotkey's own ToString(), which is a display
+    /// format ("Ctrl + F1") not meant to round-trip. Both null means unassigned.</summary>
+    public string? SwitchHotkeyKey { get; set; }
+    public string? SwitchHotkeyModifiers { get; set; }
 }
 
 public sealed class SceneSetRegistration
@@ -123,6 +145,38 @@ public sealed class GoLiveSettings
     /// EffectiveGain. Always present regardless of which/how many devices are selected, unlike
     /// the per-device channel strips.</summary>
     public double MasterVolumePercent { get; set; } = 100;
+
+    /// <summary>Whether to publish the composited output as a named Spout2 source on launch (see
+    /// native/crates/core/src/spout.rs and the Spout2 Integration Plan in the Obsidian vault).
+    /// Independent of streaming/preview — purely an external-output feature for other Spout-aware
+    /// apps (OBS + obs-spout2-plugin, TouchDesigner, Resolume, SpoutReceiver) on the same machine.</summary>
+    public bool IsSpoutOutputEnabled { get; set; }
+
+    /// <summary>Sender name other apps see when picking StreamFlow as a Spout source.</summary>
+    public string SpoutSenderName { get; set; } = "StreamFlow";
+
+    /// <summary>Whether to also write a local MP4 (stream-copy, same encoded packets sent to
+    /// RTMP) alongside the live stream — see StartStreamCommand.RecordPath. Only ever active
+    /// while actually streaming; the native encoder currently requires a real RTMP target to
+    /// start at all (rtmp_url isn't optional), so there's no standalone "record without
+    /// streaming" mode yet.</summary>
+    public bool IsRecordingEnabled { get; set; }
+
+    /// <summary>Folder the recording's auto-timestamped filename gets written into — a folder,
+    /// not a fixed file path, so repeated recordings across sessions don't collide/overwrite.
+    /// Null until the user has picked one.</summary>
+    public string? RecordFolderPath { get; set; }
+
+    /// <summary>Whether the Stream Deck HTTP/WebSocket server (see StreamDeckServerService)
+    /// starts automatically on launch.</summary>
+    public bool IsStreamDeckServerEnabled { get; set; }
+
+    public int StreamDeckServerPort { get; set; } = 8080;
+
+    /// <summary>Bearer token the Stream Deck plugin must present — generated once
+    /// (StreamDeckServerService) and persisted here rather than regenerated per launch, so the
+    /// user only has to paste it into the plugin's config once.</summary>
+    public string? StreamDeckApiKey { get; set; }
 
     // Legacy fields for backwards compatibility
     public string? SceneName { get; set; }

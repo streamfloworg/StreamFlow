@@ -132,7 +132,7 @@ impl AudioEncoder {
         tracing::info!("Audio stream time_base updated to {}/{}", self.stream_tb.num, self.stream_tb.den);
     }
 
-    pub unsafe fn poll<F>(&mut self, elapsed_secs: f64, send_packet: &mut F) -> Result<()> 
+    pub unsafe fn poll<F>(&mut self, elapsed_secs: f64, send_packet: &mut F) -> Result<()>
     where
         F: FnMut(*mut AVPacket) -> Result<()>
     {
@@ -209,8 +209,26 @@ impl AudioEncoder {
         }
 
         // 2. Encode from FIFO if enough samples
+        //
+        // Capped per poll() call — unlike the video path (streaming.rs's own encode loop, which
+        // paces itself against wall-clock time via spin_sleep and only ever "catches up" by
+        // skipping PTS ranges, never by bursting), this loop used to drain the *entire* FIFO
+        // unconditionally, however much had backed up. poll() is only ever called once per video
+        // tick, so if the ring buffer (self.cons, fed by a separate capture thread) had
+        // accumulated any backlog — a momentary capture-thread scheduling hiccup, OS jitter,
+        // anything — this loop would encode and send all of it in one tight, completely unpaced
+        // burst: multiple seconds of audio hitting the RTMP socket within milliseconds, on the
+        // same connection as video. That's precisely "sending data faster than realtime" (verbatim
+        // YouTube ingest error) — audio has no equivalent of video's own real-time throttle. Fix:
+        // bound how many AAC frames get sent per call, so a backlog drains gradually over several
+        // (already wall-clock-paced, once per video tick) poll() calls instead of all at once.
+        // 2 is deliberately a little above the ~1 frame/tick steady-state ratio (an AAC frame is
+        // ~21-23ms at typical sample rates; a video tick is ~16-33ms) so genuinely transient drift
+        // still recovers within a couple of ticks, without ever permitting an unbounded burst.
+        const MAX_AUDIO_FRAMES_PER_POLL: i32 = 2;
         let frame_size = (*self.codec_ctx).frame_size;
-        while av_audio_fifo_size(self.fifo) >= frame_size {
+        let mut frames_sent_this_poll = 0;
+        while av_audio_fifo_size(self.fifo) >= frame_size && frames_sent_this_poll < MAX_AUDIO_FRAMES_PER_POLL {
             if av_frame_make_writable(self.frame) < 0 {
                 tracing::error!("Failed to make audio frame writable");
                 break;
@@ -230,7 +248,7 @@ impl AudioEncoder {
                 while avcodec_receive_packet(self.codec_ctx, self.pkt) >= 0 {
                     let new_pkt = av_packet_alloc();
                     av_packet_move_ref(new_pkt, self.pkt);
-                    
+
                     av_packet_rescale_ts(new_pkt, (*self.codec_ctx).time_base, self.stream_tb);
                     (*new_pkt).stream_index = self.stream_idx;
                     if let Err(e) = send_packet(new_pkt) {
@@ -241,6 +259,7 @@ impl AudioEncoder {
             } else {
                 tracing::error!("avcodec_send_frame failed: {}", ret);
             }
+            frames_sent_this_poll += 1;
         }
 
         Ok(())

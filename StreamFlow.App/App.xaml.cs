@@ -45,6 +45,8 @@ public partial class App : IDisposable
             services.AddHostedService<ApplicationHostService>();
             services.AddSingleton<CoreBridgeService>();
             services.AddHostedService(p => p.GetRequiredService<CoreBridgeService>());
+            services.AddSingleton<StreamDeckServerService>();
+            services.AddHostedService(p => p.GetRequiredService<StreamDeckServerService>());
 
             services.AddSingleton<AppModel>();
 
@@ -55,6 +57,8 @@ public partial class App : IDisposable
 
             services.AddSingleton<IPersistenceDataManager, PersistenceJsonDataManager>();
             services.AddSingleton<IDialogService, DialogService>();
+            services.AddSingleton<EventBus>();
+            services.AddSingleton<HotkeyConflictService>();
             services.AddSingleton<TwitchAuthService>();
             services.AddSingleton<YouTubeAuthService>();
             services.AddSingleton<TwitchChatService>();

@@ -83,6 +83,8 @@ public partial class SettingsViewModel : ViewModel
         // (see UpdateService.IsInstalled).
         if (_updates.IsInstalled) _ = CheckForUpdatesAsync();
 
+        InitializeStreamDeckSettings();
+
         IsInitialized = true;
     }
 

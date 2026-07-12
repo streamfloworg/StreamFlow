@@ -1,5 +1,7 @@
 ﻿using System.Collections.ObjectModel;
 
+using StreamFlow.Core.AudioProperties;
+
 namespace StreamFlow.App.ViewModels.Pages;
 
 /// <summary>
@@ -41,6 +43,13 @@ public partial class GoLiveSceneViewModel : ObservableObject
 
     [ObservableProperty]
     private double _canvasHeight = SourceSlot.DefaultCanvasWidth * 9.0 / 16.0;
+
+    /// <summary>Global (works regardless of window focus, same KeyboardHook-based dispatch as
+    /// soundboard clip hotkeys — see MainWindow.HotKeyHook_OnKeyboard) shortcut that switches Go
+    /// Live to this scene. Null means unassigned. See HotkeyConflictService for the app-wide
+    /// duplicate-combo check run before this gets set.</summary>
+    [ObservableProperty]
+    private Hotkey? _switchHotkey;
 
     public GoLiveSceneViewModel(string id, string name)
     {

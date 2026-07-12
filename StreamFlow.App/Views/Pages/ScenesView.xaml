@@ -29,6 +29,12 @@
         <conv:AspectRatioTextConverter x:Key="AspectRatioText"/>
         <conv:BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
         <conv:BoolToFontWeightConverter x:Key="BoolToFontWeight"/>
+        <conv:BoolToFontStyleConverter x:Key="BoolToFontStyle"/>
+        <conv:TextHorizontalAlignmentToIndexConverter x:Key="TextAlignmentToIndex"/>
+        <conv:TextHorizontalAlignmentToTextAlignmentConverter x:Key="TextAlignmentToWpf"/>
+        <conv:HotkeyConverter x:Key="HotkeyConverter"/>
+        <conv:DoubleScaleConverter x:Key="DoubleScale"/>
+        <conv:FontSizeToMessageSpacingMarginConverter x:Key="MessageSpacingMargin"/>
         <conv:NullVisibilityConverter x:Key="NullToVisibility"/>
         <conv:InvertedNullVisibilityConverter x:Key="InvertedNullToVisibility"/>
         <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
@@ -40,6 +46,91 @@
         <conv:TimerModeToVisibilityConverter x:Key="CountDownToVisibility"/>
         <conv:SceneTransitionKindToIndexConverter x:Key="SceneTransitionKindToIndex"/>
         <conv:CollectionCountToVisibilityConverter x:Key="CollectionCountToVisibility"/>
+
+        <!-- Shared text-formatting editor for every IHasTextStyle overlay kind (Text/Chat/Timer)
+             — mirrors GoLiveView.xaml's own copy (this page shares SceneEditorViewModel with it
+             but has its own separate Page.Resources, so the DataTemplate itself has to be
+             duplicated here too); DataContext inside is the SourceSlot. -->
+        <DataTemplate x:Key="TextStyleEditorTemplate" DataType="{x:Type vm:SourceSlot}">
+            <StackPanel>
+                <TextBlock Text="Font" Style="{StaticResource FieldLabelStyle}"/>
+                <ComboBox IsEditable="True" Text="{Binding Content.Style.FontFamily, Mode=TwoWay}" Margin="0,0,0,6">
+                    <ComboBoxItem Content="Segoe UI"/>
+                    <ComboBoxItem Content="Arial"/>
+                    <ComboBoxItem Content="Impact"/>
+                    <ComboBoxItem Content="Consolas"/>
+                    <ComboBoxItem Content="Georgia"/>
+                    <ComboBoxItem Content="Verdana"/>
+                </ComboBox>
+                <Grid Margin="0,0,0,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Font Size" VerticalAlignment="Center"
+                               Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="0,0,8,0"/>
+                    <Slider Grid.Column="1" Minimum="8" Maximum="200" VerticalAlignment="Center"
+                            Value="{Binding Content.Style.FontSize, Mode=TwoWay}"/>
+                    <TextBlock Grid.Column="2" Width="28" VerticalAlignment="Center" TextAlignment="Right"
+                               Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"
+                               Text="{Binding Content.Style.FontSize, StringFormat={}{0:F0}}"/>
+                </Grid>
+                <Grid Margin="0,0,0,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Width="24" Height="24" CornerRadius="4" Margin="0,0,8,0"
+                            BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="1"
+                            Background="{Binding Content.Style.FontColor, Converter={StaticResource ColorToBrush}}"/>
+                    <Button Grid.Column="1" Content="Text color…" HorizontalAlignment="Stretch"
+                            Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.ChangeTextColorCommand}"
+                            CommandParameter="{Binding}"/>
+                </Grid>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                    <CheckBox Content="Bold" IsChecked="{Binding Content.Style.IsBold, Mode=TwoWay}" Margin="0,0,16,0"/>
+                    <CheckBox Content="Italic" IsChecked="{Binding Content.Style.IsItalic, Mode=TwoWay}"/>
+                </StackPanel>
+                <TextBlock Text="Alignment" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"/>
+                <ComboBox Margin="0,0,0,6" SelectedIndex="{Binding Content.Style.Alignment, Converter={StaticResource TextAlignmentToIndex}}">
+                    <ComboBoxItem Content="Left"/>
+                    <ComboBoxItem Content="Center"/>
+                    <ComboBoxItem Content="Right"/>
+                </ComboBox>
+                <StackPanel Visibility="{Binding IsChatOverlay, Converter={StaticResource InverseBoolToVisibility}}">
+                    <CheckBox Content="Outline" IsChecked="{Binding Content.Style.OutlineEnabled, Mode=TwoWay}" Margin="0,0,0,6"/>
+                    <StackPanel Visibility="{Binding Content.Style.OutlineEnabled, Converter={StaticResource BoolToVisibility}}">
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Width="24" Height="24" CornerRadius="4" Margin="0,0,8,0"
+                                    BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="1"
+                                    Background="{Binding Content.Style.OutlineColor, Converter={StaticResource ColorToBrush}}"/>
+                            <Button Grid.Column="1" Content="Outline color…" HorizontalAlignment="Stretch"
+                                    Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.ChangeTextOutlineColorCommand}"
+                                    CommandParameter="{Binding}"/>
+                        </Grid>
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Thickness" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="0,0,8,0"/>
+                            <Slider Grid.Column="1" Minimum="0.5" Maximum="12" VerticalAlignment="Center"
+                                    Value="{Binding Content.Style.OutlineThickness, Mode=TwoWay}"/>
+                            <TextBlock Grid.Column="2" Width="28" VerticalAlignment="Center" TextAlignment="Right"
+                                       Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"
+                                       Text="{Binding Content.Style.OutlineThickness, StringFormat={}{0:F1}}"/>
+                        </Grid>
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+        </DataTemplate>
 
         <Style x:Key="FieldLabelStyle" TargetType="TextBlock">
             <Setter Property="FontSize" Value="11"/>
@@ -250,6 +341,12 @@
                     <TextBlock Text="Scene Name" Style="{StaticResource FieldLabelStyle}"/>
                     <TextBox Text="{Binding ViewModel.SceneEditor.ActiveScene.Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
 
+                    <TextBlock Text="Switch Hotkey" Style="{StaticResource FieldLabelStyle}"/>
+                    <TextBox Height="24" Padding="6,2" Margin="0,0,0,8"
+                             IsReadOnly="True" IsReadOnlyCaretVisible="False" IsUndoEnabled="False"
+                             PreviewKeyDown="SceneHotkeyTextBoxPreviewKeyDown"
+                             Text="{Binding ViewModel.SceneEditor.ActiveScene.SwitchHotkey, Converter={StaticResource HotkeyConverter}, Mode=OneWay, TargetNullValue='Click to set...'}"/>
+
                     <!-- Only relevant for a primary-less scene — a capture source's own real
                          resolution is always authoritative once one exists. -->
                     <StackPanel Visibility="{Binding ViewModel.SceneEditor.PrimarySlot, Converter={StaticResource InvertedNullToVisibility}}">
@@ -436,35 +533,7 @@
                                     <TextBlock Text="Text Content" Style="{StaticResource FieldLabelStyle}"/>
                                     <TextBox Text="{Binding Content.OverlayText, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap"
                                              AcceptsReturn="True" MinHeight="60" Margin="0,0,0,8"/>
-                                    <!-- Font size renders the text at this exact point size regardless of
-                                         the box's own W/H — independent of the overlay's position/scaling. -->
-                                    <Grid Margin="0,0,0,6">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="Font Size" VerticalAlignment="Center"
-                                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="0,0,8,0"/>
-                                        <Slider Grid.Column="1" Minimum="8" Maximum="200" VerticalAlignment="Center"
-                                                Value="{Binding Content.FontSize, Mode=TwoWay}"/>
-                                        <TextBlock Grid.Column="2" Width="28" VerticalAlignment="Center" TextAlignment="Right"
-                                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"
-                                                   Text="{Binding Content.FontSize, StringFormat={}{0:F0}}"/>
-                                    </Grid>
-                                    <Grid Margin="0,0,0,6">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-                                        <Border Grid.Column="0" Width="24" Height="24" CornerRadius="4" Margin="0,0,8,0"
-                                                BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="1"
-                                                Background="{Binding Content.FontColor, Converter={StaticResource ColorToBrush}}"/>
-                                        <Button Grid.Column="1" Content="Text color…" HorizontalAlignment="Stretch"
-                                                Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.ChangeTextColorCommand}"
-                                                CommandParameter="{Binding}"/>
-                                    </Grid>
-                                    <CheckBox Content="Bold" IsChecked="{Binding Content.IsBold, Mode=TwoWay}" Margin="0,0,0,8"/>
+                                    <ContentControl Content="{Binding}" ContentTemplate="{StaticResource TextStyleEditorTemplate}"/>
                                 </StackPanel>
 
                                 <!-- Color Overlay -->
@@ -542,6 +611,7 @@
                                     <TextBlock Text="Chat Overlay" Style="{StaticResource FieldLabelStyle}"/>
                                     <TextBlock Text="Displays live messages from active chat connection (started from the Go Live page)."
                                                Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                    <ContentControl Content="{Binding}" ContentTemplate="{StaticResource TextStyleEditorTemplate}"/>
                                 </StackPanel>
 
                                 <!-- Timer Overlay -->
@@ -555,7 +625,8 @@
                                         <TextBlock Text="Duration (seconds)" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"/>
                                         <TextBox Text="{Binding Content.TimerDurationSeconds, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
                                     </StackPanel>
-                                    <StackPanel Orientation="Horizontal">
+                                    <CheckBox Content="Auto-start on Go Live" IsChecked="{Binding Content.AutoStartOnGoLive, Mode=TwoWay}" Margin="0,0,0,8"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                                         <Button Content="▶ Start" Padding="10,4" Margin="0,0,6,0"
                                                 IsEnabled="{Binding Content.IsTimerRunning, Converter={StaticResource BooleanInvertConverter}}"
                                                 Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.StartTimerCommand}"
@@ -568,6 +639,7 @@
                                                 Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.ResetTimerCommand}"
                                                 CommandParameter="{Binding}"/>
                                     </StackPanel>
+                                    <ContentControl Content="{Binding}" ContentTemplate="{StaticResource TextStyleEditorTemplate}"/>
                                 </StackPanel>
 
                                 <!-- Blur Layer -->
@@ -786,33 +858,68 @@
                                         <!-- Text overlays likewise render locally via WPF's own text layout — a
                                              close approximation of the rasterized bitmap actually sent to the core. -->
                                         <Viewbox Stretch="Fill" Visibility="{Binding IsTextOverlay, Converter={StaticResource BoolToVisibility}}">
-                                            <TextBlock Text="{Binding Content.OverlayText}" FontFamily="Segoe UI"
-                                                       FontWeight="{Binding Content.IsBold, Converter={StaticResource BoolToFontWeight}}"
-                                                       Foreground="{Binding Content.FontColor, Converter={StaticResource ColorToBrush}}"/>
+                                            <TextBlock Text="{Binding Content.OverlayText}" FontFamily="{Binding Content.Style.FontFamily}"
+                                                       FontWeight="{Binding Content.Style.IsBold, Converter={StaticResource BoolToFontWeight}}"
+                                                       FontStyle="{Binding Content.Style.IsItalic, Converter={StaticResource BoolToFontStyle}}"
+                                                       TextAlignment="{Binding Content.Style.Alignment, Converter={StaticResource TextAlignmentToWpf}}"
+                                                       Foreground="{Binding Content.Style.FontColor, Converter={StaticResource ColorToBrush}}"/>
                                         </Viewbox>
                                         <!-- Timer overlays render the same live-ticking text locally (see
                                              SceneEditorViewModel.FormatTimerDisplay/TickTimerOverlaysAsync). -->
                                         <Viewbox Stretch="Fill" Visibility="{Binding IsTimerOverlay, Converter={StaticResource BoolToVisibility}}">
-                                            <TextBlock Text="{Binding Content.TimerDisplayText}" FontFamily="Segoe UI" FontWeight="Bold" Foreground="White"/>
+                                            <TextBlock Text="{Binding Content.TimerDisplayText}" FontFamily="{Binding Content.Style.FontFamily}"
+                                                       FontWeight="{Binding Content.Style.IsBold, Converter={StaticResource BoolToFontWeight}}"
+                                                       FontStyle="{Binding Content.Style.IsItalic, Converter={StaticResource BoolToFontStyle}}"
+                                                       Foreground="{Binding Content.Style.FontColor, Converter={StaticResource ColorToBrush}}"/>
                                         </Viewbox>
                                         <!-- Color overlays are a flat fill — no image/text content to render. -->
                                         <Border Background="{Binding Content.OverlayColor, Converter={StaticResource ColorToBrush}}"
                                                 Visibility="{Binding IsColorOverlay, Converter={StaticResource BoolToVisibility}}"/>
                                         <!-- Chat overlays render recent chat messages locally — populated only
                                              if the Go Live page's chat connection is currently active, since
-                                             this page has no chat connection of its own. -->
+                                             this page has no chat connection of its own. Kept in proportion
+                                             with OverlayContentRenderer.RenderChatToBgra's own scaling
+                                             (Style.FontSize / 3) via DoubleScale — see GoLiveView.xaml's
+                                             identical block for the full rationale. -->
                                         <Border Background="#40000000" ClipToBounds="True" Visibility="{Binding IsChatOverlay, Converter={StaticResource BoolToVisibility}}">
-                                            <ItemsControl ItemsSource="{Binding Content.ChatMessages}" VerticalAlignment="Bottom">
+                                            <!-- ElementName, not RelativeSource AncestorType=ItemsControl — see
+                                                 GoLiveView.xaml's identical block for why (ambiguous with the
+                                                 outer Slots ItemsControl this is nested inside). -->
+                                            <!-- DisplayMessages, not ChatMessages directly — see
+                                                 GoLiveView.xaml's identical block / ChatOverlayContent.
+                                                 DisplayMessages' own doc comment for why. -->
+                                            <!-- ScrollViewer + explicit scroll-to-bottom — see GoLiveView.xaml's
+                                                 identical block for why (not VerticalAlignment="Bottom"). Style=
+                                                 {x:Null} + zeroed Padding/BorderThickness/Margin for the same
+                                                 reason too (rules out AdonisUI's themed template as a source of a
+                                                 small constant pixel offset). -->
+                                            <ScrollViewer Style="{x:Null}" Padding="0" BorderThickness="0" Margin="0"
+                                                          VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled"
+                                                          IsHitTestVisible="False" ScrollChanged="ChatScrollViewer_ScrollChanged">
+                                            <!-- VerticalAlignment="Bottom" — see GoLiveView.xaml's identical
+                                                 block for why (safe/reliable in combination with ScrollToEnd(),
+                                                 unlike the earlier bare-Border attempt). -->
+                                            <ItemsControl x:Name="ChatMessagesItemsControl" ItemsSource="{Binding Content.DisplayMessages}" VerticalAlignment="Bottom">
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate DataType="{x:Type services:ChatMessage}">
-                                                        <TextBlock TextWrapping="Wrap" Margin="4,2" FontSize="9">
+                                                        <!-- Top-only margin — see GoLiveView.xaml's identical block
+                                                             for the full rationale (matches RenderChatToBgra's own
+                                                             spacing/inset model exactly). -->
+                                                        <TextBlock TextWrapping="Wrap"
+                                                                   Margin="{Binding ElementName=ChatMessagesItemsControl, Path=DataContext.Content.Style.FontSize, Converter={StaticResource MessageSpacingMargin}}"
+                                                                   FontFamily="{Binding ElementName=ChatMessagesItemsControl, Path=DataContext.Content.Style.FontFamily}"
+                                                                   FontSize="{Binding ElementName=ChatMessagesItemsControl, Path=DataContext.Content.Style.FontSize, Converter={StaticResource DoubleScale}, ConverterParameter=0.333333}"
+                                                                   FontStyle="{Binding ElementName=ChatMessagesItemsControl, Path=DataContext.Content.Style.IsItalic, Converter={StaticResource BoolToFontStyle}}">
                                                             <Run Text="{Binding Username, StringFormat={}{0}:}" FontWeight="Bold"
                                                                  Foreground="{Binding ColorHex, FallbackValue=Cyan, TargetNullValue=Cyan}"/>
-                                                            <Run Text="{Binding Text}" Foreground="White"/>
+                                                            <Run Text="{Binding Text}"
+                                                                 FontWeight="{Binding ElementName=ChatMessagesItemsControl, Path=DataContext.Content.Style.IsBold, Converter={StaticResource BoolToFontWeight}}"
+                                                                 Foreground="{Binding ElementName=ChatMessagesItemsControl, Path=DataContext.Content.Style.FontColor, Converter={StaticResource ColorToBrush}}"/>
                                                         </TextBlock>
                                                     </DataTemplate>
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>
+                                            </ScrollViewer>
                                         </Border>
                                     </Grid>
                                     <Thumb x:Name="MoveThumb" behaviors:SlotPlacementBehavior.Mode="Move">
