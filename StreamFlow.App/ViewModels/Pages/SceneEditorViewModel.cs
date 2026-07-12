@@ -324,6 +324,7 @@ public partial class SceneEditorViewModel : ObservableObject
                 OverlayKind.Video => new VideoOverlayContent
                 {
                     VideoPath = savedSlot.VideoPath,
+                    LoopVideo = savedSlot.LoopVideo,
                     ChromaKeyEnabled = savedSlot.ChromaKeyEnabled,
                     ChromaKeySimilarity = savedSlot.ChromaKeySimilarity,
                     ChromaKeyColor = chromaKeyColor ?? System.Windows.Media.Color.FromRgb(0x00, 0xB1, 0x40),
@@ -467,6 +468,7 @@ public partial class SceneEditorViewModel : ObservableObject
             VideoOverlayContent video => new VideoOverlayContent
             {
                 VideoPath = video.VideoPath,
+                LoopVideo = video.LoopVideo,
                 ChromaKeyEnabled = video.ChromaKeyEnabled,
                 ChromaKeyColor = video.ChromaKeyColor,
                 ChromaKeySimilarity = video.ChromaKeySimilarity,
@@ -758,7 +760,7 @@ public partial class SceneEditorViewModel : ObservableObject
         };
         if (dialog.ShowDialog() != true) return;
 
-        var sourceId = $"video:{Base64UrlEncode(dialog.FileName)}";
+        var sourceId = BuildVideoSourceId(dialog.FileName, loopVideo: true);
         var slot = new SourceSlot(
             isPrimary: false, x: 30, y: 30, w: 30, h: 30,
             isOverlay: true, content: new VideoOverlayContent { VideoPath = dialog.FileName });
@@ -931,6 +933,14 @@ public partial class SceneEditorViewModel : ObservableObject
     /// (base64::engine::general_purpose::URL_SAFE_NO_PAD).</summary>
     private static string Base64UrlEncode(string text) =>
         Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(text)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+    /// <summary>Builds a video overlay's source id, the sole channel the core learns both the file
+    /// path and the loop mode through (see main.rs's StartCapture handling for the "video:"
+    /// prefix) — no separate IPC command exists for either. A non-looping overlay carries an
+    /// extra "once:" marker ahead of the base64 path; looping (the historical default) keeps the
+    /// original "video:{base64}" shape unchanged for compatibility with already-saved scenes.</summary>
+    private static string BuildVideoSourceId(string path, bool loopVideo) =>
+        loopVideo ? $"video:{Base64UrlEncode(path)}" : $"video:once:{Base64UrlEncode(path)}";
 
     // ── Properties-panel edits to an existing overlay's content ────────────────────
 
@@ -1199,9 +1209,10 @@ public partial class SceneEditorViewModel : ObservableObject
             ScheduleOverlayContentUpdate(slot);
         }
 
-        if (e.PropertyName == nameof(VideoOverlayContent.VideoPath) && slot.Content is VideoOverlayContent { VideoPath: not null } video)
+        if (e.PropertyName is nameof(VideoOverlayContent.VideoPath) or nameof(VideoOverlayContent.LoopVideo)
+            && slot.Content is VideoOverlayContent { VideoPath: not null } video)
         {
-            slot.SourceId = $"video:{Base64UrlEncode(video.VideoPath)}";
+            slot.SourceId = BuildVideoSourceId(video.VideoPath, video.LoopVideo);
         }
 
         if (e.PropertyName is nameof(TextOverlayContent.OverlayText)
@@ -1209,7 +1220,8 @@ public partial class SceneEditorViewModel : ObservableObject
             or nameof(TextStyle.IsBold) or nameof(TextStyle.IsItalic) or nameof(TextStyle.Alignment)
             or nameof(TextStyle.OutlineEnabled) or nameof(TextStyle.OutlineColor) or nameof(TextStyle.OutlineThickness)
             or nameof(ImageOverlayContent.ImagePath)
-            or nameof(ColorOverlayContent.OverlayColor) or nameof(VideoOverlayContent.VideoPath) or nameof(BlurOverlayContent.BlurRadius)
+            or nameof(ColorOverlayContent.OverlayColor) or nameof(VideoOverlayContent.VideoPath) or nameof(VideoOverlayContent.LoopVideo)
+            or nameof(BlurOverlayContent.BlurRadius)
             or nameof(IChromaKeyable.ChromaKeyEnabled) or nameof(IChromaKeyable.ChromaKeyColor) or nameof(IChromaKeyable.ChromaKeySimilarity)
             or nameof(TimerOverlayContent.TimerMode) or nameof(TimerOverlayContent.TimerDurationSeconds)
             or nameof(TimerOverlayContent.AutoStartOnGoLive))
@@ -1760,6 +1772,7 @@ public partial class SceneEditorViewModel : ObservableObject
         OverlayText = (s.Content as TextOverlayContent)?.OverlayText,
         OverlayColorHex = (s.Content as ColorOverlayContent)?.OverlayColor?.ToString(CultureInfo.InvariantCulture),
         VideoPath = (s.Content as VideoOverlayContent)?.VideoPath,
+        LoopVideo = (s.Content as VideoOverlayContent)?.LoopVideo ?? true,
         XPercent = s.XPercent,
         YPercent = s.YPercent,
         WPercent = s.WPercent,

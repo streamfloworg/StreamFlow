@@ -24,12 +24,12 @@ pub struct VideoOverlaySession {
 }
 
 impl VideoOverlaySession {
-    pub fn new(source_id: String, path: String, tx: broadcast::Sender<Arc<RawFrame>>) -> Result<Self> {
+    pub fn new(source_id: String, path: String, loop_video: bool, tx: broadcast::Sender<Arc<RawFrame>>) -> Result<Self> {
         let stop_flag = Arc::new(AtomicBool::new(false));
         let thread_flag = Arc::clone(&stop_flag);
 
         let handle = thread::spawn(move || {
-            if let Err(e) = run_decode_loop(&source_id, &path, &thread_flag, &tx) {
+            if let Err(e) = run_decode_loop(&source_id, &path, loop_video, &thread_flag, &tx) {
                 tracing::warn!(source = %source_id, %path, "Video overlay decode loop exited: {e:#}");
             }
         });
@@ -143,6 +143,7 @@ impl Drop for OwnedAvPacket {
 fn run_decode_loop(
     source_id: &str,
     path: &str,
+    loop_video: bool,
     stop_flag: &Arc<AtomicBool>,
     tx: &broadcast::Sender<Arc<RawFrame>>,
 ) -> Result<()> {
@@ -203,9 +204,33 @@ fn run_decode_loop(
 
             let read_ret = av_read_frame(fmt_ctx.0, packet.0);
             if read_ret < 0 {
-                // End of file (or a transient read error, treated the same way) — loop
-                // playback by seeking back to the start instead of ending the session.
+                // End of file (or a transient read error, treated the same way).
                 av_packet_unref(packet.0);
+
+                if !loop_video {
+                    // Play-once: rather than freezing on the last decoded frame, send one
+                    // fully transparent (all-zero, alpha=0) frame so the compositor's
+                    // source-over blend (see compositor::bgra_blend) leaves whatever is
+                    // beneath this layer untouched — the overlay just disappears instead of
+                    // sticking around as a static image. The session then idles until an
+                    // explicit StopCapture (see VideoOverlaySession::stop) instead of exiting
+                    // outright, so a mid-playback ChromaKey/etc. toggle still has a live
+                    // session to talk to.
+                    bgra_buf.fill(0);
+                    let _ = tx.send(Arc::new(RawFrame {
+                        source_id: source_id.to_string(),
+                        width: width as u32,
+                        height: height as u32,
+                        pixels: bgra_buf.clone(),
+                        timestamp_100ns: 0,
+                    }));
+                    while !stop_flag.load(Ordering::Relaxed) {
+                        thread::sleep(Duration::from_millis(200));
+                    }
+                    break 'playback;
+                }
+
+                // Loop playback by seeking back to the start instead of ending the session.
                 let seek_ret = av_seek_frame(fmt_ctx.0, stream_index, 0, AVSEEK_FLAG_BACKWARD);
                 if seek_ret < 0 {
                     return Err(anyhow!("Failed to loop video playback (seek error {seek_ret})"));

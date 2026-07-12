@@ -565,6 +565,8 @@
                                             Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.BrowseOverlayVideoCommand}"
                                             CommandParameter="{Binding}"
                                             Margin="0,0,0,8"/>
+                                    <CheckBox Content="Loop" IsChecked="{Binding Content.LoopVideo, Mode=TwoWay}" Margin="0,0,0,8"
+                                              ToolTip="When off, the video plays once and then disappears instead of restarting."/>
                                 </StackPanel>
 
                                 <!-- Chroma Key — image/video overlays only; color-key transparency

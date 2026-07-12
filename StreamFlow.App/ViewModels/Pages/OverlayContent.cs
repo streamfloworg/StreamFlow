@@ -150,6 +150,15 @@ public partial class VideoOverlayContent : ObservableObject, IChromaKeyable
     [ObservableProperty]
     private string? _videoPath;
 
+    /// <summary>Whether the core loops playback back to the start on end-of-file (the historical,
+    /// always-on behavior) or plays once and then disappears — see SceneEditorViewModel's
+    /// source-id builder, which bakes this into the "video:" source id the core parses (the
+    /// core has no separate command for it, same as VideoPath itself). Settable so the properties
+    /// panel can toggle it live; changing it rebuilds the source id and restarts the decode
+    /// session, same as re-browsing to a different file.</summary>
+    [ObservableProperty]
+    private bool _loopVideo = true;
+
     [ObservableProperty]
     private bool _chromaKeyEnabled;
 

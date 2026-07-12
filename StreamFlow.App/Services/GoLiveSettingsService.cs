@@ -25,6 +25,9 @@ public sealed class SlotSettings
     /// serializing System.Windows.Media.Color's own shape, which is a messier JSON object.</summary>
     public string? OverlayColorHex { get; set; }
     public string? VideoPath { get; set; }
+    /// <summary>See VideoOverlayContent.LoopVideo. Defaults to true so settings files predating
+    /// this field keep the old always-loop behavior without needing a migration.</summary>
+    public bool LoopVideo { get; set; } = true;
     public double XPercent { get; set; }
     public double YPercent { get; set; }
     public double WPercent { get; set; }

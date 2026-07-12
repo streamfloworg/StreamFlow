@@ -460,11 +460,16 @@ async fn run_stdin_commands(
                                 .map(|s| Box::new(s) as Box<dyn CaptureSessionTrait>)
                         } else if source_id.starts_with("video:") {
                             // The file path is base64-encoded into the id itself (same approach
-                            // as webcam's symlink) rather than needing a separate command.
-                            base64::Engine::decode(
-                                &base64::engine::general_purpose::URL_SAFE_NO_PAD,
-                                source_id.trim_start_matches("video:"),
-                            )
+                            // as webcam's symlink) rather than needing a separate command. A
+                            // non-looping overlay carries an extra "once:" marker ahead of the
+                            // path (still no separate command) — see SceneEditorViewModel's
+                            // source-id builder on the C# side.
+                            let rest = source_id.trim_start_matches("video:");
+                            let (loop_video, encoded_path) = match rest.strip_prefix("once:") {
+                                Some(encoded) => (false, encoded),
+                                None => (true, rest),
+                            };
+                            base64::Engine::decode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, encoded_path)
                             .map_err(|e| anyhow!("Invalid video overlay id: {e}"))
                             .and_then(|bytes| String::from_utf8(bytes).map_err(|e| anyhow!("Invalid video overlay path: {e}")))
                             .and_then(|path| {
@@ -474,7 +479,7 @@ async fn run_stdin_commands(
                                 // video files, unlike monitor/window sources, have no earlier
                                 // GetSources-time opportunity to report this.
                                 video_resolution = video_overlay::probe_dimensions(&path).ok();
-                                video_overlay::VideoOverlaySession::new(source_id.clone(), path, frame_tx.clone())
+                                video_overlay::VideoOverlaySession::new(source_id.clone(), path, loop_video, frame_tx.clone())
                                     .map(|s| Box::new(s) as Box<dyn CaptureSessionTrait>)
                             })
                         } else {
