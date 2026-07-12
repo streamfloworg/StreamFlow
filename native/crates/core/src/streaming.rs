@@ -1,4 +1,4 @@
-﻿#![allow(unsafe_code)]
+#![allow(unsafe_code)]
 
 use std::collections::HashMap;
 use std::ffi::CString;
@@ -1002,6 +1002,10 @@ unsafe fn run_encoder_unsafe(
     std::ptr::write_bytes((*yuv_frame).data[2], 128, ((*yuv_frame).linesize[2] * out_h / 2) as usize);
 
     let pkt = av_packet_alloc();
+
+    if let Some(ref mut enc) = audio_enc {
+        enc.clear_backlog();
+    }
 
     // ── Encode loop ───────────────────────────────────────────────────────────
     let stream_start = Instant::now();

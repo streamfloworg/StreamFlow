@@ -264,6 +264,15 @@ impl AudioEncoder {
 
         Ok(())
     }
+
+    pub fn clear_backlog(&mut self) {
+        let available = self.cons.occupied_len();
+        if available > 0 {
+            let mut temp = vec![0.0f32; available];
+            self.cons.pop_slice(&mut temp);
+            tracing::warn!("Discarded audio backlog of {} samples to align timelines", available);
+        }
+    }
 }
 
 impl Drop for AudioEncoder {
