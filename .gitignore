@@ -413,7 +413,6 @@ appsettings.Local.json
 # Claude Code local state (memory-tool data, per-machine settings, scheduler lock) —
 # not shared team config. If a genuinely shared settings.json is ever added, allow it explicitly.
 .claude/*
-!.claude/settings.json
 
 # Claude memory-tool working directory (session logs, daily buffers) — personal, not project data.
 # Also self-ignored via its own nested .remember/.gitignore, but listed here explicitly so a
