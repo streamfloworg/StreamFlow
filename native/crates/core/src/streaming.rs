@@ -369,6 +369,13 @@ impl StreamSession {
             std::thread::Builder::new()
                 .name("audio-mixer".into())
                 .spawn(move || {
+                    // Sits between capture (mic capture is TIME_CRITICAL via cpal; loopback
+                    // capture now matches it — see audio.rs's wasapi_loopback_thread) and the
+                    // encoder — starving this thread would reintroduce the same stall/burst
+                    // skew a starved capture thread causes, just one stage later. ABOVE_NORMAL
+                    // matches the RTMP writer's tier rather than TIME_CRITICAL: this is bulk
+                    // mixing work, not a hardware IO callback tied to a device's own clock.
+                    unsafe { let _ = SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL); }
                     use ringbuf::traits::{Consumer as _, Observer as _, Producer as _};
                     use std::sync::mpsc::TryRecvError;
                     const CHUNK: usize = 512;
@@ -855,6 +862,17 @@ unsafe fn run_encoder_unsafe(
     let rtmp_stop      = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let rtmp_stop_rtmp = Arc::clone(&rtmp_stop);
 
+    // Set by the writer thread right before it aborts on a genuine write error (never on a
+    // normal/forced stop) — the encode loop below only ever watched `stop_rx` (a user-initiated
+    // stop), so when the writer thread died on its own (observed: a bad packet triggering
+    // av_interleaved_write_frame to fail, tearing down the RTMP connection — Twitch saw the
+    // stream end immediately) the encode loop had no way to notice at all. It kept encoding and
+    // "sending" packets into a channel nobody was draining anymore for 9+ more seconds — burning
+    // GPU/CPU for a stream that was already gone, before something unrelated finally ended it —
+    // instead of surfacing the failure and stopping right away.
+    let rtmp_died      = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let rtmp_died_rtmp = Arc::clone(&rtmp_died);
+
     // ── Async recording write thread (separate from RTMP) ─────────────────────
     // Previously the recording's av_write_frame ran inline on the RTMP writer thread, BEFORE
     // the RTMP write itself — any latency there (disk contention, AV scanner, a slower/network
@@ -953,6 +971,7 @@ unsafe fn run_encoder_unsafe(
                 unsafe {
                     if av_interleaved_write_frame(ofmt_ctx, owned.0) < 0 {
                         tracing::error!("av_interleaved_write_frame error (pkt #{}) - aborting RTMP writer", total_pkts);
+                        rtmp_died_rtmp.store(true, Ordering::Relaxed);
                         break;
                     }
                 }
@@ -1074,6 +1093,12 @@ unsafe fn run_encoder_unsafe(
     let mut forced_stop = false;
     loop {
         if stop_rx.try_recv().is_ok() { forced_stop = true; break; }
+        if rtmp_died.load(Ordering::Relaxed) {
+            tracing::error!("RTMP writer thread died - stopping encode loop instead of continuing to encode into a dead connection");
+            let _ = event_tx.send(StreamEvent::Error("RTMP connection lost".to_string()));
+            forced_stop = true;
+            break;
+        }
 
         if let Some(ref mut enc) = audio_enc {
             let mut send_audio = |pkt: *mut AVPacket| -> Result<()> {
@@ -1163,6 +1188,17 @@ unsafe fn run_encoder_unsafe(
             let qd = queue_depth.load(Ordering::Relaxed);
             let rtmp_slow = rtmp_slow_writes.load(Ordering::Relaxed);
             let rtmp_total = rtmp_total_pkts.load(Ordering::Relaxed);
+            // video_pts_s/audio_pts_s/av_gap_s: each stream's own logical position in seconds,
+            // and the gap between them — added after a session showed ffmpeg's flv muxer force-
+            // flushing on a >10s interleave gap (its own hardcoded max_interleave_delta) with
+            // every other metric here (fps, queue, drops) reading perfectly healthy the whole
+            // time, and poll()'s own wall-clock-vs-track_time check (see AudioEncoder::poll)
+            // never once detecting audio behind by more than a second. That combination means
+            // neither stream's own self-consistency check catches this — only comparing the two
+            // streams' actual pts values directly will show which one is actually diverging.
+            let video_pts_s = last_pts as f64 / target_fps as f64;
+            let audio_pts_s = audio_enc.as_ref().map(|enc| unsafe { enc.track_seconds() });
+            let silence_samples = audio_enc.as_ref().map(|enc| enc.silence_samples_inserted);
             // warn! (not debug!) so this is visible in the C# Core Diagnostics panel by default
             // — diagnosing a "recording looks sped up / static periods missing" report needs to
             // see fps/skipped over time, and debug! is invisible without --verbose. If fps stays
@@ -1177,8 +1213,11 @@ unsafe fn run_encoder_unsafe(
                  sws={:.1}ms send={:.1}ms recv={:.1}ms | \
                  queue={}/{QUEUE_CAP} skipped_catchup={frames_skipped_catchup} \
                  skipped_backpressure={frames_skipped_backpressure} dropped={pkts_dropped} | \
-                 rtmp_writes={rtmp_total} rtmp_slow(>50ms)={rtmp_slow}",
+                 rtmp_writes={rtmp_total} rtmp_slow(>50ms)={rtmp_slow} | \
+                 video_pts_s={video_pts_s:.2} audio_pts_s={audio_pts_s:.2?} \
+                 av_gap_s={:.2?} silence_samples_total={silence_samples:?}",
                 sws_ms_acc / n, nvenc_ms_acc / n, recv_ms_acc / n, qd,
+                audio_pts_s.map(|a| video_pts_s - a),
             );
             event_tx.send(StreamEvent::Status {
                 frame: total_frames,

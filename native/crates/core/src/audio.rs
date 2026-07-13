@@ -502,7 +502,9 @@ unsafe fn wasapi_loopback_thread(
         DEVICE_STATE_ACTIVE, WAVEFORMATEX, WAVEFORMATEXTENSIBLE,
     };
     use windows::Win32::Media::Multimedia::WAVE_FORMAT_IEEE_FLOAT;
-    use windows::Win32::System::Threading::{CreateEventW, WaitForSingleObject};
+    use windows::Win32::System::Threading::{
+        CreateEventW, GetCurrentThread, SetThreadPriority, WaitForSingleObject, THREAD_PRIORITY_TIME_CRITICAL,
+    };
     // KSDATAFORMAT_SUBTYPE_IEEE_FLOAT = {00000003-0000-0010-8000-00aa00389b71}
     const KSDATAFORMAT_SUBTYPE_IEEE_FLOAT: GUID = GUID::from_values(
         0x0000_0003, 0x0000, 0x0010, [0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71],
@@ -513,6 +515,19 @@ unsafe fn wasapi_loopback_thread(
     use windows::Win32::System::Com::StructuredStorage::PropVariantClear;
     use windows::Win32::System::Variant::VT_LPWSTR;
     use windows::core::GUID;
+
+    // Matches the priority cpal's own WASAPI backend gives the mic/input capture thread (see
+    // cpal::host::wasapi::stream::boost_current_thread_priority — THREAD_PRIORITY_TIME_CRITICAL).
+    // Without this, this hand-rolled loopback thread ran at plain default priority while every
+    // other thread on the streaming critical path (video encode loop, RTMP writer) runs elevated
+    // — under CPU pressure the OS scheduler starves this one first, and a starved-then-resumed
+    // capture thread delivers audio in stall/burst bursts instead of a steady stream. That skew
+    // matters more than it would for an isolated audio glitch: video and audio packets share one
+    // av_interleaved_write_frame call (see streaming.rs's rtmp-writer thread), so a temporally
+    // skewed run of audio packets can stall that call waiting to reorder against video — visible
+    // to viewers as buffering, not just a local audio hiccup. Only ever exercised for "output:"
+    // (loopback) sources — mic/"input:" capture already goes through cpal, which does this itself.
+    let _ = SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
 
     let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
 

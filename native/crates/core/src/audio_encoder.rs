@@ -15,6 +15,12 @@ pub struct AudioEncoder {
     channels: i32,
     cons: HeapCons<f32>,
     pub frame_count: u64,
+    /// Cumulative samples injected by the small-drift silence-insertion path (diff between 0.05s
+    /// and the hard-resync threshold) — exposed so the periodic status log can show how often
+    /// this is actually firing. Added to check a live-Twitch-only "audio drops every so often"
+    /// report against real evidence instead of guessing: each insertion is genuine injected
+    /// silence, audible as a brief dropout if it fires often enough.
+    pub silence_samples_inserted: u64,
 }
 
 unsafe impl Send for AudioEncoder {}
@@ -123,6 +129,7 @@ impl AudioEncoder {
             channels,
             cons,
             frame_count: 0,
+            silence_samples_inserted: 0,
         })
     }
 
@@ -136,9 +143,36 @@ impl AudioEncoder {
     where
         F: FnMut(*mut AVPacket) -> Result<()>
     {
-        // 1. Read from ringbuf
-        let available = self.cons.occupied_len() as i32 / self.channels;
-        if available > 0 {
+        let sample_rate = (*self.codec_ctx).sample_rate;
+
+        // Checked before touching the ring buffer this tick: a source delivering samples at a
+        // genuinely wrong rate (e.g. a capture device whose real engine clock doesn't match the
+        // nominal rate CPAL/WASAPI negotiated — observed with a Voicemeeter virtual bus running
+        // audio ~1.56x realtime, sustained and constant from the very first tick, not a stall)
+        // races audio's own pts steadily *ahead* of wall-clock. Once already-emitted packets carry
+        // a given pts, self.pts can only ever move forward — rewinding it to resync would emit a
+        // packet with a *lower* pts than one already sent, which FLV/RTMP's monotonically-
+        // increasing DTS requirement rejects outright (observed in practice: "Application provided
+        // invalid, non monotonically increasing dts to muxer", the write erroring out, and the
+        // whole RTMP writer thread aborting — Twitch saw the stream end while this app kept
+        // running, unaware its own writer thread had already died). So when running ahead, correct
+        // by discarding freshly-arrived raw input instead: skip converting/queuing it into the
+        // FIFO this tick, which pauses audio's own clock (self.pts stops advancing) until wall-
+        // clock catches back up on its own — pts only ever holds still or advances, never reverses.
+        let pre_fifo_size = av_audio_fifo_size(self.fifo) as i64;
+        let pre_track_time = (self.pts + pre_fifo_size) as f64 / sample_rate as f64;
+        if elapsed_secs - pre_track_time < -1.0 {
+            let discard = self.cons.occupied_len();
+            if discard > 0 {
+                let mut scratch = vec![0.0f32; discard];
+                self.cons.pop_slice(&mut scratch);
+            }
+            tracing::warn!(
+                "Audio ran {:.2}s ahead of wall-clock - discarding new input instead of rewinding pts",
+                pre_track_time - elapsed_secs
+            );
+        } else if self.cons.occupied_len() as i32 / self.channels > 0 {
+            let available = self.cons.occupied_len() as i32 / self.channels;
             let mut interleaved = vec![0.0f32; (available * self.channels) as usize];
             let read = self.cons.pop_slice(&mut interleaved);
             let samples_read = read as i32 / self.channels;
@@ -177,12 +211,42 @@ impl AudioEncoder {
             av_freep(&mut out_data[0] as *mut _ as *mut std::ffi::c_void);
         }
 
-        let sample_rate = (*self.codec_ctx).sample_rate;
         let track_time = (self.pts + av_audio_fifo_size(self.fifo) as i64) as f64 / sample_rate as f64;
         let diff = elapsed_secs - track_time;
 
-        if diff > 0.05 {
+        // Above a small drift, the encode-and-send loop below (capped at
+        // MAX_AUDIO_FRAMES_PER_POLL frames/poll, by design — see its own comment) can only ever
+        // claw back a couple of AAC frames per tick. That's enough to correct the sub-100ms drift
+        // it was built for, but a genuine multi-second gap (a stalled capture device/mixer thread
+        // resuming with a large backlog, anything upstream that stalls for a while) would take
+        // many seconds-to-minutes to fully drain at that rate. During all of that time this
+        // stream's packets carry pts values that lag video's by the full gap — and since both
+        // streams share one av_interleaved_write_frame call (see streaming.rs's rtmp-writer
+        // thread), FFmpeg's own interleave buffer has to hold that gap open, hitting its hardcoded
+        // 10s max_interleave_delta and force-flushing on nearly every write once the gap grows
+        // that large. That's a stable, self-perpetuating state, not a transient one — observed in
+        // practice as "[flv] ... forcing output" spammed indefinitely while every one of this
+        // app's own health metrics (fps, queue depth, drops) looked completely normal, because
+        // this stream's own throughput was fine, just chronically offset from video. Once the gap
+        // is this large, gradual catch-up isn't going to close it on any reasonable timescale —
+        // hard-resync instead: drop whatever's queued and jump straight to now, the same fix
+        // clear_backlog() already applies once at stream start, just re-triggerable any time the
+        // gap reopens mid-stream instead of only before the first frame. Forward-only: jumping
+        // pts *ahead* is always monotonic-safe (see the ahead-of-wall-clock check above for why
+        // the reverse direction can't use this same jump).
+        const HARD_RESYNC_THRESHOLD_SECS: f64 = 1.0;
+        if diff > HARD_RESYNC_THRESHOLD_SECS {
+            let queued = av_audio_fifo_size(self.fifo);
+            if queued > 0 {
+                av_audio_fifo_drain(self.fifo, queued);
+            }
+            self.pts = (elapsed_secs * sample_rate as f64) as i64;
+            tracing::warn!(
+                "Audio fell {diff:.2}s behind wall-clock - hard-resyncing instead of gradual catch-up"
+            );
+        } else if diff > 0.05 {
             let silence_samples = (diff * sample_rate as f64) as i32;
+            self.silence_samples_inserted += silence_samples.max(0) as u64;
             let mut silence_data: [*mut u8; 8] = [ptr::null_mut(); 8];
             let mut silence_linesize = 0;
             av_samples_alloc(
@@ -263,6 +327,16 @@ impl AudioEncoder {
         }
 
         Ok(())
+    }
+
+    /// Audio's own logical position, in seconds since stream start — the same `track_time`
+    /// computed inside `poll()`, exposed so the encode loop's periodic status log can report it
+    /// alongside video's pts. Added to actually observe the two streams' pts values diverge
+    /// (rather than infer it from ffmpeg's own "forcing output" spam, which only ever says
+    /// "gap > 10s" and never the true magnitude) after a mid-stream desync was seen with no
+    /// corresponding drift ever detected by poll()'s own wall-clock-vs-track_time check.
+    pub unsafe fn track_seconds(&self) -> f64 {
+        (self.pts + av_audio_fifo_size(self.fifo) as i64) as f64 / (*self.codec_ctx).sample_rate as f64
     }
 
     pub fn clear_backlog(&mut self) {
