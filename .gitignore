@@ -419,6 +419,9 @@ appsettings.Local.json
 # Also self-ignored via its own nested .remember/.gitignore, but listed here explicitly so a
 # fresh clone/collaborator machine without that nested file still excludes it.
 .remember/
+
+# graphify (LLM codebase-graph tool) output — regeneratable local cache/artifacts, not project data.
+graphify-out/
 AGENTS.MD
 CLAUDE.MD
 URI_*.MD
