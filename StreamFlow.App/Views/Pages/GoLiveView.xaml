@@ -1593,8 +1593,12 @@
             </Border>
         </Grid>
 
-        <!-- ── Core diagnostics: collapsed by default, out of the way ───────── -->
-        <Expander Grid.Row="2" Margin="24,0,24,16" Header="Core diagnostics" IsExpanded="False" Foreground="{StaticResource TextSecondaryBrush}">
+        <!-- ── Core diagnostics: collapsed by default, out of the way — Debug builds only,
+             see GoLiveViewModel.IsDebugBuild. The diag-log launch flag's own file logging
+             (CoreBridgeService) still works in Release builds regardless; this only hides the
+             in-app live-tail UI. ── -->
+        <Expander Grid.Row="2" Margin="24,0,24,16" Header="Core diagnostics" IsExpanded="False" Foreground="{StaticResource TextSecondaryBrush}"
+                  Visibility="{Binding ViewModel.IsDebugBuild, Converter={StaticResource BoolToVisibility}}">
             <StackPanel Margin="0,12,0,0">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="Core process:" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>

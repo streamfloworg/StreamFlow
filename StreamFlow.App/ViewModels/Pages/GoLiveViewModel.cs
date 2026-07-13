@@ -57,6 +57,17 @@ public partial class GoLiveViewModel : ViewModel
     /// dimension logging added in capture.rs so it's visible without a separate log file.</summary>
     public ObservableCollection<string> CoreLogLines { get; } = [];
 
+    /// <summary>Gates the Core Diagnostics panel's visibility in GoLiveView — a live tail of the
+    /// core's internal tracing output isn't something a released build should surface to end
+    /// users. Doesn't affect --diag-log itself (see CoreBridgeService.DiagLogEnabled): that still
+    /// persists the full session to disk in Release builds too, in case its detail is useful for
+    /// a submitted issue — this only hides the in-app live-tail UI.</summary>
+#if DEBUG
+    public bool IsDebugBuild => true;
+#else
+    public bool IsDebugBuild => false;
+#endif
+
     private const int MaxCoreLogLines = 500;
 
     [RelayCommand]
