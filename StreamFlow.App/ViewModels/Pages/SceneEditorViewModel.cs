@@ -8,6 +8,7 @@ using StreamFlow.App.Controls;
 using StreamFlow.App.Rendering;
 using StreamFlow.App.Services;
 using StreamFlow.App.Services.Core;
+using StreamFlow.Core.AudioProperties;
 
 namespace StreamFlow.App.ViewModels.Pages;
 
@@ -37,16 +38,78 @@ public partial class SceneEditorViewModel : ObservableObject
     private readonly CoreBridgeService _core;
     private readonly IDialogService _dialogs;
     private readonly SceneSetService _sceneSetService;
+    private readonly EventBus _eventBus;
     private readonly ILogger<SceneEditorViewModel> _logger;
 
-    public SceneEditorViewModel(CoreBridgeService core, IDialogService dialogs, SceneSetService sceneSetService, ILogger<SceneEditorViewModel> logger)
+    /// <summary>Tracked purely for chat-overlay placeholder content (see
+    /// ChatOverlayContent.PlaceholderMessages) — this class otherwise deliberately has no concept
+    /// of "is streaming" (see this class's own top doc comment), but needs to know whether it's
+    /// safe to show fake chat activity without risking a viewer ever seeing it, which the
+    /// GoLiveStartedEvent/GoLiveStoppedEvent subscriptions below exist specifically to answer
+    /// without actually depending on GoLiveViewModel.IsStreaming directly.</summary>
+    private bool _isLive;
+
+    public SceneEditorViewModel(CoreBridgeService core, IDialogService dialogs, SceneSetService sceneSetService, EventBus eventBus, ILogger<SceneEditorViewModel> logger)
     {
         _core = core;
         _dialogs = dialogs;
         _sceneSetService = sceneSetService;
+        _eventBus = eventBus;
         _logger = logger;
 
         Scenes.CollectionChanged += (_, _) => RemoveActiveSceneCommand.NotifyCanExecuteChanged();
+
+        // Event System/Triggers: any timer overlay slot (in any scene, not just the active one —
+        // starting it doesn't depend on that scene being on screen, only rendering does) marked
+        // AutoStartOnGoLive begins counting the moment the core confirms the stream is actually
+        // live. See EventBus's own doc comment for why this goes through the bus rather than
+        // GoLiveViewModel calling a method on this class directly — other future subscribers
+        // (Stream Deck, later triggers) can hook GoLiveStartedEvent without this class or
+        // GoLiveViewModel needing to know about each other's existence.
+        _eventBus.Subscribe<GoLiveStartedEvent>(_ =>
+        {
+            _isLive = true;
+            foreach (var scene in Scenes)
+            foreach (var slot in scene.Slots)
+                if (slot.Content is TimerOverlayContent { AutoStartOnGoLive: true, IsTimerRunning: false } && StartTimerCommand.CanExecute(slot))
+                    StartTimerCommand.ExecuteAsync(slot);
+
+            // Wipe any placeholder chat content the instant we actually go live — never let a
+            // viewer see fake chat activity, even for the brief window before real messages (if
+            // any) start arriving. Real content already in progress (IsShowingPlaceholder false)
+            // is untouched.
+            foreach (var scene in Scenes)
+            foreach (var slot in scene.Slots)
+                if (slot.Content is ChatOverlayContent { IsShowingPlaceholder: true } chat)
+                {
+                    chat.ChatMessages.Clear();
+                    chat.IsShowingPlaceholder = false;
+                    if (slot.SourceId is not null) ScheduleOverlayContentUpdate(slot);
+                }
+        });
+
+        _eventBus.Subscribe<GoLiveStoppedEvent>(_ =>
+        {
+            _isLive = false;
+            foreach (var scene in Scenes)
+            foreach (var slot in scene.Slots)
+                if (slot.Content is ChatOverlayContent { ChatMessages.Count: 0 } chat)
+                    PopulateChatPlaceholder(slot, chat);
+        });
+    }
+
+    /// <summary>Fills an empty, idle chat overlay with sample messages so its text-style controls
+    /// and the placement canvas have something to actually preview — see
+    /// ChatOverlayContent.PlaceholderMessages. No-op while live (never risk a viewer seeing fake
+    /// chat activity) or if real messages are already present.</summary>
+    private void PopulateChatPlaceholder(SourceSlot slot, ChatOverlayContent chat)
+    {
+        if (_isLive || chat.ChatMessages.Count > 0) return;
+
+        foreach (var message in ChatOverlayContent.PlaceholderMessages)
+            chat.ChatMessages.Add(message);
+        chat.IsShowingPlaceholder = true;
+        if (slot.SourceId is not null) ScheduleOverlayContentUpdate(slot);
     }
 
     public event Action? Changed;
@@ -223,6 +286,11 @@ public partial class SceneEditorViewModel : ObservableObject
         {
             CanvasResolutionWidth = saved.CanvasResolutionWidth,
             CanvasResolutionHeight = saved.CanvasResolutionHeight,
+            SwitchHotkey = saved.SwitchHotkeyKey is not null && saved.SwitchHotkeyModifiers is not null
+                && Enum.TryParse<System.Windows.Input.Key>(saved.SwitchHotkeyKey, out var savedKey)
+                && Enum.TryParse<System.Windows.Input.ModifierKeys>(saved.SwitchHotkeyModifiers, out var savedModifiers)
+                ? new Hotkey(savedKey, savedModifiers)
+                : null,
         };
         scene.PropertyChanged += OnScenePropertyChanged;
 
@@ -251,20 +319,12 @@ public partial class SceneEditorViewModel : ObservableObject
                     ChromaKeySimilarity = savedSlot.ChromaKeySimilarity,
                     ChromaKeyColor = chromaKeyColor ?? System.Windows.Media.Color.FromRgb(0x00, 0xB1, 0x40),
                 },
-                OverlayKind.Text => new TextOverlayContent
-                {
-                    OverlayText = savedSlot.OverlayText,
-                    FontSize = savedSlot.TextFontSize ?? 48,
-                    FontColor = savedSlot.TextFontColorHex is not null
-                        && System.Windows.Media.ColorConverter.ConvertFromString(savedSlot.TextFontColorHex) is System.Windows.Media.Color parsedFontColor
-                        ? parsedFontColor
-                        : System.Windows.Media.Colors.White,
-                    IsBold = savedSlot.TextIsBold ?? true,
-                },
+                OverlayKind.Text => new TextOverlayContent { OverlayText = savedSlot.OverlayText },
                 OverlayKind.Color => new ColorOverlayContent { OverlayColor = overlayColor },
                 OverlayKind.Video => new VideoOverlayContent
                 {
                     VideoPath = savedSlot.VideoPath,
+                    LoopVideo = savedSlot.LoopVideo,
                     ChromaKeyEnabled = savedSlot.ChromaKeyEnabled,
                     ChromaKeySimilarity = savedSlot.ChromaKeySimilarity,
                     ChromaKeyColor = chromaKeyColor ?? System.Windows.Media.Color.FromRgb(0x00, 0xB1, 0x40),
@@ -275,9 +335,12 @@ public partial class SceneEditorViewModel : ObservableObject
                 {
                     TimerMode = savedSlot.TimerMode,
                     TimerDurationSeconds = savedSlot.TimerDurationSeconds,
+                    AutoStartOnGoLive = savedSlot.TimerAutoStartOnGoLive,
                 },
                 _ => null,
             };
+            if (content is IHasTextStyle hasStyle)
+                ApplyTextStyleFromSettings(hasStyle.Style, savedSlot);
 
             var slot = new SourceSlot(
                 savedSlot.IsPrimary, savedSlot.XPercent, savedSlot.YPercent, savedSlot.WPercent, savedSlot.HPercent,
@@ -287,7 +350,11 @@ public partial class SceneEditorViewModel : ObservableObject
                 OpacityPercent = savedSlot.OpacityPercent,
                 RotationDegrees = savedSlot.RotationDegrees,
             };
-            if (slot.IsChatOverlay || slot.IsBlurOverlay || slot.IsTimerOverlay)
+            // Timer is aspect-locked now, same as Text (its rendered digits get the same
+            // ApplyRenderedAspectRatio treatment below via RestoreStaticOverlayAsync) — Chat and
+            // Blur still aren't, since their box size is a deliberate, free-form user choice
+            // rather than something meant to track rendered content dimensions.
+            if (slot.IsChatOverlay || slot.IsBlurOverlay)
             {
                 slot.IsAspectLocked = false;
             }
@@ -309,6 +376,13 @@ public partial class SceneEditorViewModel : ObservableObject
                     : slot.IsTimerOverlay ? "Timer Overlay"
                     : slot.IsColorOverlay ? "Color Overlay"
                     : overlayColor?.ToString(CultureInfo.InvariantCulture) ?? "");
+                // A loaded chat overlay starts with no messages of its own (ChatMessages is
+                // never persisted — see ChatOverlayContent's own doc comment) — fill it with
+                // placeholder content the same as a freshly-added one, so restoring a saved scene
+                // while idle doesn't show an empty box either.
+                if (content is ChatOverlayContent chatContentToRestore)
+                    PopulateChatPlaceholder(slot, chatContentToRestore);
+
                 // Blur layers have no pixels to restore — RestoreStaticOverlayAsync renders
                 // nothing for them and returns; the Config push on scene activation is all
                 // the core needs.
@@ -342,51 +416,113 @@ public partial class SceneEditorViewModel : ObservableObject
     {
         if (slot.Content is System.ComponentModel.INotifyPropertyChanged notifying)
             notifying.PropertyChanged += (_, e) => OnSlotContentPropertyChanged(slot, e);
+
+        // TextStyle is a separate nested ObservableObject (see IHasTextStyle), so edits to it
+        // (FontSize, FontColor, etc.) raise PropertyChanged on Style itself, not on Content —
+        // without this second subscription they'd never reach OnSlotContentPropertyChanged at
+        // all, silently breaking re-render/re-save for every text-formatting edit.
+        if (slot.Content is IHasTextStyle hasStyle)
+            hasStyle.Style.PropertyChanged += (_, e) => OnSlotContentPropertyChanged(slot, e);
+    }
+
+    /// <summary>Applies the persisted shared text-formatting fields (see SlotSettings' Text*
+    /// fields) onto a freshly-constructed TextStyle — used for any of the three IHasTextStyle
+    /// kinds (Text/Chat/Timer) when restoring a saved scene. TextFontSize/TextFontColorHex/
+    /// TextIsBold predate TextStyle and were Text-overlay-only; kept under their original names
+    /// for backward compatibility with already-saved scene files, now just applied more broadly.</summary>
+    private static void ApplyTextStyleFromSettings(TextStyle style, SlotSettings s)
+    {
+        style.FontFamily = string.IsNullOrWhiteSpace(s.TextFontFamily) ? "Segoe UI" : s.TextFontFamily;
+        style.FontSize = s.TextFontSize ?? 48;
+        style.FontColor = s.TextFontColorHex is not null
+            && System.Windows.Media.ColorConverter.ConvertFromString(s.TextFontColorHex) is System.Windows.Media.Color parsedFontColor
+            ? parsedFontColor
+            : System.Windows.Media.Colors.White;
+        style.IsBold = s.TextIsBold ?? true;
+        style.IsItalic = s.TextIsItalic ?? false;
+        style.Alignment = Enum.TryParse<TextHorizontalAlignment>(s.TextAlignment, out var alignment) ? alignment : TextHorizontalAlignment.Left;
+        style.OutlineEnabled = s.TextOutlineEnabled ?? false;
+        style.OutlineColor = s.TextOutlineColorHex is not null
+            && System.Windows.Media.ColorConverter.ConvertFromString(s.TextOutlineColorHex) is System.Windows.Media.Color parsedOutlineColor
+            ? parsedOutlineColor
+            : System.Windows.Media.Colors.Black;
+        style.OutlineThickness = s.TextOutlineThickness ?? 2;
     }
 
     /// <summary>Deep-copies a slot's Content for DuplicateActiveScene — sharing the same
     /// instance between the original and duplicate slots would mean editing one's ImagePath (or
     /// any other content property) silently mutates the other's too.</summary>
-    private static IOverlayContent? CloneContent(IOverlayContent? content) => content switch
+    private static IOverlayContent? CloneContent(IOverlayContent? content)
     {
-        ImageOverlayContent img => new ImageOverlayContent
+        IOverlayContent? cloned = content switch
         {
-            ImagePath = img.ImagePath,
-            ChromaKeyEnabled = img.ChromaKeyEnabled,
-            ChromaKeyColor = img.ChromaKeyColor,
-            ChromaKeySimilarity = img.ChromaKeySimilarity,
-        },
-        TextOverlayContent text => new TextOverlayContent { OverlayText = text.OverlayText, FontSize = text.FontSize, FontColor = text.FontColor, IsBold = text.IsBold },
-        ColorOverlayContent color => new ColorOverlayContent { OverlayColor = color.OverlayColor },
-        VideoOverlayContent video => new VideoOverlayContent
+            ImageOverlayContent img => new ImageOverlayContent
+            {
+                ImagePath = img.ImagePath,
+                ChromaKeyEnabled = img.ChromaKeyEnabled,
+                ChromaKeyColor = img.ChromaKeyColor,
+                ChromaKeySimilarity = img.ChromaKeySimilarity,
+            },
+            TextOverlayContent text => new TextOverlayContent { OverlayText = text.OverlayText },
+            ColorOverlayContent color => new ColorOverlayContent { OverlayColor = color.OverlayColor },
+            VideoOverlayContent video => new VideoOverlayContent
+            {
+                VideoPath = video.VideoPath,
+                LoopVideo = video.LoopVideo,
+                ChromaKeyEnabled = video.ChromaKeyEnabled,
+                ChromaKeyColor = video.ChromaKeyColor,
+                ChromaKeySimilarity = video.ChromaKeySimilarity,
+            },
+            ChatOverlayContent => new ChatOverlayContent(),
+            BlurOverlayContent blur => new BlurOverlayContent { BlurRadius = blur.BlurRadius },
+            TimerOverlayContent timer => new TimerOverlayContent
+            {
+                TimerMode = timer.TimerMode,
+                TimerDurationSeconds = timer.TimerDurationSeconds,
+                AutoStartOnGoLive = timer.AutoStartOnGoLive,
+            },
+            _ => null,
+        };
+
+        // Style lives on a separate nested object now (see IHasTextStyle) — object-initializer
+        // syntax above can't reach it (Style has no setter, only a getter), so copy its fields
+        // across explicitly instead, same as every other content property above.
+        if (content is IHasTextStyle sourceStyle && cloned is IHasTextStyle clonedStyle)
         {
-            VideoPath = video.VideoPath,
-            ChromaKeyEnabled = video.ChromaKeyEnabled,
-            ChromaKeyColor = video.ChromaKeyColor,
-            ChromaKeySimilarity = video.ChromaKeySimilarity,
-        },
-        ChatOverlayContent => new ChatOverlayContent(),
-        BlurOverlayContent blur => new BlurOverlayContent { BlurRadius = blur.BlurRadius },
-        TimerOverlayContent timer => new TimerOverlayContent
-        {
-            TimerMode = timer.TimerMode,
-            TimerDurationSeconds = timer.TimerDurationSeconds,
-        },
-        _ => null,
-    };
+            clonedStyle.Style.FontFamily = sourceStyle.Style.FontFamily;
+            clonedStyle.Style.FontSize = sourceStyle.Style.FontSize;
+            clonedStyle.Style.FontColor = sourceStyle.Style.FontColor;
+            clonedStyle.Style.IsBold = sourceStyle.Style.IsBold;
+            clonedStyle.Style.IsItalic = sourceStyle.Style.IsItalic;
+            clonedStyle.Style.Alignment = sourceStyle.Style.Alignment;
+            clonedStyle.Style.OutlineEnabled = sourceStyle.Style.OutlineEnabled;
+            clonedStyle.Style.OutlineColor = sourceStyle.Style.OutlineColor;
+            clonedStyle.Style.OutlineThickness = sourceStyle.Style.OutlineThickness;
+        }
+
+        return cloned;
+    }
 
     private async Task RestoreStaticOverlayAsync(SourceSlot slot, string sourceId)
     {
         var rendered = slot.Content is ImageOverlayContent { ImagePath: not null } image ? OverlayContentRenderer.DecodeImageToBgra(image.ImagePath, GetImageOverlayCapSize(slot))
-            : slot.Content is TextOverlayContent { OverlayText: not null } text ? OverlayContentRenderer.RenderTextToBgra(text.OverlayText, text.FontSize, text.FontColor, text.IsBold)
+            : slot.Content is TextOverlayContent { OverlayText: not null } text ? OverlayContentRenderer.RenderTextToBgra(text.OverlayText, text.Style)
             : slot.Content is ColorOverlayContent { OverlayColor: System.Windows.Media.Color color } ? OverlayContentRenderer.RenderColorToBgra(color)
             : slot.IsChatOverlay ? OverlayContentRenderer.RenderChatToBgra(slot)
-            : slot.IsTimerOverlay ? OverlayContentRenderer.RenderTextToBgra(FormatTimerDisplay(slot))
+            : slot.Content is TimerOverlayContent timerStyle && slot.IsTimerOverlay ? OverlayContentRenderer.RenderTextToBgra(FormatTimerDisplay(slot), timerStyle.Style)
             : ((int Width, int Height, byte[] Pixels)?)null;
         if (rendered is not var (width, height, pixels)) return;
 
-        if (!slot.IsColorOverlay && !slot.IsChatOverlay && !slot.IsTimerOverlay)
-            OverlayContentRenderer.ApplyRenderedAspectRatio(slot, width, height);
+        // Timer included now, same as Text — its rendered digits get the same aspect-ratio
+        // tracking (see the AddTimerOverlayAsync/BuildSceneFromSettings comments on
+        // IsAspectLocked). This does mean a digit-count change (9:59→10:00, 59:59→1:00:00) can
+        // trigger a small resize on that tick, same mechanism Text already has for any content
+        // edit — accepted as consistent with "match Text's behavior" rather than special-cased
+        // to only run once at creation. trackNaturalSize=true specifically for IHasTextStyle
+        // content (Text/Timer) — see ApplyRenderedAspectRatio's own doc comment for why Image
+        // deliberately doesn't get the same treatment.
+        if (!slot.IsColorOverlay && !slot.IsChatOverlay)
+            OverlayContentRenderer.ApplyRenderedAspectRatio(slot, width, height, trackNaturalSize: slot.Content is IHasTextStyle);
         await RegisterStaticOverlayAsync(sourceId, width, height, pixels);
     }
 
@@ -452,7 +588,7 @@ public partial class SceneEditorViewModel : ObservableObject
 
     private void OnScenePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(GoLiveSceneViewModel.Name))
+        if (e.PropertyName is nameof(GoLiveSceneViewModel.Name) or nameof(GoLiveSceneViewModel.SwitchHotkey))
             NotifyChanged();
     }
 
@@ -567,7 +703,7 @@ public partial class SceneEditorViewModel : ObservableObject
         AttachSlot(slot);
 
         slot.DisplayName = "Text Overlay";
-        OverlayContentRenderer.ApplyRenderedAspectRatio(slot, width, height);
+        OverlayContentRenderer.ApplyRenderedAspectRatio(slot, width, height, trackNaturalSize: true);
         slot.SourceId = sourceId;
 
         // See AddImageOverlayAsync's identical comment — Config must land before the overlay's
@@ -624,7 +760,7 @@ public partial class SceneEditorViewModel : ObservableObject
         };
         if (dialog.ShowDialog() != true) return;
 
-        var sourceId = $"video:{Base64UrlEncode(dialog.FileName)}";
+        var sourceId = BuildVideoSourceId(dialog.FileName, loopVideo: true);
         var slot = new SourceSlot(
             isPrimary: false, x: 30, y: 30, w: 30, h: 30,
             isOverlay: true, content: new VideoOverlayContent { VideoPath = dialog.FileName });
@@ -665,9 +801,10 @@ public partial class SceneEditorViewModel : ObservableObject
     private async Task AddChatOverlayAsync()
     {
         var sourceId = $"overlay:{Guid.NewGuid():N}";
+        var chatContent = new ChatOverlayContent();
         var slot = new SourceSlot(
             isPrimary: false, x: 30, y: 30, w: 40, h: 40,
-            isOverlay: true, content: new ChatOverlayContent())
+            isOverlay: true, content: chatContent)
         {
             IsAspectLocked = false
         };
@@ -675,6 +812,11 @@ public partial class SceneEditorViewModel : ObservableObject
 
         slot.DisplayName = "Chat Overlay";
         slot.SourceId = sourceId;
+
+        // Sample content so the properties panel's text-style controls and the placement canvas
+        // have something to preview immediately, rather than an empty box — see
+        // ChatOverlayContent.PlaceholderMessages. No-op if already live.
+        PopulateChatPlaceholder(slot, chatContent);
 
         // Config must land before the overlay's own pixels — see AddImageOverlayAsync's
         // identical comment for why.
@@ -692,21 +834,24 @@ public partial class SceneEditorViewModel : ObservableObject
     private async Task AddTimerOverlayAsync()
     {
         var sourceId = $"overlay:{Guid.NewGuid():N}";
+        var content = new TimerOverlayContent();
         var slot = new SourceSlot(
             isPrimary: false, x: 30, y: 30, w: 30, h: 15,
-            isOverlay: true, content: new TimerOverlayContent())
-        {
-            IsAspectLocked = false
-        };
+            isOverlay: true, content: content);
         AttachSlot(slot);
 
         slot.DisplayName = "Timer Overlay";
+        // Aspect-locked to the rendered timer text's own natural size now, same as a Text
+        // overlay (AddTextOverlayAsync) — previously explicitly IsAspectLocked=false with no
+        // ApplyRenderedAspectRatio call at all, so resizing was free-form regardless of what the
+        // digits actually needed.
+        var (width, height, pixels) = OverlayContentRenderer.RenderTextToBgra(FormatTimerDisplay(slot), content.Style)!.Value;
+        OverlayContentRenderer.ApplyRenderedAspectRatio(slot, width, height, trackNaturalSize: true);
         slot.SourceId = sourceId;
 
         // Config must land before the overlay's own pixels — see AddImageOverlayAsync's
         // identical comment for why.
         await _core.SendCommandAsync(BuildConfigCommand());
-        var (width, height, pixels) = OverlayContentRenderer.RenderTextToBgra(FormatTimerDisplay(slot))!.Value;
         await RegisterStaticOverlayAsync(sourceId, width, height, pixels);
         NotifyChanged();
     }
@@ -789,6 +934,14 @@ public partial class SceneEditorViewModel : ObservableObject
     private static string Base64UrlEncode(string text) =>
         Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(text)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
+    /// <summary>Builds a video overlay's source id, the sole channel the core learns both the file
+    /// path and the loop mode through (see main.rs's StartCapture handling for the "video:"
+    /// prefix) — no separate IPC command exists for either. A non-looping overlay carries an
+    /// extra "once:" marker ahead of the base64 path; looping (the historical default) keeps the
+    /// original "video:{base64}" shape unchanged for compatibility with already-saved scenes.</summary>
+    private static string BuildVideoSourceId(string path, bool loopVideo) =>
+        loopVideo ? $"video:{Base64UrlEncode(path)}" : $"video:once:{Base64UrlEncode(path)}";
+
     // ── Properties-panel edits to an existing overlay's content ────────────────────
 
     [RelayCommand]
@@ -819,16 +972,32 @@ public partial class SceneEditorViewModel : ObservableObject
         color.OverlayColor = System.Windows.Media.Color.FromArgb(dialog.Color.A, dialog.Color.R, dialog.Color.G, dialog.Color.B);
     }
 
+    /// <summary>Shared by every IHasTextStyle kind (Text/Chat/Timer), not just Text overlays —
+    /// widened from the pre-TextStyle version, which only ever checked for TextOverlayContent.</summary>
     [RelayCommand]
     private void ChangeTextColor(SourceSlot slot)
     {
-        if (slot.Content is not TextOverlayContent text) return;
+        if (slot.Content is not IHasTextStyle hasStyle) return;
 
         using var dialog = new System.Windows.Forms.ColorDialog { FullOpen = true };
-        dialog.Color = System.Drawing.Color.FromArgb(text.FontColor.A, text.FontColor.R, text.FontColor.G, text.FontColor.B);
+        var current = hasStyle.Style.FontColor;
+        dialog.Color = System.Drawing.Color.FromArgb(current.A, current.R, current.G, current.B);
         if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
 
-        text.FontColor = System.Windows.Media.Color.FromArgb(dialog.Color.A, dialog.Color.R, dialog.Color.G, dialog.Color.B);
+        hasStyle.Style.FontColor = System.Windows.Media.Color.FromArgb(dialog.Color.A, dialog.Color.R, dialog.Color.G, dialog.Color.B);
+    }
+
+    [RelayCommand]
+    private void ChangeTextOutlineColor(SourceSlot slot)
+    {
+        if (slot.Content is not IHasTextStyle hasStyle) return;
+
+        using var dialog = new System.Windows.Forms.ColorDialog { FullOpen = true };
+        var current = hasStyle.Style.OutlineColor;
+        dialog.Color = System.Drawing.Color.FromArgb(current.A, current.R, current.G, current.B);
+        if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+
+        hasStyle.Style.OutlineColor = System.Windows.Media.Color.FromArgb(dialog.Color.A, dialog.Color.R, dialog.Color.G, dialog.Color.B);
     }
 
     [RelayCommand]
@@ -880,6 +1049,20 @@ public partial class SceneEditorViewModel : ObservableObject
 
     public void AttachSlot(SourceSlot slot)
     {
+        // SourceSlot's own constructor defaults CanvasWidth/CanvasHeight to a hardcoded 16:9
+        // assumption — only UpdateCanvasReference (which runs on scene *switch*, not on adding a
+        // slot to the scene that's already active) corrects it to the scene's real aspect ratio.
+        // Without this, a freshly-added overlay on any non-16:9 scene keeps the wrong
+        // CanvasHeight until the user happens to switch away and back, which throws off anything
+        // that derives real proportions from it (e.g. OverlayContentRenderer.RenderChatToBgra's
+        // bitmap dimensions vs. what the compositor — which always knows the true resolution —
+        // actually stretches it into).
+        if (ActiveScene is { } activeScene)
+        {
+            slot.CanvasWidth = activeScene.CanvasWidth;
+            slot.CanvasHeight = activeScene.CanvasHeight;
+        }
+
         slot.PropertyChanged += OnSlotPropertyChanged;
         HookContentPropertyChanged(slot);
         Slots.Add(slot);
@@ -889,6 +1072,52 @@ public partial class SceneEditorViewModel : ObservableObject
     /// <summary>Last source id each slot's capture session was (re)started for — lets
     /// UpdateSlotCaptureAsync know what to stop when a slot's SourceId changes.</summary>
     private readonly Dictionary<SourceSlot, string?> _activeCaptureBySlot = [];
+
+    /// <summary>Reference count per underlying capture source_id, driving the actual Start/
+    /// StopCaptureCommand IPC traffic — <see cref="_activeCaptureBySlot"/> only tracks what each
+    /// *slot* last requested, which isn't enough on its own: two different scenes commonly share
+    /// the same primary source (e.g. the same monitor), and switching between them creates two
+    /// different SourceSlot instances for the "same" capture. Without a shared refcount, a scene
+    /// switch would always stop-then-restart that source's native capture session (WGC teardown/
+    /// recreate) even though nothing about it actually changed — see AcquireCaptureAsync/
+    /// ReleaseCaptureAsync, and the reordered Activate-before-Deactivate in
+    /// SwitchSceneCoreStateAsync that lets the refcount ever see a shared source stay above zero
+    /// across the switch. Confirmed via diagnostic log as the root cause of a rapid stop/start
+    /// thrash on every scene switch that could eventually race the underlying WGC session into a
+    /// permanently-stopped state with no frames ever arriving again (preview looked "frozen").</summary>
+    private readonly Dictionary<string, int> _activeCaptureRefCounts = [];
+
+    /// <summary>Registers one more slot wanting <paramref name="sourceId"/> — only sends
+    /// StartCaptureCommand the moment the refcount actually leaves zero, so a source already kept
+    /// alive by another slot (typically the outgoing scene's slot for the same source, mid-switch)
+    /// is left running untouched.</summary>
+    private async Task AcquireCaptureAsync(SourceSlot slot, string sourceId)
+    {
+        _activeCaptureBySlot[slot] = sourceId;
+        _activeCaptureRefCounts.TryGetValue(sourceId, out var count);
+        _activeCaptureRefCounts[sourceId] = count + 1;
+        if (count == 0)
+            await _core.SendCommandAsync(new StartCaptureCommand(sourceId));
+    }
+
+    /// <summary>Releases the given slot's claim on whatever source it last acquired — only sends
+    /// StopCaptureCommand once the refcount actually reaches zero, i.e. no other slot (typically
+    /// the incoming scene's slot for the same source, mid-switch) still needs it. No-op for a
+    /// slot that never acquired a capture (static overlays, or a slot with no source selected).</summary>
+    private async Task ReleaseCaptureAsync(SourceSlot slot)
+    {
+        if (!_activeCaptureBySlot.Remove(slot, out var sourceId) || sourceId is null) return;
+        if (!_activeCaptureRefCounts.TryGetValue(sourceId, out var count)) return;
+        if (count <= 1)
+        {
+            _activeCaptureRefCounts.Remove(sourceId);
+            await _core.SendCommandAsync(new StopCaptureCommand(sourceId));
+        }
+        else
+        {
+            _activeCaptureRefCounts[sourceId] = count - 1;
+        }
+    }
 
     private async void OnSlotPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
@@ -938,6 +1167,22 @@ public partial class SceneEditorViewModel : ObservableObject
         {
             ScheduleLiveConfigPush();
         }
+
+        // Chat is the one static-overlay kind whose *rendered bitmap* dimensions are derived
+        // directly from the box's own WPercent/HPercent (see OverlayContentRenderer.
+        // RenderChatToBgra) rather than being intrinsic/independent content that just gets
+        // uniformly stretched into whatever box size (Text/Image/Timer — their AspectRatio is
+        // locked to match, so a stale bitmap stretched into a resized box stays proportionally
+        // correct; Chat isn't aspect-locked at all). Without this, resizing a chat overlay only
+        // ever told the compositor the box's new size via Config — the actual registered bitmap
+        // was never re-rendered at the new dimensions, so the compositor kept stretching the
+        // stale one into the resized box, non-uniformly, worse the more it diverged from
+        // whatever size it was first rendered at.
+        if (e.PropertyName is nameof(SourceSlot.WPercent) or nameof(SourceSlot.HPercent)
+            && slot.Content is ChatOverlayContent && slot.IsStaticOverlay)
+        {
+            ScheduleOverlayContentUpdate(slot);
+        }
     }
 
     /// <summary>Mirrors <see cref="OnSlotPropertyChanged"/> for edits to a slot's kind-specific
@@ -949,27 +1194,37 @@ public partial class SceneEditorViewModel : ObservableObject
         // Properties-panel edits to an existing overlay's content: re-render and re-register
         // its pixels (debounced, since text edits fire on every keystroke). A re-browsed video
         // is different — its "content" is the file the core itself decodes — so that's handled
-        // by rebuilding the source id instead (below).
-        if (e.PropertyName is nameof(TextOverlayContent.OverlayText) or nameof(TextOverlayContent.FontSize)
-                or nameof(TextOverlayContent.FontColor) or nameof(TextOverlayContent.IsBold)
+        // by rebuilding the source id instead (below). TextStyle's property names are shared
+        // across Text/Chat/Timer (see IHasTextStyle) — one check covers all three instead of
+        // per-kind duplicates, since HookContentPropertyChanged forwards Style's own
+        // PropertyChanged through this same handler now.
+        if ((e.PropertyName is nameof(TextOverlayContent.OverlayText)
+                or nameof(TextStyle.FontFamily) or nameof(TextStyle.FontSize) or nameof(TextStyle.FontColor)
+                or nameof(TextStyle.IsBold) or nameof(TextStyle.IsItalic) or nameof(TextStyle.Alignment)
+                or nameof(TextStyle.OutlineEnabled) or nameof(TextStyle.OutlineColor) or nameof(TextStyle.OutlineThickness)
                 or nameof(ImageOverlayContent.ImagePath) or nameof(ColorOverlayContent.OverlayColor)
-                or nameof(TimerOverlayContent.TimerMode) or nameof(TimerOverlayContent.TimerDurationSeconds)
+                or nameof(TimerOverlayContent.TimerMode) or nameof(TimerOverlayContent.TimerDurationSeconds))
             && slot.IsStaticOverlay)
         {
             ScheduleOverlayContentUpdate(slot);
         }
 
-        if (e.PropertyName == nameof(VideoOverlayContent.VideoPath) && slot.Content is VideoOverlayContent { VideoPath: not null } video)
+        if (e.PropertyName is nameof(VideoOverlayContent.VideoPath) or nameof(VideoOverlayContent.LoopVideo)
+            && slot.Content is VideoOverlayContent { VideoPath: not null } video)
         {
-            slot.SourceId = $"video:{Base64UrlEncode(video.VideoPath)}";
+            slot.SourceId = BuildVideoSourceId(video.VideoPath, video.LoopVideo);
         }
 
-        if (e.PropertyName is nameof(TextOverlayContent.OverlayText) or nameof(TextOverlayContent.FontSize)
-            or nameof(TextOverlayContent.FontColor) or nameof(TextOverlayContent.IsBold)
+        if (e.PropertyName is nameof(TextOverlayContent.OverlayText)
+            or nameof(TextStyle.FontFamily) or nameof(TextStyle.FontSize) or nameof(TextStyle.FontColor)
+            or nameof(TextStyle.IsBold) or nameof(TextStyle.IsItalic) or nameof(TextStyle.Alignment)
+            or nameof(TextStyle.OutlineEnabled) or nameof(TextStyle.OutlineColor) or nameof(TextStyle.OutlineThickness)
             or nameof(ImageOverlayContent.ImagePath)
-            or nameof(ColorOverlayContent.OverlayColor) or nameof(VideoOverlayContent.VideoPath) or nameof(BlurOverlayContent.BlurRadius)
+            or nameof(ColorOverlayContent.OverlayColor) or nameof(VideoOverlayContent.VideoPath) or nameof(VideoOverlayContent.LoopVideo)
+            or nameof(BlurOverlayContent.BlurRadius)
             or nameof(IChromaKeyable.ChromaKeyEnabled) or nameof(IChromaKeyable.ChromaKeyColor) or nameof(IChromaKeyable.ChromaKeySimilarity)
-            or nameof(TimerOverlayContent.TimerMode) or nameof(TimerOverlayContent.TimerDurationSeconds))
+            or nameof(TimerOverlayContent.TimerMode) or nameof(TimerOverlayContent.TimerDurationSeconds)
+            or nameof(TimerOverlayContent.AutoStartOnGoLive))
         {
             NotifyChanged();
         }
@@ -1097,14 +1352,11 @@ public partial class SceneEditorViewModel : ObservableObject
         _activeCaptureBySlot.TryGetValue(slot, out var oldSourceId);
         if (oldSourceId == newSourceId) return;
 
-        if (oldSourceId is not null)
-            await _core.SendCommandAsync(new StopCaptureCommand(oldSourceId));
-
-        _activeCaptureBySlot[slot] = newSourceId;
+        await ReleaseCaptureAsync(slot);
 
         if (newSourceId is not null)
         {
-            await _core.SendCommandAsync(new StartCaptureCommand(newSourceId));
+            await AcquireCaptureAsync(slot, newSourceId);
             // The compositor only emits a composited frame once it knows the primary/PiP
             // layout, and the core only forwards a PiP's raw thumbnail for sources currently
             // listed here — either way, nothing shows until Config reflects this slot.
@@ -1122,20 +1374,20 @@ public partial class SceneEditorViewModel : ObservableObject
         foreach (var slot in scene.Slots.Where(s => !string.IsNullOrEmpty(s.SourceId) && !s.IsStaticOverlay))
         {
             if (_activeCaptureBySlot.TryGetValue(slot, out var active) && active == slot.SourceId) continue;
-            await _core.SendCommandAsync(new StartCaptureCommand(slot.SourceId!));
-            _activeCaptureBySlot[slot] = slot.SourceId;
+            await AcquireCaptureAsync(slot, slot.SourceId!);
         }
     }
 
-    /// <summary>Stops every capture session belonging to a scene that's no longer active — only
-    /// the active scene keeps live sessions running (see UpdateSlotCaptureAsync).</summary>
+    /// <summary>Releases every capture session belonging to a scene that's no longer active —
+    /// only the active scene keeps live sessions running (see UpdateSlotCaptureAsync). A source
+    /// also needed by the scene becoming active (see AcquireCaptureAsync's refcount) is left
+    /// running rather than stopped-then-restarted — see SwitchSceneCoreStateAsync, which always
+    /// activates the new scene (acquiring shared sources first) before deactivating the old one,
+    /// specifically so that ordering is what lets the refcount ever see a shared source this way.</summary>
     public async Task DeactivateSceneAsync(GoLiveSceneViewModel scene)
     {
         foreach (var slot in scene.Slots)
-        {
-            if (_activeCaptureBySlot.Remove(slot, out var sourceId) && sourceId is not null)
-                await _core.SendCommandAsync(new StopCaptureCommand(sourceId));
-        }
+            await ReleaseCaptureAsync(slot);
     }
 
     /// <summary>Starts capture sessions for a scene's slots and pushes a fresh Config so it
@@ -1189,6 +1441,14 @@ public partial class SceneEditorViewModel : ObservableObject
 
         _ = SwitchSceneCoreStateAsync(oldValue, newValue);
         NotifyChatOverlayStateChanged();
+
+        // Published alongside, not instead of, the direct SwitchSceneCoreStateAsync call above —
+        // that call performs the actual required deactivate/activate/transition work and must
+        // always run regardless of subscribers. This is purely an observability signal for other
+        // consumers (e.g. Stream Deck's WebSocket broadcast). Skipped for the transient switch to
+        // null that happens while a scene set is loading — not a meaningful switch to announce.
+        if (newValue is not null)
+            _eventBus.Publish(new SceneSwitchedEvent(oldValue?.Id, newValue.Id));
     }
 
     partial void OnDefaultSceneChanged(GoLiveSceneViewModel? value)
@@ -1199,10 +1459,30 @@ public partial class SceneEditorViewModel : ObservableObject
 
     private async Task SwitchSceneCoreStateAsync(GoLiveSceneViewModel? oldScene, GoLiveSceneViewModel? newScene)
     {
-        if (oldScene is not null)
-            await DeactivateSceneAsync(oldScene);
-        if (newScene is not null)
-            await ActivateSceneAsync(newScene, animate: oldScene is not null);
+        // Fire-and-forget from OnActiveSceneChanged (a property-changed hook can't be awaited by
+        // its caller) — without this try/catch, any exception here (e.g. a bad IPC command) is an
+        // unobserved task exception that silently vanishes, leaving the UI-bound scene/slot state
+        // updated but the actual compositor Config push (which is what makes the preview reflect
+        // the switch) never sent, with no trace of why.
+        try
+        {
+            // Activate the new scene BEFORE deactivating the old one — the reverse order (as
+            // this used to run) means a capture source shared between both scenes (e.g. the same
+            // monitor/webcam as primary in both) always gets its refcount dropped to zero and
+            // immediately started right back up, i.e. a full native capture-session teardown+
+            // rebuild on every single switch even though nothing about that source changed. See
+            // AcquireCaptureAsync/ReleaseCaptureAsync's own doc comments — activating first means
+            // the shared source's refcount goes 1→2→1 instead of 1→0→1, so it's never actually
+            // stopped at all.
+            if (newScene is not null)
+                await ActivateSceneAsync(newScene, animate: oldScene is not null);
+            if (oldScene is not null)
+                await DeactivateSceneAsync(oldScene);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Scene switch core-state update failed ({OldScene} -> {NewScene})", oldScene?.Name, newScene?.Name);
+        }
     }
 
     private bool CanRemoveActiveScene() => ActiveScene is not null && Scenes.Count > 1;
@@ -1284,8 +1564,7 @@ public partial class SceneEditorViewModel : ObservableObject
         // the actual stream, since nothing else tells the core it's gone.
         await _core.SendCommandAsync(BuildConfigCommand());
 
-        if (_activeCaptureBySlot.Remove(slot, out var sourceId) && sourceId is not null)
-            await _core.SendCommandAsync(new StopCaptureCommand(sourceId));
+        await ReleaseCaptureAsync(slot);
 
         NotifyChanged();
         NotifyChatOverlayStateChanged();
@@ -1298,6 +1577,8 @@ public partial class SceneEditorViewModel : ObservableObject
 
         var sourceScene = ActiveScene;
         var name = $"{sourceScene.Name} Copy";
+        // SwitchHotkey deliberately isn't copied — two scenes sharing one combo would be an
+        // instant self-conflict the moment the duplicate exists (see HotkeyConflictService).
         var duplicatedScene = new GoLiveSceneViewModel(Guid.NewGuid().ToString("N"), name)
         {
             CanvasResolutionWidth = sourceScene.CanvasResolutionWidth,
@@ -1321,6 +1602,12 @@ public partial class SceneEditorViewModel : ObservableObject
 
             if (newSlot.IsStaticOverlay && !string.IsNullOrEmpty(newSlot.SourceId))
             {
+                // CloneContent deliberately doesn't copy chat messages (they're live/transient
+                // either way) — refill with placeholder content the same as any other idle empty
+                // chat overlay.
+                if (newSlot.Content is ChatOverlayContent duplicatedChat)
+                    PopulateChatPlaceholder(newSlot, duplicatedChat);
+
                 _ = RestoreStaticOverlayAsync(newSlot, newSlot.SourceId);
             }
 
@@ -1467,6 +1754,8 @@ public partial class SceneEditorViewModel : ObservableObject
             Name = scene.Name,
             CanvasResolutionWidth = scene.CanvasResolutionWidth,
             CanvasResolutionHeight = scene.CanvasResolutionHeight,
+            SwitchHotkeyKey = scene.SwitchHotkey?.Key.ToString(),
+            SwitchHotkeyModifiers = scene.SwitchHotkey?.Modifiers.ToString(),
             Slots = scene.Slots.Select(ToSlotSettings).ToList(),
         }).ToList();
 
@@ -1483,6 +1772,7 @@ public partial class SceneEditorViewModel : ObservableObject
         OverlayText = (s.Content as TextOverlayContent)?.OverlayText,
         OverlayColorHex = (s.Content as ColorOverlayContent)?.OverlayColor?.ToString(CultureInfo.InvariantCulture),
         VideoPath = (s.Content as VideoOverlayContent)?.VideoPath,
+        LoopVideo = (s.Content as VideoOverlayContent)?.LoopVideo ?? true,
         XPercent = s.XPercent,
         YPercent = s.YPercent,
         WPercent = s.WPercent,
@@ -1496,9 +1786,19 @@ public partial class SceneEditorViewModel : ObservableObject
         RotationDegrees = s.RotationDegrees,
         TimerMode = (s.Content as TimerOverlayContent)?.TimerMode ?? TimerMode.CountDown,
         TimerDurationSeconds = (s.Content as TimerOverlayContent)?.TimerDurationSeconds ?? 300,
-        TextFontSize = (s.Content as TextOverlayContent)?.FontSize,
-        TextFontColorHex = (s.Content as TextOverlayContent)?.FontColor.ToString(CultureInfo.InvariantCulture),
-        TextIsBold = (s.Content as TextOverlayContent)?.IsBold,
+        TimerAutoStartOnGoLive = (s.Content as TimerOverlayContent)?.AutoStartOnGoLive ?? false,
+        // Text* fields predate TextStyle and were Text-overlay-only; now sourced from
+        // IHasTextStyle.Style so Chat/Timer formatting persists too — see
+        // ApplyTextStyleFromSettings for the load-side counterpart.
+        TextFontFamily = (s.Content as IHasTextStyle)?.Style.FontFamily,
+        TextFontSize = (s.Content as IHasTextStyle)?.Style.FontSize,
+        TextFontColorHex = (s.Content as IHasTextStyle)?.Style.FontColor.ToString(CultureInfo.InvariantCulture),
+        TextIsBold = (s.Content as IHasTextStyle)?.Style.IsBold,
+        TextIsItalic = (s.Content as IHasTextStyle)?.Style.IsItalic,
+        TextAlignment = (s.Content as IHasTextStyle)?.Style.Alignment.ToString(),
+        TextOutlineEnabled = (s.Content as IHasTextStyle)?.Style.OutlineEnabled,
+        TextOutlineColorHex = (s.Content as IHasTextStyle)?.Style.OutlineColor.ToString(CultureInfo.InvariantCulture),
+        TextOutlineThickness = (s.Content as IHasTextStyle)?.Style.OutlineThickness,
     };
 
     /// <summary>Imports a .sfset file from disk (registering it, same as Go Live's own "Import

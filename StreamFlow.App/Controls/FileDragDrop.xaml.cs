@@ -112,8 +112,27 @@ public partial class FileDragDrop : AdonisWindow
         this.Close();
     }
 
-    private void Add_Click(object sender, RoutedEventArgs e)
+    private async void Add_Click(object sender, RoutedEventArgs e)
     {
+        // Matched by full, normalized path (not just filename) — two files that happen to share a
+        // name in different folders are legitimately different sounds, but the same file added
+        // twice (e.g. re-dropping it, or picking it again via Add Audio's multiselect) is very
+        // easy to do by accident and just clutters the list with a dead duplicate.
+        var candidatePath = Path.GetFullPath(droppedFile);
+        var duplicate = AppModel.Instance.Audios.FirstOrDefault(a =>
+            string.Equals(Path.GetFullPath(a.FilePath), candidatePath, StringComparison.OrdinalIgnoreCase));
+        if (duplicate is not null)
+        {
+            var dlg = App.Services.GetService(typeof(Services.IDialogService)) as Services.IDialogService;
+            if (dlg is not null)
+            {
+                await dlg.WarningAsync("Duplicate Audio",
+                    $"'{Path.GetFileName(droppedFile)}' is already in the list as '{duplicate.Name}'.");
+            }
+            this.Close();
+            return;
+        }
+
         if (tglbtn_audioTrack.IsChecked == true)
         {
             AppModel.Instance.Audios.Add(new AudioTrack(droppedFile, AudioName!));

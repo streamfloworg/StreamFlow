@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:crates.io)",
+      "WebFetch(domain:github.com)",
+      "Bash(curl -s \"https://crates.io/api/v1/crates?q=spout&per_page=25\" -H \"User-Agent: StreamFlow-research \\(contact: research@streamflow.local\\)\")",
+      "Bash(ls \"/d/Documents/Obsidian Vault/StreamFlow/Maker/Plans/\" 2>&1 | head -30)",
+      "Read(//d/Documents/Obsidian Vault/StreamFlow/Maker/**)",
+      "Read(//d/Documents/Obsidian Vault/StreamFlow/**)",
+      "Read(//d/Documents/Obsidian Vault/**)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(cargo build *)"
+    ],
+    "additionalDirectories": [
+      "D:\\Documents\\Obsidian Vault\\StreamFlow"
+    ]
+  }
+}

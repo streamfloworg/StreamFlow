@@ -33,6 +33,7 @@ public partial class GoLiveViewModel : ViewModel
     private readonly YouTubeChatService _youTubeChat;
     private readonly GoLiveSettingsService _settings;
     private readonly SceneSetService _sceneSetService;
+    private readonly EventBus _eventBus;
     private readonly ILogger<GoLiveViewModel> _logger;
 
     /// <summary>Shared with ScenesViewModel — same live Scenes/Slots/ActiveScene state,
@@ -108,7 +109,7 @@ public partial class GoLiveViewModel : ViewModel
         CoreBridgeService core, IDialogService dialogs, TwitchAuthService twitchAuth, YouTubeAuthService youTubeAuth,
         TwitchChatService twitchChat, YouTubeChatService youTubeChat,
         GoLiveSettingsService settings, SceneSetService sceneSetService, GpuEncoderDetectionService gpuEncoderDetection,
-        SceneEditorViewModel sceneEditor, ILogger<GoLiveViewModel> logger)
+        SceneEditorViewModel sceneEditor, EventBus eventBus, ILogger<GoLiveViewModel> logger)
     {
         _core = core;
         _dialogs = dialogs;
@@ -118,6 +119,7 @@ public partial class GoLiveViewModel : ViewModel
         _youTubeChat = youTubeChat;
         _settings = settings;
         _sceneSetService = sceneSetService;
+        _eventBus = eventBus;
         _logger = logger;
         SceneEditor = sceneEditor;
         _core.StateChanged += OnCoreStateChanged;
@@ -169,6 +171,20 @@ public partial class GoLiveViewModel : ViewModel
         _masterVolumePercent = saved.MasterVolumePercent;
         _persistedSelectedAudioDeviceIds = saved.SelectedAudioDeviceIds;
         _persistedAudioDeviceDisplayNames = saved.AudioDeviceDisplayNames;
+
+        _isSpoutOutputEnabled = saved.IsSpoutOutputEnabled;
+        _spoutSenderName = saved.SpoutSenderName;
+
+        _isRecordingEnabled = saved.IsRecordingEnabled;
+        _recordFolderPath = saved.RecordFolderPath;
+        // CoreBridgeService queues commands sent before core's Ready event and flushes them once
+        // it arrives, so it's safe to push this here even though the core process may not have
+        // started yet — same reasoning that already lets other ViewModel constructors send
+        // commands eagerly (see CoreBridgeService's own doc comment).
+        if (_isSpoutOutputEnabled)
+        {
+            _ = _core.SendCommandAsync(new SetSpoutOutputCommand(true, _spoutSenderName));
+        }
 
         SceneEditor.TransitionKind = SceneEditorViewModel.TransitionKindFromWire(saved.TransitionKind);
         SceneEditor.TransitionDurationMs = (int)saved.TransitionDurationMs;
@@ -236,8 +252,19 @@ public partial class GoLiveViewModel : ViewModel
         _ = LoadSceneSetByIdAsync(ActiveProfile?.LinkedSceneSetId);
     }
 
-    private GoLiveSettings BuildSettingsSnapshot() =>
-        new()
+    private GoLiveSettings BuildSettingsSnapshot()
+    {
+        // Stream Deck server settings (IsStreamDeckServerEnabled/Port/ApiKey) are deliberately
+        // owned by SettingsViewModel/StreamDeckServerService, not this ViewModel — but this method
+        // builds a brand-new GoLiveSettings from scratch rather than load-modify-save, so without
+        // reading the currently-persisted values forward here, every debounced autosave this
+        // ViewModel triggers (any scene/profile edit — see ScheduleSaveSettings) would silently
+        // reset those three fields back to their defaults, wiping whatever the Settings page had
+        // just saved. Read once per snapshot rather than cached, so it always reflects the latest
+        // value regardless of which page wrote it last.
+        var currentOnDisk = _settings.Load();
+
+        return new()
         {
             TransitionKind = SceneEditorViewModel.TransitionKindToWire(SceneEditor.TransitionKind),
             TransitionDurationMs = (uint)Math.Max(0, SceneEditor.TransitionDurationMs),
@@ -291,8 +318,16 @@ public partial class GoLiveViewModel : ViewModel
             AudioDeviceDisplayNames = AudioSources.Count > 0
                 ? AudioSources.Where(a => a.IsRenamed).ToDictionary(a => a.Device.Id, a => a.DisplayName)
                 : _persistedAudioDeviceDisplayNames ?? [],
-            MasterVolumePercent = MasterVolumePercent
+            MasterVolumePercent = MasterVolumePercent,
+            IsSpoutOutputEnabled = IsSpoutOutputEnabled,
+            SpoutSenderName = SpoutSenderName,
+            IsRecordingEnabled = IsRecordingEnabled,
+            RecordFolderPath = RecordFolderPath,
+            IsStreamDeckServerEnabled = currentOnDisk.IsStreamDeckServerEnabled,
+            StreamDeckServerPort = currentOnDisk.StreamDeckServerPort,
+            StreamDeckApiKey = currentOnDisk.StreamDeckApiKey
         };
+    }
 
     private CancellationTokenSource? _saveDebounceCts;
 
@@ -453,6 +488,7 @@ public partial class GoLiveViewModel : ViewModel
                     StatusLabel = IsTestStreaming ? "Testing" : "Live";
                     _errorDismissCts?.Cancel();
                     ErrorMessage = null;
+                    _eventBus.Publish(new GoLiveStartedEvent());
                     break;
                 case StreamStoppedEvent:
                     IsStreaming = false;
@@ -462,6 +498,7 @@ public partial class GoLiveViewModel : ViewModel
                     LiveBitrateKbps = 0;
                     DroppedFrames = 0;
                     EndActiveYouTubeTestBroadcastIfAny();
+                    _eventBus.Publish(new GoLiveStoppedEvent());
                     break;
                 case StreamStatusEvent status:
                     LiveFps = status.Fps;

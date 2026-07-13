@@ -155,12 +155,20 @@
     <PackageReference Include="RichCanvas" Version="3.0.1" />
     <PackageReference Include="System.Management" Version="9.0.0" />
     <PackageReference Include="Velopack" Version="1.2.0" />
+    <PackageReference Include="Vortice.Direct3D9" Version="3.8.3" />
   </ItemGroup>
   
   <ItemGroup>
     <ProjectReference Include="..\libxmpBindings\libxmpBindings\libxmpBindings.csproj" />
     <ProjectReference Include="..\SoundFlow\Src\SoundFlow.csproj" />
     <ProjectReference Include="..\StreamFlow.Core\StreamFlow.Core.csproj" />
+  </ItemGroup>
+
+  <!-- Self-hosted Kestrel (StreamDeckServerService) — a well-supported pattern for embedding
+       ASP.NET Core hosting in a non-web SDK project (WPF here) without switching the whole
+       project to Microsoft.NET.Sdk.Web. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
   <!--

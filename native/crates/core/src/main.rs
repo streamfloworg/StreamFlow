@@ -6,6 +6,7 @@ mod d2d;
 mod gl_blur;
 mod process_stats;
 mod sources;
+mod spout;
 mod static_overlay;
 mod streaming;
 mod video_overlay;
@@ -113,8 +114,17 @@ async fn main() -> Result<()> {
     // Channel for events produced by the stream encoder thread  stdout.
     let (stream_evt_tx, stream_evt_rx) =
         tokio::sync::mpsc::unbounded_channel::<StreamEvent>();
+    // Channel for Spout texture-ready notifications produced by the compositor thread  stdout
+    // (Event::SpoutTextureReady) — same shape as stream_evt_tx above, just a different producer
+    // thread. UnboundedSender::send is a plain sync call, safe to use from the compositor's
+    // std::thread (it's not itself async).
+    let (spout_evt_tx, spout_evt_rx) =
+        tokio::sync::mpsc::unbounded_channel::<(u32, u32, u32, i64)>();
 
-    let compositor_cfg = Arc::new(std::sync::Mutex::new(compositor::CompositorConfig { sources: Vec::new(), blur_regions: Vec::new(), canvas_width: None, canvas_height: None, pending_transition: None }));
+    let compositor_cfg = Arc::new(std::sync::Mutex::new(compositor::CompositorConfig {
+        sources: Vec::new(), blur_regions: Vec::new(), canvas_width: None, canvas_height: None,
+        pending_transition: None, spout_enabled: false, spout_sender_name: "StreamFlow".to_string(),
+    }));
     // Wakes the compositor thread to recompute the composited frame from cached inputs
     // immediately on a Config change, rather than waiting for WGC's next primary frame.
     let config_notify = Arc::new(tokio::sync::Notify::new());
@@ -123,6 +133,7 @@ async fn main() -> Result<()> {
         Arc::clone(&shm_overlay),
         Arc::clone(&compositor_cfg),
         Arc::clone(&config_notify),
+        spout_evt_tx,
     );
 
     // Data pipe is secondary: if the client disconnects, the core keeps running.
@@ -161,7 +172,7 @@ async fn main() -> Result<()> {
     );
 
     tokio::select! {
-        result = run_stdin_commands(frame_tx.clone(), composited_tx.clone(), Arc::clone(&preview_enabled), stream_evt_tx, stream_evt_rx, Arc::clone(&compositor_cfg), Arc::clone(&config_notify), verbose) => {
+        result = run_stdin_commands(frame_tx.clone(), composited_tx.clone(), Arc::clone(&preview_enabled), stream_evt_tx, stream_evt_rx, spout_evt_rx, Arc::clone(&compositor_cfg), Arc::clone(&config_notify), verbose) => {
             if let Err(e) = result {
                 error!("Control plane error: {e:#}");
                 voicemeeter::shutdown();
@@ -224,6 +235,7 @@ async fn run_stdin_commands(
     preview_enabled: Arc<AtomicBool>,
     stream_evt_tx: tokio::sync::mpsc::UnboundedSender<StreamEvent>,
     mut stream_evt_rx: tokio::sync::mpsc::UnboundedReceiver<StreamEvent>,
+    mut spout_evt_rx: tokio::sync::mpsc::UnboundedReceiver<(u32, u32, u32, i64)>,
     compositor_cfg: compositor::SharedCompositorConfig,
     config_notify: Arc<tokio::sync::Notify>,
     verbose: bool,
@@ -329,6 +341,12 @@ async fn run_stdin_commands(
                 }
                 continue;
             }
+            Some((share_handle, width, height, adapter_luid)) = spout_evt_rx.recv() => {
+                let frame = encode_event(&Event::SpoutTextureReady { share_handle, width, height, adapter_luid })?;
+                stdout.write_all(&frame).await?;
+                stdout.flush().await?;
+                continue;
+            }
             // ── Commands from Electron on stdin ───────────────────────────────
             read_result = lines.next_line() => {
                 match read_result {
@@ -374,6 +392,17 @@ async fn run_stdin_commands(
                     }
                     Ok(Command::Config { sources, canvas_width, canvas_height, transition }) => {
                         last_keepalive = tokio::time::Instant::now();
+                        // Elevated to warn! (not info!) so this is visible in the C# Core
+                        // Diagnostics panel by default — that panel only shows warn+ (the app
+                        // runs without --verbose normally), and there was previously no signal
+                        // at all here to confirm a scene switch's Config command actually made
+                        // it to the compositor rather than being silently lost/never sent.
+                        let primary = sources.iter().find(|s| s.is_primary).map(|s| s.source_id.as_str()).unwrap_or("(none)");
+                        warn!(
+                            "[diag] Config received: {} source(s), primary={primary}, canvas={canvas_width:?}x{canvas_height:?}, transition={}",
+                            sources.len(),
+                            transition.is_some(),
+                        );
                         {
                             let mut cfg = compositor_cfg.lock().unwrap();
                             cfg.sources = sources;
@@ -384,6 +413,25 @@ async fn run_stdin_commands(
                         config_notify.notify_one();
                         if verbose {
                             let frame = encode_event(&Event::Acknowledge { command: "Config".into() })?;
+                            stdout.write_all(&frame).await?;
+                            stdout.flush().await?;
+                        }
+                    }
+                    Ok(Command::SetSpoutOutput { enabled, sender_name }) => {
+                        last_keepalive = tokio::time::Instant::now();
+                        {
+                            let mut cfg = compositor_cfg.lock().unwrap();
+                            cfg.spout_enabled = enabled;
+                            if !sender_name.is_empty() {
+                                cfg.spout_sender_name = sender_name;
+                            }
+                        }
+                        // No accompanying Config in the common case (this is usually toggled on
+                        // its own) — wake the compositor thread now instead of waiting for the
+                        // next frame/config event to notice the change.
+                        config_notify.notify_one();
+                        if verbose {
+                            let frame = encode_event(&Event::Acknowledge { command: "SetSpoutOutput".into() })?;
                             stdout.write_all(&frame).await?;
                             stdout.flush().await?;
                         }
@@ -412,11 +460,16 @@ async fn run_stdin_commands(
                                 .map(|s| Box::new(s) as Box<dyn CaptureSessionTrait>)
                         } else if source_id.starts_with("video:") {
                             // The file path is base64-encoded into the id itself (same approach
-                            // as webcam's symlink) rather than needing a separate command.
-                            base64::Engine::decode(
-                                &base64::engine::general_purpose::URL_SAFE_NO_PAD,
-                                source_id.trim_start_matches("video:"),
-                            )
+                            // as webcam's symlink) rather than needing a separate command. A
+                            // non-looping overlay carries an extra "once:" marker ahead of the
+                            // path (still no separate command) — see SceneEditorViewModel's
+                            // source-id builder on the C# side.
+                            let rest = source_id.trim_start_matches("video:");
+                            let (loop_video, encoded_path) = match rest.strip_prefix("once:") {
+                                Some(encoded) => (false, encoded),
+                                None => (true, rest),
+                            };
+                            base64::Engine::decode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, encoded_path)
                             .map_err(|e| anyhow!("Invalid video overlay id: {e}"))
                             .and_then(|bytes| String::from_utf8(bytes).map_err(|e| anyhow!("Invalid video overlay path: {e}")))
                             .and_then(|path| {
@@ -426,7 +479,7 @@ async fn run_stdin_commands(
                                 // video files, unlike monitor/window sources, have no earlier
                                 // GetSources-time opportunity to report this.
                                 video_resolution = video_overlay::probe_dimensions(&path).ok();
-                                video_overlay::VideoOverlaySession::new(source_id.clone(), path, frame_tx.clone())
+                                video_overlay::VideoOverlaySession::new(source_id.clone(), path, loop_video, frame_tx.clone())
                                     .map(|s| Box::new(s) as Box<dyn CaptureSessionTrait>)
                             })
                         } else {
@@ -481,7 +534,9 @@ async fn run_stdin_commands(
                                 })?;
                                 stdout.write_all(&evt).await?;
                                 stdout.flush().await?;
-                                info!(source = %source_id, width, height, "Static overlay registered");
+                                // warn!, not info! — see the matching note on Command::Config
+                                // above for why (invisible in the diag panel otherwise).
+                                warn!("[diag] Static overlay registered: source_id={source_id} {width}x{height}");
                             }
                             Err(e) => {
                                 warn!("Failed to register static overlay {source_id}: {e:#}");
@@ -877,6 +932,15 @@ async fn run_data_pipe(
                 if !preview_enabled.load(Ordering::Relaxed) {
                     // Capture is running (e.g. streaming-only) but preview is off.
                     // Frame consumed to prevent channel back-pressure; not written to pipe.
+                    continue;
+                }
+                // "Show Preview" (the same checkbox that drives the public Spout registration —
+                // see GoLiveViewModel.IsSpoutOutputEnabled) replaces this CPU downsample+pipe
+                // path for the *composited* frame with the C# host reading the GPU-shared Spout
+                // texture directly (Event::SpoutTextureReady). PiP raw-frame thumbnails below are
+                // unaffected — Spout only ever carries the final composited output, never each
+                // individual PiP source, so that feed still needs the pipe regardless.
+                if compositor_cfg.lock().unwrap().spout_enabled {
                     continue;
                 }
                 if last_preview_time.elapsed() < preview_interval {

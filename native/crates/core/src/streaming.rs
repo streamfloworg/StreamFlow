@@ -1,9 +1,9 @@
-﻿#![allow(unsafe_code)]
+#![allow(unsafe_code)]
 
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::ptr;
-use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::atomic::{AtomicI32, AtomicI64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::time::{Duration, Instant};
 
@@ -11,7 +11,7 @@ use anyhow::{anyhow, Context, Result};
 use ffmpeg_sys_next::*;
 use serde::Deserialize;
 use tokio::sync::{broadcast, mpsc};
-use windows::Win32::System::Threading::{GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_HIGHEST};
+use windows::Win32::System::Threading::{GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_ABOVE_NORMAL, THREAD_PRIORITY_HIGHEST};
 
 use crate::capture::RawFrame;
 use streamflow_ipc::{AudioSourceConfig, StreamSourceDef};
@@ -369,6 +369,13 @@ impl StreamSession {
             std::thread::Builder::new()
                 .name("audio-mixer".into())
                 .spawn(move || {
+                    // Sits between capture (mic capture is TIME_CRITICAL via cpal; loopback
+                    // capture now matches it — see audio.rs's wasapi_loopback_thread) and the
+                    // encoder — starving this thread would reintroduce the same stall/burst
+                    // skew a starved capture thread causes, just one stage later. ABOVE_NORMAL
+                    // matches the RTMP writer's tier rather than TIME_CRITICAL: this is bulk
+                    // mixing work, not a hardware IO callback tied to a device's own clock.
+                    unsafe { let _ = SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL); }
                     use ringbuf::traits::{Consumer as _, Observer as _, Producer as _};
                     use std::sync::mpsc::TryRecvError;
                     const CHUNK: usize = 512;
@@ -383,9 +390,20 @@ impl StreamSession {
                             Err(TryRecvError::Empty) => {}
                         }
 
+                        // Gated on the *maximum* occupied length across sources, not the minimum
+                        // — a WASAPI loopback capture on an "output" device that isn't currently
+                        // playing anything genuinely delivers little to no packets while idle
+                        // (Windows suspends the audio engine on a render endpoint with nothing
+                        // actively rendering). Gating on the minimum meant one idle/silent
+                        // selected device could permanently stall `available` at 0, which starved
+                        // every other source's contribution too — the entire mix would produce
+                        // nothing until that one device resumed, easily the whole stream if it
+                        // never did. Each source below now only contributes what it actually has
+                        // this chunk and is zero-padded otherwise, instead of every source being
+                        // required to keep pace with the busiest one.
                         let available = sources.iter()
                             .map(|c| c.occupied_len())
-                            .min()
+                            .max()
                             .unwrap_or(0);
 
                         if available == 0 {
@@ -410,11 +428,17 @@ impl StreamSession {
 
                         for (i, src) in sources.iter_mut().enumerate() {
                             let buf = &mut bufs[i];
+                            buf.clear();
                             buf.resize(to_mix, 0.0);
-                            // Always drain, even if this source isn't audible right now — an
-                            // unread ring buffer would otherwise back up and eventually drop
-                            // samples with a stale/garbled catch-up once re-enabled.
-                            src.pop_slice(&mut buf[..to_mix]);
+                            // Pop only what this source actually has ready (may be less than
+                            // to_mix if it's idle/lagging this chunk) and leave the remainder
+                            // zero-filled — draining still happens every iteration regardless of
+                            // audibility, same as before, so a muted-but-still-capturing source's
+                            // ring buffer doesn't back up.
+                            let have = src.occupied_len().min(to_mix);
+                            if have > 0 {
+                                src.pop_slice(&mut buf[..have]);
+                            }
                             if !audible[i] { continue; }
 
                             let gain = gains[i];
@@ -824,19 +848,88 @@ unsafe fn run_encoder_unsafe(
     let queue_depth      = Arc::new(AtomicI32::new(0));
     let queue_depth_rtmp = Arc::clone(&queue_depth);
 
+    // rtmp_writer's own av_write_frame timing, surfaced in the encode loop's periodic status log
+    // below (rather than only at thread exit) so a future "sending faster than realtime" report
+    // has real write-latency evidence to diagnose from immediately.
+    let rtmp_slow_writes      = Arc::new(AtomicI64::new(0));
+    let rtmp_slow_writes_rtmp = Arc::clone(&rtmp_slow_writes);
+    let rtmp_total_pkts       = Arc::new(AtomicI64::new(0));
+    let rtmp_total_pkts_rtmp  = Arc::clone(&rtmp_total_pkts);
+
     // When the user stops the stream, we set this flag so the RTMP thread exits
     // immediately rather than draining the entire queue (which at 300ms/write
     // would take up to 90 seconds for a full 300-packet queue).
     let rtmp_stop      = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let rtmp_stop_rtmp = Arc::clone(&rtmp_stop);
 
+    // Set by the writer thread right before it aborts on a genuine write error (never on a
+    // normal/forced stop) — the encode loop below only ever watched `stop_rx` (a user-initiated
+    // stop), so when the writer thread died on its own (observed: a bad packet triggering
+    // av_interleaved_write_frame to fail, tearing down the RTMP connection — Twitch saw the
+    // stream end immediately) the encode loop had no way to notice at all. It kept encoding and
+    // "sending" packets into a channel nobody was draining anymore for 9+ more seconds — burning
+    // GPU/CPU for a stream that was already gone, before something unrelated finally ended it —
+    // instead of surfacing the failure and stopping right away.
+    let rtmp_died      = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let rtmp_died_rtmp = Arc::clone(&rtmp_died);
+
+    // ── Async recording write thread (separate from RTMP) ─────────────────────
+    // Previously the recording's av_write_frame ran inline on the RTMP writer thread, BEFORE
+    // the RTMP write itself — any latency there (disk contention, AV scanner, a slower/network
+    // drive) delayed every single RTMP packet by exactly that amount and was never measured by
+    // the `slow_writes`/ms tracking below (that only ever timed the RTMP write). Under sustained
+    // disk contention this starves the RTMP queue (queue_depth climbs, the encode loop starts
+    // skipping frames via frames_skipped_backpressure) and looks exactly like a bitrate/
+    // buffering problem on the stream itself, even though the network path was never the
+    // bottleneck. Splitting onto its own thread/channel means a slow recording write can only
+    // ever cost the recording (a dropped frame there, still on its own steady cadence for
+    // everything that does make it through) and can no longer touch RTMP delivery at all.
+    let (rec_pkt_tx, recording_writer) = if let Some(fmt_send) = rec_fmt_send {
+        let (tx, rx) = std::sync::mpsc::sync_channel::<OwnedPacket>(QUEUE_CAP as usize);
+        let handle = std::thread::Builder::new()
+            .name("recording-writer".into())
+            .spawn(move || {
+                let rctx = fmt_send.into_raw();
+                let mut total: u64 = 0;
+                while let Ok(owned) = rx.recv() {
+                    unsafe {
+                        if av_interleaved_write_frame(rctx, owned.0) < 0 {
+                            tracing::warn!("[Recording] av_interleaved_write_frame failed");
+                        }
+                    }
+                    total += 1;
+                    // owned drops here  av_packet_free called
+                }
+                unsafe {
+                    av_write_trailer(rctx);
+                    avio_closep(&mut (*rctx).pb);
+                    avformat_free_context(rctx);
+                }
+                tracing::info!("[Recording] File closed ({total} pkts written)");
+            })
+            .expect("failed to spawn recording-writer thread");
+        (Some(tx), Some(handle))
+    } else {
+        (None, None)
+    };
+
     let rtmp_writer = std::thread::Builder::new()
         .name("rtmp-writer".into())
         .spawn(move || {
+            // Elevated priority, matching the encode loop's own THREAD_PRIORITY_HIGHEST further
+            // down — this thread is the other half of the same critical path (encoding a frame
+            // that never actually reaches the network is no better than not encoding it at all).
+            // Previously ran at plain default priority, same as every other thread this process
+            // spawns (compositor, Spout publisher, recording writer) — under sustained CPU
+            // contention the OS scheduler favors the highest-priority thread, so this one could
+            // get starved of the CPU time its own av_write_frame calls and the OS's underlying
+            // network-stack processing need to keep up, even though av_write_frame itself still
+            // returns quickly (it's mostly just copying into the OS's own socket send buffer;
+            // actual transmission happens asynchronously and isn't visible to that timing at all).
+            unsafe { let _ = SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL); }
             // into_raw() is a method call, so Rust captures FormatCtxSend (Send)
             // rather than the inner field *mut AVFormatContext (not Send).
             let ofmt_ctx = fmt_send.into_raw();
-            let rec_ctx  = rec_fmt_send.map(|f| f.into_raw());
             let mut total_pkts: u64 = 0;
             let mut slow_writes: u64 = 0;
 
@@ -848,45 +941,58 @@ unsafe fn run_encoder_unsafe(
                 }
                 queue_depth_rtmp.fetch_sub(1, Ordering::Relaxed);
 
-                // Clone the packet for recording before the RTMP write (which may
-                // modify the packet's metadata in place).
-                if let Some(rctx) = rec_ctx {
+                // Clone the packet and hand it to the recording thread — non-blocking, so a
+                // recording write that's falling behind only ever drops a frame from the
+                // recording, never delays the RTMP write below.
+                if let Some(ref tx) = rec_pkt_tx {
                     unsafe {
                         let rec_pkt = av_packet_clone(owned.0);
                         if !rec_pkt.is_null() {
-                            if av_write_frame(rctx, rec_pkt) < 0 {
-                                tracing::warn!("[Recording] av_write_frame failed");
-                            }
-                            av_packet_free(&mut (rec_pkt as *mut _));
+                            let _ = tx.try_send(OwnedPacket(rec_pkt));
+                            // On Err (queue full), the returned OwnedPacket drops right here,
+                            // freeing it — same as a normal successful send further downstream.
                         }
                     }
                 }
 
+                // NOTE: three consecutive attempts at real-time-pacing this write (absolute-PTS
+                // based, then a combined leaky bucket, then a per-stream leaky bucket with
+                // spin_sleep) each made streaming measurably worse — queue_depth climbing from the
+                // very first status tick rather than staying low, well beyond what any of those
+                // designs should have caused on paper. Reverted entirely rather than iterate
+                // further blind; something about pacing this specific write loop isn't behaving
+                // as the isolated logic suggested, and this thread draining pkt_rx as fast as
+                // physically possible (queue_depth staying low/near-zero) was the proven-healthy
+                // behavior in every earlier test this session. slow_writes/total_pkts below are
+                // now surfaced in the periodic status log (see rtmp_slow_writes/rtmp_total_pkts)
+                // so a future real recurrence of "sending faster than realtime" has actual write-
+                // timing evidence to diagnose from, instead of guessing at a fix again.
                 let t = Instant::now();
                 unsafe {
-                    if av_write_frame(ofmt_ctx, owned.0) < 0 {
-                        tracing::error!("av_write_frame error (pkt #{}) - aborting RTMP writer", total_pkts);
+                    if av_interleaved_write_frame(ofmt_ctx, owned.0) < 0 {
+                        tracing::error!("av_interleaved_write_frame error (pkt #{}) - aborting RTMP writer", total_pkts);
+                        rtmp_died_rtmp.store(true, Ordering::Relaxed);
                         break;
                     }
                 }
                 let ms = t.elapsed().as_millis();
                 total_pkts += 1;
-                if ms > 50 { slow_writes += 1; }
+                if ms > 50 {
+                    slow_writes += 1;
+                    rtmp_slow_writes_rtmp.fetch_add(1, Ordering::Relaxed);
+                }
+                rtmp_total_pkts_rtmp.fetch_add(1, Ordering::Relaxed);
                 // owned drops here  av_packet_free called
             }
 
             tracing::info!("RTMP writer done: {total_pkts} pkts written, {slow_writes} slow (>50ms)");
             unsafe {
-                if let Some(rctx) = rec_ctx {
-                    av_write_trailer(rctx);
-                    avio_closep(&mut (*rctx).pb);
-                    avformat_free_context(rctx);
-                    tracing::info!("[Recording] File closed");
-                }
                 av_write_trailer(ofmt_ctx);
                 avio_closep(&mut (*ofmt_ctx).pb);
                 avformat_free_context(ofmt_ctx);
             }
+            // rec_pkt_tx (if any) drops here — disconnects the recording-writer thread's
+            // channel so it drains whatever's left, writes the trailer, and closes the file.
         })
         .expect("failed to spawn rtmp-writer thread");
 
@@ -916,6 +1022,10 @@ unsafe fn run_encoder_unsafe(
 
     let pkt = av_packet_alloc();
 
+    if let Some(ref mut enc) = audio_enc {
+        enc.clear_backlog();
+    }
+
     // ── Encode loop ───────────────────────────────────────────────────────────
     let stream_start = Instant::now();
     let mut last_pts: i64 = -1;
@@ -929,7 +1039,16 @@ unsafe fn run_encoder_unsafe(
     let mut nvenc_ms_acc: f64 = 0.0;
     let mut recv_ms_acc:  f64 = 0.0;
     let mut pkts_dropped:  u64 = 0; // dropped inside encode_frame (queue full at send time)
-    let mut frames_skipped: u64 = 0; // skipped before encode (queue ≥80% full)
+    // Split into two distinct counters (previously merged into one `frames_skipped`) so a
+    // "recording looks sped up, static periods missing" report can be diagnosed from the status
+    // log alone: a PTS range skipped via frames_skipped_catchup is a genuine gap in the encoded
+    // timeline (this loop fell behind real wall-clock time and gave up on those frames entirely,
+    // never encoding anything for that PTS range) — very different from
+    // frames_skipped_backpressure, where the loop stayed on schedule but chose not to encode
+    // because the RTMP/recording write queue was backed up (also a real gap, but points at
+    // downstream I/O being the bottleneck rather than the pacing loop itself).
+    let mut frames_skipped_catchup: u64 = 0;
+    let mut frames_skipped_backpressure: u64 = 0;
 
     // Encode the first frame.
     calls_this_interval += 1;
@@ -974,6 +1093,12 @@ unsafe fn run_encoder_unsafe(
     let mut forced_stop = false;
     loop {
         if stop_rx.try_recv().is_ok() { forced_stop = true; break; }
+        if rtmp_died.load(Ordering::Relaxed) {
+            tracing::error!("RTMP writer thread died - stopping encode loop instead of continuing to encode into a dead connection");
+            let _ = event_tx.send(StreamEvent::Error("RTMP connection lost".to_string()));
+            forced_stop = true;
+            break;
+        }
 
         if let Some(ref mut enc) = audio_enc {
             let mut send_audio = |pkt: *mut AVPacket| -> Result<()> {
@@ -995,10 +1120,10 @@ unsafe fn run_encoder_unsafe(
         
         let mut current_pts = last_pts + 1;
         if ideal_pts > current_pts + 1 {
-            // We fell behind real-time. Drop exactly ONE frame to smoothly pace catch-up 
-            // without chunked stutters (e.g., effectively outputs 30 FPS instead of 60 FPS 
+            // We fell behind real-time. Drop exactly ONE frame to smoothly pace catch-up
+            // without chunked stutters (e.g., effectively outputs 30 FPS instead of 60 FPS
             // uniformly, rather than dropping 3 frames at once and causing a huge visual jerk).
-            frames_skipped += 1;
+            frames_skipped_catchup += 1;
             last_pts = current_pts;
             continue; // Physically skip encoding this frame to save CPU
         }
@@ -1040,7 +1165,7 @@ unsafe fn run_encoder_unsafe(
 
         // Skip encoding entirely when the RTMP queue is >=80% full.
         if queue_depth.load(Ordering::Relaxed) >= QUEUE_SKIP_THRESHOLD {
-            frames_skipped += 1;
+            frames_skipped_backpressure += 1;
         } else {
             calls_this_interval += 1;
             let mut enc_pts_arg = enc_pts;
@@ -1061,11 +1186,38 @@ unsafe fn run_encoder_unsafe(
             let fps = frames_this_interval as f32 / elapsed.as_secs_f32();
             let n = calls_this_interval.max(1) as f64;
             let qd = queue_depth.load(Ordering::Relaxed);
-            tracing::debug!(
-                "Stream status: {fps:.1}fps {bitrate_kbps}kbps | \
+            let rtmp_slow = rtmp_slow_writes.load(Ordering::Relaxed);
+            let rtmp_total = rtmp_total_pkts.load(Ordering::Relaxed);
+            // video_pts_s/audio_pts_s/av_gap_s: each stream's own logical position in seconds,
+            // and the gap between them — added after a session showed ffmpeg's flv muxer force-
+            // flushing on a >10s interleave gap (its own hardcoded max_interleave_delta) with
+            // every other metric here (fps, queue, drops) reading perfectly healthy the whole
+            // time, and poll()'s own wall-clock-vs-track_time check (see AudioEncoder::poll)
+            // never once detecting audio behind by more than a second. That combination means
+            // neither stream's own self-consistency check catches this — only comparing the two
+            // streams' actual pts values directly will show which one is actually diverging.
+            let video_pts_s = last_pts as f64 / target_fps as f64;
+            let audio_pts_s = audio_enc.as_ref().map(|enc| unsafe { enc.track_seconds() });
+            let silence_samples = audio_enc.as_ref().map(|enc| enc.silence_samples_inserted);
+            // warn! (not debug!) so this is visible in the C# Core Diagnostics panel by default
+            // — diagnosing a "recording looks sped up / static periods missing" report needs to
+            // see fps/skipped over time, and debug! is invisible without --verbose. If fps stays
+            // near target_fps with skipped~0 even through a static period, the encode loop itself
+            // is fine and the bug is downstream (MP4 muxing); if fps drops and skipped climbs,
+            // this loop is genuinely falling behind and dropping PTS ranges. rtmp_slow/rtmp_total
+            // are av_write_frame's OWN timing (rtmp_writer thread) — previously only logged once,
+            // at thread exit; surfaced here every tick so a "sending faster than realtime" report
+            // has direct evidence of whether the actual network write is the bottleneck.
+            tracing::warn!(
+                "[diag] Stream status: {fps:.1}fps (target {target_fps}) {bitrate_kbps}kbps | \
                  sws={:.1}ms send={:.1}ms recv={:.1}ms | \
-                 queue={}/{QUEUE_CAP} skipped={frames_skipped} dropped={pkts_dropped}",
+                 queue={}/{QUEUE_CAP} skipped_catchup={frames_skipped_catchup} \
+                 skipped_backpressure={frames_skipped_backpressure} dropped={pkts_dropped} | \
+                 rtmp_writes={rtmp_total} rtmp_slow(>50ms)={rtmp_slow} | \
+                 video_pts_s={video_pts_s:.2} audio_pts_s={audio_pts_s:.2?} \
+                 av_gap_s={:.2?} silence_samples_total={silence_samples:?}",
                 sws_ms_acc / n, nvenc_ms_acc / n, recv_ms_acc / n, qd,
+                audio_pts_s.map(|a| video_pts_s - a),
             );
             event_tx.send(StreamEvent::Status {
                 frame: total_frames,
@@ -1080,7 +1232,8 @@ unsafe fn run_encoder_unsafe(
             nvenc_ms_acc  = 0.0;
             recv_ms_acc   = 0.0;
             pkts_dropped  = 0;
-            frames_skipped = 0;
+            frames_skipped_catchup = 0;
+            frames_skipped_backpressure = 0;
         }
     }
 
@@ -1117,6 +1270,12 @@ unsafe fn run_encoder_unsafe(
 
     // Wait for RTMP thread to write remaining packets, trailer, and close.
     let _ = rtmp_writer.join();
+
+    // Wait for the recording thread (if any) to drain, write its trailer, and close the file —
+    // rtmp_writer dropping rec_pkt_tx above is what lets its channel disconnect and exit.
+    if let Some(rw) = recording_writer {
+        let _ = rw.join();
+    }
 
     tracing::info!("Stream encoder exited cleanly");
     Ok(())

@@ -52,6 +52,14 @@ public partial class GoLiveViewModel
             foreach (var slot in chatSlots)
             {
                 var chat = (ChatOverlayContent)slot.Content!;
+                // A real message always displaces placeholder content outright rather than
+                // appending after it — see ChatOverlayContent.IsShowingPlaceholder.
+                if (chat.IsShowingPlaceholder)
+                {
+                    chat.ChatMessages.Clear();
+                    chat.IsShowingPlaceholder = false;
+                }
+
                 chat.ChatMessages.Add(message);
                 while (chat.ChatMessages.Count > 10)
                 {

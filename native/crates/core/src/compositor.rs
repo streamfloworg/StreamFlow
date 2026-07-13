@@ -1,12 +1,13 @@
 ﻿#![allow(unsafe_code)]
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use streamflow_ipc::{BlurRegionDef, ChromaKeyDef, StreamSourceDef, TransitionKind};
 use crate::capture::{RawFrame, ShmOverlay, SharedShmOverlay};
 use ffmpeg_sys_next::*;
+use windows::Win32::System::Threading::{GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_BELOW_NORMAL};
 
 /// Cached scaler + last scaled output for one layer's source_id — a PiP/overlay, or the primary
 /// (which now goes through this same scale-and-place path like any other layer). Static overlays
@@ -34,6 +35,40 @@ struct PipScalerCache {
     // cost is coming from somewhere else in this per-frame loop entirely).
     total_calls: u64,
     scale_calls: u64,
+}
+
+/// One frame's worth of data for the Spout publisher thread to act on — see `SpoutMailbox`'s own
+/// doc comment for why this hands off through a mailbox rather than running inline.
+struct SpoutPublishMsg {
+    enabled: bool,
+    primary_frame_known: bool,
+    sender_name: String,
+    frame: Arc<RawFrame>,
+}
+
+/// Single-slot "latest value" handoff from the compositor thread to a dedicated Spout publisher
+/// thread. Sending always overwrites whatever's currently sitting in the slot rather than
+/// queuing, so the compositor thread's send can never block, and the Spout thread — if it's
+/// running behind — only ever skips forward to the newest frame instead of working through a
+/// backlog.
+///
+/// This exists because `SpoutSender::send_bgra` (specifically its `ID3D11DeviceContext::Flush()`
+/// call — see spout.rs's own comment on why that's there) is a genuine, synchronous GPU driver
+/// call that can stall. It previously ran inline inside `recomposite!()`, on the same single
+/// thread that also produces every other consumer's frame (the CPU preview pipe *and* the
+/// streaming/recording encoder both subscribe to the same broadcast `tx` this thread sends on) —
+/// a stall there didn't just delay Spout, it delayed the *next* recomposite tick entirely,
+/// throttling how often fresh frames reached the encoder. Since the encoder's own jitter buffer
+/// paces itself by wall-clock time regardless of how often new frames actually arrive (see
+/// streaming.rs), the practical effect was the encoder "catching up" through a backlog of
+/// composited frames whenever the compositor thread unstuck itself — video content (and anything
+/// visibly time-based in it, like a Timer overlay) appearing to play through more real elapsed
+/// time than the stream's own declared duration, i.e. looking sped up, with no single dropped
+/// frame or PTS discontinuity for any of our own diagnostics to catch. Moving Spout's GPU work to
+/// its own thread means a stall there can now only ever affect Spout's own publish cadence.
+struct SpoutMailbox {
+    slot: Mutex<Option<SpoutPublishMsg>>,
+    notify: Condvar,
 }
 
 pub struct CompositeFrame {
@@ -134,6 +169,14 @@ pub struct CompositorConfig {
     /// off the animation. `None` here just means "no scene-switch transition is pending", not
     /// that one isn't currently playing (see `ActiveTransition` in the compositor task itself).
     pub pending_transition: Option<streamflow_ipc::TransitionDef>,
+    /// Set by `Command::SetSpoutOutput` — whether the compositor thread should be maintaining a
+    /// live Spout sender at all. See `spout_sender_name` for which name; both are read together
+    /// each recomposite, same as `blur_regions`.
+    pub spout_enabled: bool,
+    /// Sender name to publish under — only meaningful while `spout_enabled`. Changing this while
+    /// enabled tears down the old sender and stands up a new one under the new name, rather than
+    /// renaming in place (Spout has no rename operation; a name is fixed for a sender's lifetime).
+    pub spout_sender_name: String,
 }
 
 pub type SharedCompositorConfig = Arc<Mutex<CompositorConfig>>;
@@ -710,9 +753,88 @@ pub fn start_compositor(
     shm_overlay: SharedShmOverlay,
     config: SharedCompositorConfig,
     config_notify: Arc<tokio::sync::Notify>,
+    spout_evt_tx: tokio::sync::mpsc::UnboundedSender<(u32, u32, u32, i64)>,
 ) -> tokio::sync::broadcast::Sender<Arc<RawFrame>> {
     let (tx, _rx) = tokio::sync::broadcast::channel(8);
     let out_tx = tx.clone();
+
+    // ── Spout publisher thread ─────────────────────────────────────────────────
+    // See SpoutMailbox's own doc comment for why this is a separate thread from the compositor's
+    // main recompose loop below, rather than running inline as it used to.
+    let spout_mailbox = Arc::new(SpoutMailbox { slot: Mutex::new(None), notify: Condvar::new() });
+    {
+        let spout_mailbox = Arc::clone(&spout_mailbox);
+        std::thread::Builder::new()
+            .name("spout-publisher".into())
+            .spawn(move || {
+                // Deliberately de-prioritized — this thread does real, sustained GPU work every
+                // recompose tick (UpdateSubresource + Flush, see SpoutSender::send_bgra's own
+                // comment on why Flush is a genuine synchronous GPU call, not just a queued one)
+                // purely to feed an *optional* external consumer (OBS, TouchDesigner, etc. via
+                // Spout). That's real CPU/GPU load competing with the actual streaming path
+                // (encode loop at THREAD_PRIORITY_HIGHEST, rtmp-writer at ABOVE_NORMAL) for the
+                // same finite CPU time — under sustained contention, BELOW_NORMAL here means the
+                // scheduler favors the stream actually reaching viewers over the local preview
+                // feed, rather than treating both as equally important.
+                unsafe { let _ = SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL); }
+                // Thread-affinity note (same reasoning as blur_engine/GL in the compositor thread
+                // below): the D3D11 device is created and used exclusively from this one thread.
+                let mut spout_sender: Option<crate::spout::SpoutSender> = None;
+                let mut spout_active_name: Option<String> = None;
+                // Last (share_handle, width, height) reported to the C# host via
+                // Event::SpoutTextureReady — compared against SpoutSender::texture_info() each
+                // publish so the event only fires on an actual create/resize.
+                let mut spout_notified_info: Option<(u32, u32, u32, i64)> = None;
+
+                loop {
+                    let msg = {
+                        let mut slot = spout_mailbox.slot.lock().unwrap();
+                        loop {
+                            if let Some(msg) = slot.take() { break msg; }
+                            slot = spout_mailbox.notify.wait(slot).unwrap();
+                        }
+                    };
+
+                    if msg.enabled && msg.primary_frame_known {
+                        if spout_active_name.as_deref() != Some(msg.sender_name.as_str()) {
+                            // First enable, or the configured name changed — Spout has no rename
+                            // operation, so drop (deregisters) and stand up fresh.
+                            spout_sender = None;
+                            match crate::spout::SpoutSender::new(&msg.sender_name) {
+                                Ok(sender) => {
+                                    spout_sender = Some(sender);
+                                    spout_active_name = Some(msg.sender_name.clone());
+                                }
+                                Err(e) => {
+                                    tracing::warn!("Failed to start Spout sender '{}': {e:#}", msg.sender_name);
+                                    spout_active_name = None;
+                                }
+                            }
+                        }
+                        if let Some(sender) = spout_sender.as_mut() {
+                            if let Err(e) = sender.send_bgra(&msg.frame.pixels, msg.frame.width, msg.frame.height) {
+                                tracing::warn!("Spout send_bgra failed: {e:#}");
+                            }
+                            let info = sender.texture_info();
+                            if info.is_some() && info != spout_notified_info {
+                                if let Some((share_handle, width, height, adapter_luid)) = info {
+                                    tracing::info!(
+                                        "[diag] Spout texture ready: share_handle=0x{share_handle:08X} width={width} height={height} adapter_luid={adapter_luid}"
+                                    );
+                                    let _ = spout_evt_tx.send((share_handle, width, height, adapter_luid));
+                                }
+                                spout_notified_info = info;
+                            }
+                        }
+                    } else if spout_sender.is_some() {
+                        spout_sender = None; // Drop deregisters the sender name.
+                        spout_active_name = None;
+                        spout_notified_info = None;
+                    }
+                }
+            })
+            .expect("failed to spawn spout-publisher thread");
+    }
 
     std::thread::spawn(move || {
         let mut latest_pips: HashMap<String, Arc<RawFrame>> = HashMap::new();
@@ -874,6 +996,12 @@ pub fn start_compositor(
                         };
 
                         let blur = cfg.blur_regions.clone();
+                        let spout_enabled = cfg.spout_enabled;
+                        let spout_sender_name = cfg.spout_sender_name.clone();
+                        // Whether this scene has a primary source configured at all, regardless
+                        // of whether it's delivered its first frame yet — see the Spout-publish
+                        // gate below for why this matters.
+                        let has_configured_primary = cfg.sources.iter().any(|s| s.is_primary);
                         drop(cfg);
                         let out_frame = composite_frame(&composite, &shm_overlay, &blur, &mut pip_scalers, &mut blur_engine, &mut overlay_buf, &mut good_overlay_buf, &mut last_overlay_dims);
 
@@ -891,7 +1019,35 @@ pub fn start_compositor(
                             None => out_frame,
                         };
                         last_composited = Some(Arc::clone(&final_frame));
-                        let _ = tx.send(final_frame);
+                        // Preview/streaming get the frame first, unconditionally. Spout's actual
+                        // GPU publish now happens entirely on its own thread (see SpoutMailbox's
+                        // doc comment) — handing it off here is just an Arc clone + a mutex swap,
+                        // never a blocking GPU call, so it can never delay this thread reaching
+                        // the next recomposite tick the way the old inline call could.
+                        let _ = tx.send(Arc::clone(&final_frame));
+
+                        // Skip Spout entirely while a *configured* primary hasn't delivered its
+                        // first frame yet — canvas_dims is a transient fallback in that window
+                        // (see its own comment above), and creating/publishing a texture at that
+                        // throwaway size just to immediately replace it once the real frame
+                        // arrives creates a race: a receiver (including our own C# "Show
+                        // Preview" path) that's slow to open the first handle can end up trying
+                        // to open a texture the Rust side has already destroyed and recreated at
+                        // the real size, which fails with a generic, hard-to-diagnose
+                        // E_INVALIDARG rather than anything pointing at what actually happened.
+                        // A scene with no primary configured at all isn't affected — canvas_dims
+                        // there is the real, stable answer from the start, not a placeholder.
+                        let primary_frame_known = latest_primary.is_some() || !has_configured_primary;
+                        {
+                            let mut slot = spout_mailbox.slot.lock().unwrap();
+                            *slot = Some(SpoutPublishMsg {
+                                enabled: spout_enabled,
+                                primary_frame_known,
+                                sender_name: spout_sender_name,
+                                frame: Arc::clone(&final_frame),
+                            });
+                        }
+                        spout_mailbox.notify.notify_one();
                     }
                 };
             }
@@ -935,6 +1091,11 @@ pub fn start_compositor(
                                 // Config) — falls through to the plain instant-cut recomposite.
                             }
                         }
+                        // warn! so this shows in the C# Core Diagnostics panel by default (see
+                        // the matching Command::Config log in main.rs) — confirms the compositor
+                        // thread actually woke up and will recomposite on the next 16ms tick,
+                        // as opposed to the notify getting lost or this thread being stuck.
+                        tracing::warn!("[diag] Compositor woke on config change, will recomposite next tick");
                         dirty = true;
                     }
                     _ = recompute_interval.tick(), if dirty || transition.is_some() => {

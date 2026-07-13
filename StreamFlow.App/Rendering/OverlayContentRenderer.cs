@@ -69,14 +69,40 @@ public static class OverlayContentRenderer
 
     /// <summary>Applies a native pixel size to a slot's aspect ratio immediately — no round
     /// trip to the core is needed for a static overlay, unlike capture sources whose resolution
-    /// only the core can determine.</summary>
-    public static void ApplyRenderedAspectRatio(SourceSlot slot, int width, int height)
+    /// only the core can determine.
+    ///
+    /// <paramref name="trackNaturalSize"/> (Text/Timer only — see call sites) additionally scales
+    /// the box itself to track the rendered content's own natural size changing, e.g. a FontSize
+    /// edit growing/shrinking the rendered text. Without this, the box's WPercent stays pinned at
+    /// whatever it already was and only the aspect ratio gets corrected — which for the same text
+    /// at a uniformly different font scale barely changes (both dimensions grow/shrink together),
+    /// so a FontSize slider visibly did nothing: the compositor's stretch-to-fit absorbed the
+    /// entire size difference invisibly into the box's existing footprint. Image overlays
+    /// deliberately don't opt into this — replacing a small icon with a much larger photo
+    /// shouldn't balloon the box out to the new file's native resolution, just correct its aspect
+    /// ratio at whatever size the user already positioned it at.</summary>
+    public static void ApplyRenderedAspectRatio(SourceSlot slot, int width, int height, bool trackNaturalSize = false)
     {
         if (width <= 0 || height <= 0) return;
 
+        if (!trackNaturalSize)
+        {
+            slot.AspectRatio = width / (double)height;
+            if (slot.IsAspectLocked)
+                slot.ResizeToWidthPercent(slot.WPercent);
+            return;
+        }
+
+        var scaleFactor = slot.LastRenderedContentWidth is double lastWidth && lastWidth > 0
+            ? width / lastWidth
+            : 1.0;
+        slot.LastRenderedContentWidth = width;
+
         slot.AspectRatio = width / (double)height;
-        if (slot.IsAspectLocked)
-            slot.ResizeToWidthPercent(slot.WPercent);
+        if (!slot.IsAspectLocked) return;
+
+        var targetWPercent = Math.Clamp(slot.WPercent * scaleFactor, 5, 100 - slot.XPercent);
+        slot.ResizeToWidthPercent(targetWPercent);
     }
 
     /// <summary>Headroom over an image overlay's current on-screen pixel size when capping its
@@ -130,18 +156,34 @@ public static class OverlayContentRenderer
     /// actually sent to the core was too small for however large the box was placed).</summary>
     private const double TextSupersampleFactor = 4.0;
 
-    /// <summary>Rasterizes a string to a tightly-cropped BGRA bitmap (white bold text on a
-    /// transparent background) for use as a static overlay.</summary>
-    public static (int Width, int Height, byte[] Pixels)? RenderTextToBgra(
-        string text, double fontSize = 48, System.Windows.Media.Color? color = null, bool bold = true)
+    /// <summary>Rasterizes a string to a tightly-cropped BGRA bitmap for use as a static
+    /// overlay — formatting (font/size/color/bold/italic/alignment/outline) comes from
+    /// <paramref name="style"/>, defaulting to TextStyle's own defaults (white bold Segoe UI,
+    /// no outline) when omitted.</summary>
+    public static (int Width, int Height, byte[] Pixels)? RenderTextToBgra(string text, TextStyle? style = null)
     {
-        var typeface = new Typeface(new System.Windows.Media.FontFamily("Segoe UI"), FontStyles.Normal, bold ? FontWeights.Bold : FontWeights.Normal, FontStretches.Normal);
+        style ??= new TextStyle();
+        var fontFamily = string.IsNullOrWhiteSpace(style.FontFamily) ? "Segoe UI" : style.FontFamily;
+        var typeface = new Typeface(new System.Windows.Media.FontFamily(fontFamily),
+            style.IsItalic ? FontStyles.Italic : FontStyles.Normal,
+            style.IsBold ? FontWeights.Bold : FontWeights.Normal, FontStretches.Normal);
         var formatted = new FormattedText(
             text, CultureInfo.InvariantCulture, System.Windows.FlowDirection.LeftToRight, typeface,
-            emSize: fontSize * TextSupersampleFactor, new SolidColorBrush(color ?? System.Windows.Media.Colors.White), 1.0);
+            emSize: style.FontSize * TextSupersampleFactor, new SolidColorBrush(style.FontColor), 1.0)
+        {
+            TextAlignment = style.Alignment switch
+            {
+                TextHorizontalAlignment.Center => System.Windows.TextAlignment.Center,
+                TextHorizontalAlignment.Right => System.Windows.TextAlignment.Right,
+                _ => System.Windows.TextAlignment.Left,
+            }
+        };
 
-        var width = (int)Math.Ceiling(formatted.WidthIncludingTrailingWhitespace);
-        var height = (int)Math.Ceiling(formatted.Height);
+        // Outline needs extra room around the glyph bounds so the stroke doesn't get clipped
+        // at the bitmap edge — padded on all sides, origin shifted to match.
+        var outlinePad = style.OutlineEnabled ? style.OutlineThickness * TextSupersampleFactor : 0;
+        var width = (int)Math.Ceiling(formatted.WidthIncludingTrailingWhitespace + outlinePad * 2);
+        var height = (int)Math.Ceiling(formatted.Height + outlinePad * 2);
         if (width <= 0 || height <= 0) return null;
 
         var visual = new DrawingVisual();
@@ -150,8 +192,26 @@ public static class OverlayContentRenderer
         // whatever the default happens to resolve to.
         TextOptions.SetTextRenderingMode(visual, TextRenderingMode.Grayscale);
         TextOptions.SetTextFormattingMode(visual, TextFormattingMode.Ideal);
+        var origin = new System.Windows.Point(outlinePad, outlinePad);
         using (var dc = visual.RenderOpen())
-            dc.DrawText(formatted, new System.Windows.Point(0, 0));
+        {
+            if (style.OutlineEnabled)
+            {
+                // Stroke the glyphs' own outline geometry rather than the classic "draw N
+                // offset copies behind it" hack — centers evenly on the glyph edge at any
+                // thickness instead of looking uneven/gappy at larger strokes.
+                var geometry = formatted.BuildGeometry(origin);
+                var pen = new System.Windows.Media.Pen(new SolidColorBrush(style.OutlineColor), style.OutlineThickness * TextSupersampleFactor)
+                {
+                    LineJoin = PenLineJoin.Round
+                };
+                dc.DrawGeometry(new SolidColorBrush(style.FontColor), pen, geometry);
+            }
+            else
+            {
+                dc.DrawText(formatted, origin);
+            }
+        }
 
         // RenderTargetBitmap only renders in premultiplied alpha — un-premultiply below so this
         // matches the straight alpha the compositor's alpha-blend expects everywhere else.
@@ -176,21 +236,41 @@ public static class OverlayContentRenderer
 
     public static (int Width, int Height, byte[] Pixels)? RenderChatToBgra(SourceSlot slot)
     {
-        var targetWidth = (int)Math.Ceiling((slot.WPercent / 100.0 * 640) * TextSupersampleFactor);
-        var targetHeight = (int)Math.Ceiling((slot.HPercent / 100.0 * 360) * TextSupersampleFactor);
+        // slot.CanvasWidth/CanvasHeight (not a hardcoded 640x360) — these mirror the scene's
+        // actual aspect ratio (see SceneEditorViewModel.UpdateCanvasReference), which isn't
+        // always 16:9. A hardcoded 360 here previously meant the rendered bitmap's proportions
+        // didn't match the box it gets stretched into on any non-16:9 scene, distorting the
+        // composited text size relative to the local WPF preview (which already uses these real
+        // per-slot values everywhere else).
+        var targetWidth = (int)Math.Ceiling((slot.WPercent / 100.0 * slot.CanvasWidth) * TextSupersampleFactor);
+        var targetHeight = (int)Math.Ceiling((slot.HPercent / 100.0 * slot.CanvasHeight) * TextSupersampleFactor);
 
         if (targetWidth <= 0 || targetHeight <= 0)
             return RenderEmptyChatToBgra();
 
-        var messages = slot.Content is ChatOverlayContent chat ? (IReadOnlyList<ChatMessage>)chat.ChatMessages : Array.Empty<ChatMessage>();
+        var chatContent = slot.Content as ChatOverlayContent;
+        var messages = chatContent is not null ? (IReadOnlyList<ChatMessage>)chatContent.ChatMessages : Array.Empty<ChatMessage>();
         if (messages.Count == 0)
         {
             var emptyPixels = new byte[targetWidth * targetHeight * 4];
             return (targetWidth, targetHeight, emptyPixels);
         }
 
-        var typeface = new Typeface(new System.Windows.Media.FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal);
-        var spacing = 8 * TextSupersampleFactor;
+        // Username segment always renders bold (in its own per-user color) regardless of
+        // Style.IsBold, since that's what visually distinguishes speakers — Style governs the
+        // message-text segment's weight/color/family/italic instead. Outline isn't applied here
+        // (see ChatOverlayContent.Style's own doc comment).
+        var style = chatContent?.Style ?? new TextStyle();
+        var fontFamily = string.IsNullOrWhiteSpace(style.FontFamily) ? "Segoe UI" : style.FontFamily;
+        var messageStyle = style.IsItalic ? FontStyles.Italic : FontStyles.Normal;
+        var messageWeight = style.IsBold ? FontWeights.Bold : FontWeights.Normal;
+        var typeface = new Typeface(new System.Windows.Media.FontFamily(fontFamily), messageStyle, FontWeights.Bold, FontStretches.Normal);
+        var messageBrush = new SolidColorBrush(style.FontColor);
+        // Proportional to FontSize, not a flat constant — at the default FontSize (48) this
+        // still works out to the original hardcoded 8 (48/6=8), so existing scenes don't visibly
+        // jump, but it now actually shrinks/grows the gap as the user adjusts font size instead
+        // of leaving it fixed while the text around it changes size.
+        var spacing = style.FontSize / 6 * TextSupersampleFactor;
         var messagesToRender = new List<FormattedText>();
         double totalHeight = 0;
 
@@ -198,9 +278,12 @@ public static class OverlayContentRenderer
         {
             var msg = messages[i];
             var text = $"{msg.Username}: {msg.Text}";
+            // Chat messages render much smaller than a standalone Text overlay's own FontSize
+            // scale (48pt default there), so /3 keeps TextStyle's shared 48pt default mapping to
+            // chat's pre-refactor hardcoded 16pt — proportional from there if the user changes it.
             var formatted = new FormattedText(
                 text, CultureInfo.InvariantCulture, System.Windows.FlowDirection.LeftToRight, typeface,
-                emSize: 16 * TextSupersampleFactor, System.Windows.Media.Brushes.White, 1.0)
+                emSize: style.FontSize / 3 * TextSupersampleFactor, messageBrush, 1.0)
             {
                 MaxTextWidth = targetWidth
             };
@@ -215,8 +298,8 @@ public static class OverlayContentRenderer
             }
             formatted.SetForegroundBrush(new SolidColorBrush(color), 0, usernameLength);
 
-            formatted.SetFontWeight(FontWeights.Normal, usernameLength, msg.Text.Length + 1);
-            formatted.SetForegroundBrush(System.Windows.Media.Brushes.White, usernameLength, msg.Text.Length + 1);
+            formatted.SetFontWeight(messageWeight, usernameLength, msg.Text.Length + 1);
+            formatted.SetForegroundBrush(messageBrush, usernameLength, msg.Text.Length + 1);
 
             var nextHeight = totalHeight + formatted.Height + (messagesToRender.Count > 0 ? spacing : 0);
             if (nextHeight > targetHeight)

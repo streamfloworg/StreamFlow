@@ -3,10 +3,10 @@
 ## Documentation Location
 
 All project planning and documentation markdown files live in the Obsidian vault:
-`D:\Documents\Obsidian Vault\StreamFlow\Maker\`
+`D:\Documents\Obsidian Vault\StreamFlow\`
 
 Subdirectories:
-- `Plans\` — implementation plans (IPC_PLAN.md, PHASE1_PLAN.md, etc.)
+- `Plans\` — Task List
 - `Memory\` — Claude memory snapshots
 - `Session Log\` — session continuity logs
 

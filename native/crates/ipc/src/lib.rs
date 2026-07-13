@@ -197,6 +197,18 @@ pub enum Command {
         /// is a non-issue for a one-shot registration rather than a per-frame hot path.
         pixels_base64: String,
     },
+    /// Enables/disables publishing the composited output as a named Spout2 source (see
+    /// `spout.rs`) — other Spout-aware apps on the same machine (OBS + obs-spout2-plugin,
+    /// TouchDesigner, Resolume, the official SpoutReceiver demo) can pick it up directly.
+    /// Independent of streaming/preview: can be on while idle, off while streaming, etc.
+    /// Fire-and-forget: no response event, failures are logged core-side (Core Diagnostics).
+    SetSpoutOutput {
+        enabled: bool,
+        /// Ignored (previous name kept) when empty — lets the UI send just `{enabled}` to
+        /// toggle without needing to also resend whatever name was last configured.
+        #[serde(default)]
+        sender_name: String,
+    },
 }
 
 // ── Events (Core  Electron) ──────────────────────────────────────────────────
@@ -306,6 +318,25 @@ pub enum Event {
         /// Linear scalar 0.0-1.0, matching `IAudioEndpointVolume::GetMasterVolumeLevelScalar`.
         volume: f32,
         muted: bool,
+    },
+    /// Emitted whenever the Spout output's shared D3D11 texture is (re)created — on first enable
+    /// and again on every resolution change (see `spout.rs`). `share_handle` is the raw DXGI
+    /// shared-resource handle value: Windows guarantees kernel-object handles fit in 32 bits even
+    /// on 64-bit builds, and legacy (non-NT) shared handles like this one are usable directly by
+    /// any process on the same session without `DuplicateHandle` — the C# host opens it straight
+    /// into its own D3D9Ex device (`IDirect3DDevice9Ex::CreateTexture`) for the "Show Preview"
+    /// GPU-backed preview path (Option B of the Spout2 Integration Plan), no separate IPC needed
+    /// to hand off the resource itself.
+    SpoutTextureReady {
+        share_handle: u32,
+        width: u32,
+        height: u32,
+        /// The D3D11 device's DXGI adapter LUID, packed as `(HighPart << 32) | LowPart`. D3D9's
+        /// and DXGI's adapter enumeration don't have to agree on which one is "default" (a real
+        /// gotcha on hybrid-graphics/multi-GPU machines) — the C# host uses
+        /// `IDirect3D9Ex::GetAdapterLUID` to find the matching adapter before creating its own
+        /// device, rather than assuming adapter 0 is the same physical GPU.
+        adapter_luid: i64,
     },
 }
 

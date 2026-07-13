@@ -38,6 +38,7 @@ public enum CoreState
 [JsonDerivedType(typeof(DisablePreviewCommand), "disable_preview")]
 [JsonDerivedType(typeof(ConfigCommand), "config")]
 [JsonDerivedType(typeof(AddStaticOverlayCommand), "add_static_overlay")]
+[JsonDerivedType(typeof(SetSpoutOutputCommand), "set_spout_output")]
 public abstract record CoreCommand;
 
 /// <summary>First message on stdin: establishes session credentials.</summary>
@@ -155,6 +156,15 @@ public sealed record AudioSourceConfig(string DeviceId, float Gain = 1.0f, bool 
 /// </summary>
 public sealed record AddStaticOverlayCommand(string SourceId, uint Width, uint Height, string PixelsBase64) : CoreCommand;
 
+/// <summary>Enables/disables publishing the composited output as a named Spout2 source (see
+/// native/crates/core/src/spout.rs) — other Spout-aware apps on the same machine (OBS +
+/// obs-spout2-plugin, TouchDesigner, Resolume, the official SpoutReceiver demo) can pick it up
+/// directly. Independent of streaming/preview — can be on while idle. <see cref="SenderName"/>
+/// empty means "keep whatever name was last configured" (core-side default is "StreamFlow"),
+/// so a plain on/off toggle doesn't need to resend it every time.
+/// Fire-and-forget: no response event; failures are logged core-side (Core Diagnostics panel).</summary>
+public sealed record SetSpoutOutputCommand(bool Enabled, string SenderName = "") : CoreCommand;
+
 // ── Events (Rust core → C#, newline-delimited JSON on stdout) ────────────
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
@@ -172,6 +182,7 @@ public sealed record AddStaticOverlayCommand(string SourceId, uint Width, uint H
 [JsonDerivedType(typeof(AudioDeviceLevelEvent), "audio_device_level")]
 [JsonDerivedType(typeof(AudioDeviceVolumeEvent), "audio_device_volume")]
 [JsonDerivedType(typeof(CoreStatsEvent), "core_stats")]
+[JsonDerivedType(typeof(SpoutTextureReadyEvent), "spout_texture_ready")]
 public abstract record CoreEvent;
 
 /// <summary>Emitted once on stdout after the data pipe is bound and ready.</summary>
@@ -203,6 +214,18 @@ public sealed record StreamStatusEvent(ulong Frame, float Fps, uint BitrateKbps,
 /// nothing here is time-sensitive. VramUsedMb/VramTotalMb are null when the VRAM query itself
 /// isn't available (e.g. an unsupported driver), independent of whether any capture is active.</summary>
 public sealed record CoreStatsEvent(float CpuPercent, float WorkingSetMb, float? VramUsedMb, float? VramTotalMb) : CoreEvent;
+
+/// <summary>Emitted whenever the Spout output's shared D3D11 texture is (re)created — on first
+/// enable and again on every resolution change (see native/crates/core/src/spout.rs).
+/// ShareHandle is the raw DXGI shared-resource handle value, directly usable by
+/// IDirect3DDevice9Ex.CreateTexture on this process's own D3D9Ex device (no DuplicateHandle
+/// needed — see the Rust-side doc comment on Event::SpoutTextureReady for why) to power the
+/// "Show Preview" GPU-backed preview path (Option B of the Spout2 Integration Plan). AdapterLuid
+/// is the Rust core's D3D11 device's DXGI adapter LUID, packed as (HighPart &lt;&lt; 32) | LowPart —
+/// SpoutPreviewRenderer uses IDirect3D9Ex.GetAdapterLUID to find the matching D3D9 adapter rather
+/// than assuming adapter 0 is the same physical GPU (a real failure mode on hybrid-graphics
+/// machines: opening a shared handle from a mismatched adapter fails with E_INVALIDARG).</summary>
+public sealed record SpoutTextureReadyEvent(uint ShareHandle, uint Width, uint Height, long AdapterLuid) : CoreEvent;
 
 /// <summary>Width/Height are the source's native capture resolution (0 if not known — currently
 /// only webcams, whose resolution isn't read without opening the device).</summary>

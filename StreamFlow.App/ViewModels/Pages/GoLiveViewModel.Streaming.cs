@@ -147,6 +147,32 @@ public partial class GoLiveViewModel
         ScheduleSaveSettings();
     }
 
+    /// <summary>"Show Preview" in the UI — one switch driving both halves of the Spout2
+    /// Integration Plan: publishes the composited output as a named Spout2 source for other apps
+    /// on this machine (OBS + obs-spout2-plugin, TouchDesigner, Resolume, the official
+    /// SpoutReceiver demo) to pick up (Option A), and — since the same shared texture already
+    /// exists once this is on — GoLiveView.xaml.cs also opens it directly into a D3DImage for the
+    /// primary preview instead of the CPU pipe+WriteableBitmap path (Option B; see
+    /// SpoutPreviewRenderer). Independent of streaming, can be on while idle. See
+    /// native/crates/core/src/spout.rs and the Spout2 Integration Plan in the Obsidian vault.</summary>
+    [ObservableProperty]
+    private bool _isSpoutOutputEnabled;
+
+    [ObservableProperty]
+    private string _spoutSenderName = "StreamFlow";
+
+    partial void OnIsSpoutOutputEnabledChanged(bool value)
+    {
+        _ = _core.SendCommandAsync(new SetSpoutOutputCommand(value, SpoutSenderName));
+        ScheduleSaveSettings();
+    }
+
+    partial void OnSpoutSenderNameChanged(string value)
+    {
+        if (IsSpoutOutputEnabled) _ = _core.SendCommandAsync(new SetSpoutOutputCommand(true, value));
+        ScheduleSaveSettings();
+    }
+
     private void OnActiveProfileChanged(StreamingProfile? value)
     {
         if (value is not null)
@@ -208,6 +234,8 @@ public partial class GoLiveViewModel
             Name = scene.Name,
             CanvasResolutionWidth = scene.CanvasResolutionWidth,
             CanvasResolutionHeight = scene.CanvasResolutionHeight,
+            SwitchHotkeyKey = scene.SwitchHotkey?.Key.ToString(),
+            SwitchHotkeyModifiers = scene.SwitchHotkey?.Modifiers.ToString(),
             Slots = scene.Slots.Select(s => new SlotSettings
             {
                 IsPrimary = s.IsPrimary,
@@ -232,9 +260,16 @@ public partial class GoLiveViewModel
                 RotationDegrees = s.RotationDegrees,
                 TimerMode = (s.Content as TimerOverlayContent)?.TimerMode ?? TimerMode.CountDown,
                 TimerDurationSeconds = (s.Content as TimerOverlayContent)?.TimerDurationSeconds ?? 300,
-                TextFontSize = (s.Content as TextOverlayContent)?.FontSize,
-                TextFontColorHex = (s.Content as TextOverlayContent)?.FontColor.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                TextIsBold = (s.Content as TextOverlayContent)?.IsBold
+                TimerAutoStartOnGoLive = (s.Content as TimerOverlayContent)?.AutoStartOnGoLive ?? false,
+                TextFontFamily = (s.Content as IHasTextStyle)?.Style.FontFamily,
+                TextFontSize = (s.Content as IHasTextStyle)?.Style.FontSize,
+                TextFontColorHex = (s.Content as IHasTextStyle)?.Style.FontColor.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                TextIsBold = (s.Content as IHasTextStyle)?.Style.IsBold,
+                TextIsItalic = (s.Content as IHasTextStyle)?.Style.IsItalic,
+                TextAlignment = (s.Content as IHasTextStyle)?.Style.Alignment.ToString(),
+                TextOutlineEnabled = (s.Content as IHasTextStyle)?.Style.OutlineEnabled,
+                TextOutlineColorHex = (s.Content as IHasTextStyle)?.Style.OutlineColor.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                TextOutlineThickness = (s.Content as IHasTextStyle)?.Style.OutlineThickness
             }).ToList()
         }).ToList();
 
@@ -287,6 +322,8 @@ public partial class GoLiveViewModel
             Name = scene.Name,
             CanvasResolutionWidth = scene.CanvasResolutionWidth,
             CanvasResolutionHeight = scene.CanvasResolutionHeight,
+            SwitchHotkeyKey = scene.SwitchHotkey?.Key.ToString(),
+            SwitchHotkeyModifiers = scene.SwitchHotkey?.Modifiers.ToString(),
             Slots = scene.Slots.Select(s => new SlotSettings
             {
                 IsPrimary = s.IsPrimary,
@@ -311,9 +348,16 @@ public partial class GoLiveViewModel
                 RotationDegrees = s.RotationDegrees,
                 TimerMode = (s.Content as TimerOverlayContent)?.TimerMode ?? TimerMode.CountDown,
                 TimerDurationSeconds = (s.Content as TimerOverlayContent)?.TimerDurationSeconds ?? 300,
-                TextFontSize = (s.Content as TextOverlayContent)?.FontSize,
-                TextFontColorHex = (s.Content as TextOverlayContent)?.FontColor.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                TextIsBold = (s.Content as TextOverlayContent)?.IsBold
+                TimerAutoStartOnGoLive = (s.Content as TimerOverlayContent)?.AutoStartOnGoLive ?? false,
+                TextFontFamily = (s.Content as IHasTextStyle)?.Style.FontFamily,
+                TextFontSize = (s.Content as IHasTextStyle)?.Style.FontSize,
+                TextFontColorHex = (s.Content as IHasTextStyle)?.Style.FontColor.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                TextIsBold = (s.Content as IHasTextStyle)?.Style.IsBold,
+                TextIsItalic = (s.Content as IHasTextStyle)?.Style.IsItalic,
+                TextAlignment = (s.Content as IHasTextStyle)?.Style.Alignment.ToString(),
+                TextOutlineEnabled = (s.Content as IHasTextStyle)?.Style.OutlineEnabled,
+                TextOutlineColorHex = (s.Content as IHasTextStyle)?.Style.OutlineColor.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                TextOutlineThickness = (s.Content as IHasTextStyle)?.Style.OutlineThickness
             }).ToList()
         }).ToList();
 
@@ -656,9 +700,16 @@ public partial class GoLiveViewModel
                     RotationDegrees = s.RotationDegrees,
                     TimerMode = (s.Content as TimerOverlayContent)?.TimerMode ?? TimerMode.CountDown,
                     TimerDurationSeconds = (s.Content as TimerOverlayContent)?.TimerDurationSeconds ?? 300,
-                    TextFontSize = (s.Content as TextOverlayContent)?.FontSize,
-                    TextFontColorHex = (s.Content as TextOverlayContent)?.FontColor.ToString(CultureInfo.InvariantCulture),
-                    TextIsBold = (s.Content as TextOverlayContent)?.IsBold
+                    TimerAutoStartOnGoLive = (s.Content as TimerOverlayContent)?.AutoStartOnGoLive ?? false,
+                    TextFontFamily = (s.Content as IHasTextStyle)?.Style.FontFamily,
+                    TextFontSize = (s.Content as IHasTextStyle)?.Style.FontSize,
+                    TextFontColorHex = (s.Content as IHasTextStyle)?.Style.FontColor.ToString(CultureInfo.InvariantCulture),
+                    TextIsBold = (s.Content as IHasTextStyle)?.Style.IsBold,
+                    TextIsItalic = (s.Content as IHasTextStyle)?.Style.IsItalic,
+                    TextAlignment = (s.Content as IHasTextStyle)?.Style.Alignment.ToString(),
+                    TextOutlineEnabled = (s.Content as IHasTextStyle)?.Style.OutlineEnabled,
+                    TextOutlineColorHex = (s.Content as IHasTextStyle)?.Style.OutlineColor.ToString(CultureInfo.InvariantCulture),
+                    TextOutlineThickness = (s.Content as IHasTextStyle)?.Style.OutlineThickness
                 }).ToList()
             }).ToList();
 
@@ -859,7 +910,7 @@ public partial class GoLiveViewModel
         await _core.SendCommandAsync(new StartStreamCommand(
             rtmpUrl, BitrateKbps, Fps,
             OutputWidth: null, OutputHeight: null, FitMode: null,
-            Encoder, sources, audioSourceConfigs, RecordPath: null));
+            Encoder, sources, audioSourceConfigs, RecordPath: BuildRecordPathIfEnabled()));
     }
 
     [RelayCommand(CanExecute = nameof(IsStreaming))]
