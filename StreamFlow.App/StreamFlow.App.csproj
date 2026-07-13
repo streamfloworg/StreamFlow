@@ -242,4 +242,20 @@
     <Copy SourceFiles="@(FFmpegDll)" DestinationFolder="$(OutputPath)runtimes\" SkipUnchangedFiles="true" />
   </Target>
 
+  <!-- `dotnet publish -o <dir>` (what the Velopack release pipeline uses) writes to a directory
+       entirely separate from the regular build output BuildRustCore copies into above - nothing
+       about a normal publish pulls those files across, so a published/installed build silently
+       shipped without the native core or its FFmpeg DLLs at all. Runs after Publish (rather than
+       trying to fold into it) so $(PublishDir) is already fully resolved; BuildRustCore has
+       already run by then (Publish depends on Build), so the binary just needs copying again,
+       not rebuilding. -->
+  <Target Name="PublishRustCore" AfterTargets="Publish">
+    <MakeDir Directories="$(PublishDir)runtimes" />
+    <Copy SourceFiles="$(NativeDir)\target\$(RustBinarySubDir)\streamflow-core.exe" DestinationFolder="$(PublishDir)runtimes\" SkipUnchangedFiles="true" />
+    <ItemGroup>
+      <FFmpegDllPublish Include="$(FFmpegBinDir)\*.dll" Condition="Exists('$(FFmpegBinDir)')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(FFmpegDllPublish)" DestinationFolder="$(PublishDir)runtimes\" SkipUnchangedFiles="true" />
+  </Target>
+
 </Project>
