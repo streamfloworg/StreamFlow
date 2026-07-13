@@ -10,13 +10,13 @@ public enum UpdateCheckStatus { NotSupported, UpToDate, UpdateAvailable, Error }
 public sealed record UpdateCheckResult(UpdateCheckStatus Status, UpdateInfo? Info = null, string? ErrorMessage = null);
 
 /// <summary>Checks for and applies new releases via Velopack, from GitHub Releases on the
-/// public nomadamo/StreamFlow repo. Only meaningful for the unpackaged distribution — the MSIX
-/// build manages its own updates, and <see cref="UpdateManager.IsInstalled"/> is false for both
-/// the MSIX build and a plain `dotnet run` dev session, so every method here degrades to
+/// public streamfloworg/StreamFlow repo. Only meaningful for the unpackaged distribution — the
+/// MSIX build manages its own updates, and <see cref="UpdateManager.IsInstalled"/> is false for
+/// both the MSIX build and a plain `dotnet run` dev session, so every method here degrades to
 /// <see cref="UpdateCheckStatus.NotSupported"/>/no-op in those cases rather than erroring.</summary>
 public sealed class UpdateService
 {
-    private static readonly UpdateManager Manager = new(new GithubSource("https://github.com/nomadamo/StreamFlow", null, false));
+    private static readonly UpdateManager Manager = new(new GithubSource("https://github.com/streamfloworg/StreamFlow", null, false));
 
     private readonly ILogger<UpdateService> _logger;
 
