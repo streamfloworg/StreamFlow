@@ -391,37 +391,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
-
-        <!-- ── Header: title, tally status, primary CTA ─────────────────────── -->
-        <Grid Grid.Row="0" Margin="24,20,24,16">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-
-
-
-            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0"
-                            Visibility="{Binding ViewModel.IsTestModeSelectorVisible, Converter={StaticResource BoolToVisibility}}"
-                            ToolTip="When on, Go Live verifies the full pipeline without going visible to followers/subscribers — a bandwidth-test flag on Twitch, or an unlisted throwaway broadcast on YouTube">
-                    <TextBlock Text="Test Mode" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}"/>
-                    <ToggleButton Style="{StaticResource TestModeToggleStyle}" VerticalAlignment="Center"
-                                  IsChecked="{Binding ViewModel.IsTestModeEnabled, Mode=TwoWay}"
-                                  IsEnabled="{Binding ViewModel.IsStreaming, Converter={StaticResource BooleanInvertConverter}}"/>
-                </StackPanel>
-                <Button VerticalAlignment="Center" Style="{StaticResource GoLiveButtonStyle}" adonisExtensions:CornerRadiusExtension.CornerRadius="7"
-                        ToolTipService.ShowOnDisabled="True">
-                    <Button.ToolTip>
-                        <Binding Path="ViewModel.StartStreamBlockedReason">
-                            <Binding.TargetNullValue>Starts streaming to the active profile's configured destination</Binding.TargetNullValue>
-                        </Binding>
-                    </Button.ToolTip>
-                </Button>
-            </StackPanel>
-        </Grid>
 
         <!-- Error banner: only visible when the core reports a failure -->
         <Border Grid.Row="0" VerticalAlignment="Bottom" Margin="24,0,24,-8" Padding="12,8" CornerRadius="4"
@@ -1540,11 +1510,42 @@
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
+                    <!-- Relocated Go Live / Test Mode / Record Controls -->
+                    <Border Grid.Row="0" BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="0,0,0,1" Padding="12" Background="{DynamicResource {x:Static adonisUi:Brushes.Layer2BackgroundBrush}}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Test Mode Toggle -->
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0"
+                                        Visibility="{Binding ViewModel.IsTestModeSelectorVisible, Converter={StaticResource BoolToVisibility}}"
+                                        ToolTip="When on, Go Live verifies the full pipeline without going visible to followers/subscribers — a bandwidth-test flag on Twitch, or an unlisted throwaway broadcast on YouTube">
+                                <TextBlock Text="Test Mode" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                <ToggleButton Style="{StaticResource TestModeToggleStyle}" VerticalAlignment="Center"
+                                              IsChecked="{Binding ViewModel.IsTestModeEnabled, Mode=TwoWay}"
+                                              IsEnabled="{Binding ViewModel.IsStreaming, Converter={StaticResource InverseBooleanConverter}}"/>
+                            </StackPanel>
+
+                            <!-- Go Live / Record / Stop Button -->
+                            <Button Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource GoLiveButtonStyle}" adonisExtensions:CornerRadiusExtension.CornerRadius="7"
+                                    HorizontalAlignment="Right" ToolTipService.ShowOnDisabled="True" Padding="16,8">
+                                <Button.ToolTip>
+                                    <Binding Path="ViewModel.StartStreamBlockedReason">
+                                        <Binding.TargetNullValue>Starts streaming to the active profile's configured destination</Binding.TargetNullValue>
+                                    </Binding>
+                                </Button.ToolTip>
+                            </Button>
+                        </Grid>
+                    </Border>
+
                     <!-- Segmented tab selector -->
-                    <Grid Grid.Row="0" Margin="12,12,12,8">
+                    <Grid Grid.Row="1" Margin="12,12,12,8">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="*"/>
@@ -1560,7 +1561,7 @@
                     </Grid>
 
                     <!-- Settings Tab Panel -->
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto"
                                   Visibility="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsSettingsTabActive, Converter={StaticResource BoolToVisibility}}">
                         <StackPanel Margin="12,0,12,12">
                             
@@ -1769,7 +1770,7 @@
                     </ScrollViewer>
 
                     <!-- Stream Manager Panel -->
-                    <Grid Grid.Row="1" Margin="12,4,12,12"
+                    <Grid Grid.Row="2" Margin="12,4,12,12"
                           Visibility="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsManagerTabActive, Converter={StaticResource BoolToVisibility}}">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/> <!-- Update Info fields -->
