@@ -475,33 +475,7 @@ impl StreamSession {
                             Err(TryRecvError::Empty) => {}
                         }
 
-                        // Gated on the *maximum* occupied length across sources, not the minimum
-                        // — a WASAPI loopback capture on an "output" device that isn't currently
-                        // playing anything genuinely delivers little to no packets while idle
-                        // (Windows suspends the audio engine on a render endpoint with nothing
-                        // actively rendering). Gating on the minimum meant one idle/silent
-                        // selected device could permanently stall `available` at 0, which starved
-                        // every other source's contribution too — the entire mix would produce
-                        // nothing until that one device resumed, easily the whole stream if it
-                        // never did. Each source below only contributes what it actually has
-                        // this chunk and is zero-padded otherwise, so a muted-but-capturing
-                        // source's ring buffer doesn't back up.
-                        let available = sources.iter()
-                            .map(|s| s.cons.occupied_len())
-                            .max()
-                            .unwrap_or(0);
-
-                        if available == 0 {
-                            std::thread::sleep(std::time::Duration::from_millis(5));
-                            continue;
-                        }
-
-                        let mut mixed = vec![0.0f32; CHUNK];
-
-                        // Re-read live so a mid-stream Command::SetAudioMix (see
-                        // StreamSession::set_audio_mix) takes effect on the very next chunk —
-                        // cheap enough per 512-sample chunk (a few hundred times/sec at most)
-                        // that there's no need to cache/diff against the previous read.
+                        // Re-read mix state once per iteration (cheap — lock is brief).
                         let (gains, audible): (Vec<f32>, Vec<bool>) = {
                             let states = shared_state.lock().unwrap();
                             let any_solo = states.iter().any(|s| s.solo);
@@ -510,12 +484,51 @@ impl StreamSession {
                                 .unzip()
                         };
 
+                        // ── Availability gate ─────────────────────────────────────────────
+                        // Normalize each source's available input samples to output frames so
+                        // sources at different rates are compared on the same scale.
+                        // Gate: at least ONE audible source must have a full chunk's worth of
+                        // data ready. Muted/silent sources are drained below regardless, but
+                        // they never block or gate the mix — only audible sources do.
+                        // If no audible source has enough, sleep briefly and retry.
+                        let any_audible_ready = sources.iter().enumerate().any(|(i, s)| {
+                            if !audible[i] { return false; }
+                            let available_frames = s.cons.occupied_len() / s.src_ch.max(1);
+                            let needed_frames    = s.in_per_chunk / s.src_ch.max(1);
+                            available_frames >= needed_frames
+                        });
+
+                        // Also drain muted sources that have accumulated data, regardless of
+                        // whether we're ready to mix — prevents ring buffer backpressure.
+                        if !any_audible_ready {
+                            // Drain only. If even muted sources are empty too, sleep briefly.
+                            let any_data = sources.iter().any(|s| s.cons.occupied_len() > 0);
+                            if !any_data {
+                                std::thread::sleep(std::time::Duration::from_millis(1));
+                            } else {
+                                // Drain muted sources while waiting for audible ones to fill.
+                                for (i, src) in sources.iter_mut().enumerate() {
+                                    if audible[i] { continue; }
+                                    let have = src.cons.occupied_len().min(src.in_per_chunk);
+                                    if have > 0 {
+                                        let raw_buf = &mut raw_bufs[i];
+                                        raw_buf.resize(have, 0.0);
+                                        src.cons.pop_slice(&mut raw_buf[..have]);
+                                    }
+                                }
+                            }
+                            continue;
+                        }
+
+                        let mut mixed = vec![0.0f32; CHUNK];
+
                         for (i, src) in sources.iter_mut().enumerate() {
-                            let raw_buf  = &mut raw_bufs[i];
-                            let out_buf  = &mut out_bufs[i];
+                            let raw_buf = &mut raw_bufs[i];
+                            let out_buf = &mut out_bufs[i];
                             out_buf.fill(0.0);
 
-                            // Pop at most in_per_chunk input samples (zero-pad remainder).
+                            // Pop up to in_per_chunk input samples. Always drain even when
+                            // muted so the source ring buffer doesn't back up.
                             let want = src.in_per_chunk;
                             raw_buf.resize(want.max(CHUNK), 0.0);
                             raw_buf.fill(0.0);
@@ -528,17 +541,21 @@ impl StreamSession {
                             let out_samples = if !src.swr.is_null() {
                                 unsafe {
                                     use ffmpeg_sys_next::*;
-                                    // Both input and output are packed/interleaved f32 (FLT).
-                                    // swr_convert treats them as single-plane (1 pointer).
-                                    let in_ptr:  *const u8 = raw_buf.as_ptr() as *const u8;
-                                    let out_ptr: *mut   u8 = out_buf.as_mut_ptr() as *mut u8;
-                                    let in_samples = (have / src.src_ch).max(0) as i32;
+                                    // AV_SAMPLE_FMT_FLT is packed/interleaved — single plane.
+                                    let in_ptr  = raw_buf.as_ptr()     as *const u8;
+                                    let out_ptr = out_buf.as_mut_ptr() as *mut   u8;
+                                    // swr_convert counts in FRAMES (not samples).
+                                    let in_frames  = (have / src.src_ch.max(1)) as i32;
+                                    let out_frames = (CHUNK / TARGET_CHANNELS as usize) as i32;
+                                    // Pass pointers as single-element arrays (packed format).
+                                    let in_arr:  [*const u8; 1] = [in_ptr];
+                                    let mut out_arr: [*mut u8; 1] = [out_ptr];
                                     let n = swr_convert(
                                         src.swr,
-                                        &mut (out_ptr as *mut u8) as *mut *mut u8,
-                                        (CHUNK / TARGET_CHANNELS as usize) as i32,
-                                        &(in_ptr as *const u8) as *const *const u8,
-                                        in_samples,
+                                        out_arr.as_mut_ptr(),
+                                        out_frames,
+                                        in_arr.as_ptr(),
+                                        in_frames,
                                     );
                                     if n > 0 { n as usize * TARGET_CHANNELS as usize } else { 0 }
                                 }

@@ -1,4 +1,4 @@
-﻿#![allow(unsafe_code)]
+#![allow(unsafe_code)]
 //! Audio capture for streaming.
 //!
 //! - `input:` prefix  → CPAL (microphone / physical input device)
@@ -440,29 +440,21 @@ fn start_wasapi_loopback(
     name: &str,
     peak_tx: Option<std::sync::mpsc::SyncSender<f32>>,
 ) -> Result<(ActiveStream, ringbuf::HeapCons<f32>, cpal::StreamConfig)> {
-    // Use CPAL to resolve sample_rate + channels for the device.
-    let host = cpal::default_host();
-    let device = if name.is_empty() {
-        host.default_output_device()
-            .ok_or_else(|| anyhow!("No default output device"))?
-    } else {
-        host.output_devices()?
-            .find(|x| x.name().unwrap_or_default() == name)
-            .ok_or_else(|| anyhow!("Output device '{name}' not found — is Voicemeeter running?"))?
-    };
+    // Pre-query the WASAPI mix format so the StreamConfig we return to the mixer
+    // reflects the actual channel count and sample rate Windows uses, not CPAL's
+    // potentially stale/differing values. Without this, the resampler in the mixer
+    // is initialised with the wrong src_ch and interprets the ring buffer's interleaved
+    // layout incorrectly (e.g. 8-ch device reported as 2-ch by CPAL).
+    let (actual_rate, actual_channels) = unsafe { query_wasapi_mix_format(name)? };
 
-    let out_cfg     = device.default_output_config()?;
-    let sample_rate = out_cfg.sample_rate().0;
-    let channels    = out_cfg.channels() as u32;
+    let rb = HeapRb::<f32>::new(actual_rate as usize * actual_channels as usize * 4);
+    let (mut prod, cons) = rb.split();
 
     let stream_config = cpal::StreamConfig {
-        channels:    channels as u16,
-        sample_rate: cpal::SampleRate(sample_rate),
+        channels:    actual_channels as u16,
+        sample_rate: cpal::SampleRate(actual_rate),
         buffer_size: cpal::BufferSize::Default,
     };
-
-    let rb = HeapRb::<f32>::new(sample_rate as usize * channels as usize * 4);
-    let (mut prod, cons) = rb.split();
 
     let (stop_tx, stop_rx) = std::sync::mpsc::sync_channel::<()>(1);
     let dev_name = name.to_owned();
@@ -472,7 +464,7 @@ fn start_wasapi_loopback(
         .spawn(move || {
             // Safety: WASAPI COM calls are all wrapped in this dedicated thread.
             let result = unsafe {
-                wasapi_loopback_thread(&dev_name, sample_rate, channels, &mut prod, stop_rx, peak_tx)
+                wasapi_loopback_thread(&dev_name, actual_rate, actual_channels, &mut prod, stop_rx, peak_tx)
             };
             if let Err(e) = result {
                 tracing::error!("WASAPI loopback thread error: {e}");
@@ -482,6 +474,73 @@ fn start_wasapi_loopback(
 
     Ok((ActiveStream::Wasapi(stop_tx), cons, stream_config))
 }
+
+/// Reads the Windows audio engine's mix format for a named render endpoint (or the default
+/// endpoint if name is empty) and returns `(sample_rate, channels)` — the values actually
+/// used by the audio engine, which may differ from what CPAL reports.
+unsafe fn query_wasapi_mix_format(dev_name: &str) -> Result<(u32, u32)> {
+    use windows::Win32::Foundation::PROPERTYKEY;
+    use windows::Win32::Media::Audio::{
+        eConsole, eRender,
+        IAudioClient, IMMDeviceEnumerator, MMDeviceEnumerator,
+        DEVICE_STATE_ACTIVE, WAVEFORMATEX,
+    };
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CoTaskMemFree, CLSCTX_ALL, COINIT_MULTITHREADED, STGM_READ,
+    };
+    use windows::Win32::System::Com::StructuredStorage::PropVariantClear;
+    use windows::Win32::System::Variant::VT_LPWSTR;
+    use windows::core::GUID;
+
+    let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+    let enumerator: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
+
+    let mm_device = if dev_name.is_empty() {
+        enumerator.GetDefaultAudioEndpoint(eRender, eConsole)?
+    } else {
+        let pkey = PROPERTYKEY {
+            fmtid: GUID::from_u128(0xa45c254e_df1c_4efd_8020_67d146a850e0),
+            pid: 14,
+        };
+        let collection = enumerator.EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE)?;
+        let count = collection.GetCount().unwrap_or(0);
+        let mut found = None;
+        for i in 0..count {
+            if let Ok(dev) = collection.Item(i) {
+                if let Ok(ps) = dev.OpenPropertyStore(STGM_READ) {
+                    if let Ok(mut pv) = ps.GetValue(&pkey) {
+                        if pv.Anonymous.Anonymous.vt == VT_LPWSTR {
+                            let ptr = pv.Anonymous.Anonymous.Anonymous.pwszVal;
+                            if !ptr.is_null() {
+                                if let Ok(friendly) = ptr.to_string() {
+                                    if friendly.contains(dev_name) || dev_name.contains(&friendly) {
+                                        let _ = PropVariantClear(&mut pv);
+                                        found = Some(dev);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        let _ = PropVariantClear(&mut pv);
+                    }
+                }
+            }
+        }
+        match found {
+            Some(d) => d,
+            None => enumerator.GetDefaultAudioEndpoint(eRender, eConsole)?,
+        }
+    };
+
+    let audio_client: IAudioClient = mm_device.Activate::<IAudioClient>(CLSCTX_ALL, None)?;
+    let mix_fmt_ptr: *mut WAVEFORMATEX = audio_client.GetMixFormat()?;
+    let fmt: WAVEFORMATEX = std::ptr::read_unaligned(mix_fmt_ptr);
+    let rate = fmt.nSamplesPerSec;
+    let channels = fmt.nChannels as u32;
+    CoTaskMemFree(Some(mix_fmt_ptr.cast()));
+    Ok((rate, channels))
+}
+
 
 // ── WASAPI loopback thread implementation ─────────────────────────────────
 
