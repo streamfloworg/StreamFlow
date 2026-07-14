@@ -538,7 +538,13 @@ public partial class GoLiveViewModel : ViewModel
                     if (_lastKnownPrimaryResolution is not null && currentPrimaryRes != _lastKnownPrimaryResolution)
                         _ = SceneEditor.RefreshStaticOverlaySizesAsync();
                     _lastKnownPrimaryResolution = currentPrimaryRes;
-                    _ = SceneEditor.ForceReacquireActiveCapturesAsync();
+                    // Only attempt recovery on the very first SourcesEvent — that's the moment
+                    // the core has finished enumerating monitors/windows and any capture that
+                    // silently failed during startup (before that enumeration was complete) can
+                    // be safely retried. Subsequent SourcesEvent firings (device hotplug, etc.)
+                    // must NOT trigger this or they'll needlessly stop/restart running captures.
+                    if (!_hasReceivedFirstSourcesEvent)
+                        _ = SceneEditor.RecoverMissingCapturesAsync();
                     _hasReceivedFirstSourcesEvent = true;
                     break;
                 case AudioDevicesEvent audioDevices:
