@@ -469,6 +469,7 @@ impl StreamSession {
                         .map(|_| vec![0.0f32; CHUNK])
                         .collect();
 
+                    let mut last_mix = std::time::Instant::now() - std::time::Duration::from_millis(15);
                     loop {
                         match mixer_stop_rx.try_recv() {
                             Ok(()) | Err(TryRecvError::Disconnected) => break,
@@ -491,6 +492,24 @@ impl StreamSession {
                             continue;
                         }
 
+                        // Check if at least one source (audible or muted) has data ready.
+                        let any_ready = sources.iter().any(|s| {
+                            let available_frames = s.cons.occupied_len() / s.src_ch.max(1);
+                            let needed_frames    = s.in_per_chunk / s.src_ch.max(1);
+                            available_frames >= needed_frames
+                        });
+
+                        // Enforce a minimum interval between ticks to prevent the double-tick bug.
+                        // 512 samples at 48kHz is 10.67ms. A minimum of 8.0ms allows for jitter
+                        // but prevents consecutive ticks within <1ms.
+                        let time_ok = last_mix.elapsed() >= std::time::Duration::from_millis(8);
+
+                        if !any_ready || !time_ok {
+                            std::thread::sleep(std::time::Duration::from_millis(1));
+                            continue;
+                        }
+
+                        last_mix = std::time::Instant::now();
                         let mut mixed = vec![0.0f32; CHUNK];
 
                         for (i, src) in sources.iter_mut().enumerate() {
