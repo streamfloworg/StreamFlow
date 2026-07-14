@@ -238,7 +238,7 @@
                                 <TextBlock Text="Scenes" VerticalAlignment="Center" FontSize="13"/>
                             </StackPanel>
                         </ListBoxItem>
-                        <ListBoxItem x:Name="ComposeItem">
+                        <ListBoxItem x:Name="ComposeItem" Visibility="Collapsed">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <Path Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="14" Height="14" Data="{StaticResource ComposeIconData}" Margin="0,0,10,0"/>
                                 <TextBlock Text="Compose" VerticalAlignment="Center" FontSize="13"/>

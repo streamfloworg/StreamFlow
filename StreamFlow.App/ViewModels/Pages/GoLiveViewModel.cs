@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 using System.IO;
@@ -56,6 +56,17 @@ public partial class GoLiveViewModel : ViewModel
     /// Temporary while investigating the startup CPU-spike bug — surfaces the [diag] capture-
     /// dimension logging added in capture.rs so it's visible without a separate log file.</summary>
     public ObservableCollection<string> CoreLogLines { get; } = [];
+
+    /// <summary>Gates the Core Diagnostics panel's visibility in GoLiveView — a live tail of the
+    /// core's internal tracing output isn't something a released build should surface to end
+    /// users. Doesn't affect --diag-log itself (see CoreBridgeService.DiagLogEnabled): that still
+    /// persists the full session to disk in Release builds too, in case its detail is useful for
+    /// a submitted issue — this only hides the in-app live-tail UI.</summary>
+#if DEBUG
+    public bool IsDebugBuild => true;
+#else
+    public bool IsDebugBuild => false;
+#endif
 
     private const int MaxCoreLogLines = 500;
 
@@ -172,19 +183,16 @@ public partial class GoLiveViewModel : ViewModel
         _persistedSelectedAudioDeviceIds = saved.SelectedAudioDeviceIds;
         _persistedAudioDeviceDisplayNames = saved.AudioDeviceDisplayNames;
 
-        _isSpoutOutputEnabled = saved.IsSpoutOutputEnabled;
-        _spoutSenderName = saved.SpoutSenderName;
+        _isSpoutOutputEnabled = true; // Always enable Spout2
+        _spoutSenderName = string.IsNullOrEmpty(saved.SpoutSenderName) ? "StreamFlow" : saved.SpoutSenderName;
 
         _isRecordingEnabled = saved.IsRecordingEnabled;
-        _recordFolderPath = saved.RecordFolderPath;
-        // CoreBridgeService queues commands sent before core's Ready event and flushes them once
-        // it arrives, so it's safe to push this here even though the core process may not have
-        // started yet — same reasoning that already lets other ViewModel constructors send
-        // commands eagerly (see CoreBridgeService's own doc comment).
-        if (_isSpoutOutputEnabled)
-        {
-            _ = _core.SendCommandAsync(new SetSpoutOutputCommand(true, _spoutSenderName));
-        }
+        _recordFolderPath = string.IsNullOrEmpty(saved.RecordFolderPath)
+            ? Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyVideos), "StreamFlow")
+            : saved.RecordFolderPath;
+
+        // Force spout output to active
+        _ = _core.SendCommandAsync(new SetSpoutOutputCommand(true, _spoutSenderName));
 
         SceneEditor.TransitionKind = SceneEditorViewModel.TransitionKindFromWire(saved.TransitionKind);
         SceneEditor.TransitionDurationMs = (int)saved.TransitionDurationMs;
@@ -323,6 +331,8 @@ public partial class GoLiveViewModel : ViewModel
             SpoutSenderName = SpoutSenderName,
             IsRecordingEnabled = IsRecordingEnabled,
             RecordFolderPath = RecordFolderPath,
+            BitrateKbps = BitrateKbps,
+            Fps = Fps,
             IsStreamDeckServerEnabled = currentOnDisk.IsStreamDeckServerEnabled,
             StreamDeckServerPort = currentOnDisk.StreamDeckServerPort,
             StreamDeckApiKey = currentOnDisk.StreamDeckApiKey
@@ -485,7 +495,7 @@ public partial class GoLiveViewModel : ViewModel
                     // IsTestStreaming was already set by StartStreamCoreAsync before this event
                     // ever arrives (it drives which RTMP URL variant got sent in the first
                     // place), so it's safe to just read it here for the label.
-                    StatusLabel = IsTestStreaming ? "Testing" : "Live";
+                    StatusLabel = IsRecordOnlyMode ? "Recording" : (IsTestStreaming ? "Testing" : "Live");
                     _errorDismissCts?.Cancel();
                     ErrorMessage = null;
                     _eventBus.Publish(new GoLiveStartedEvent());

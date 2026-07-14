@@ -26,6 +26,7 @@
 
     <!-- On-air / tally-light red, for live broadcast state -->
     <SolidColorBrush x:Key="LiveBrush" Color="#E5484D" />
+    <SolidColorBrush x:Key="RecordingBrush" Color="#30A46C" />
     <SolidColorBrush x:Key="StandbyBrush" Color="#5A5A5F" />
 
     

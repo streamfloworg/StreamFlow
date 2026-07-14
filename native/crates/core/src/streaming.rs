@@ -221,7 +221,7 @@ impl Drop for PipScaler {
 // ── Public interface ──────────────────────────────────────────────────────────
 
 pub struct StreamOptions {
-    pub rtmp_url: String,
+    pub rtmp_url: Option<String>,
     pub bitrate_kbps: u32,
     pub fps: u32,
     pub output_width: Option<u32>,
@@ -613,12 +613,19 @@ unsafe fn run_encoder_unsafe(
     // repeat, but a genuine stall (e.g. WGC stopped) keeps the CBR bitrate filled.
     let frame_wait = Duration::from_millis((2000 / target_fps) as u64);
 
-    // ── Output format context (FLV over RTMP) ─────────────────────────────────
-    let url_c = CString::new(opts.rtmp_url.as_str()).context("invalid RTMP URL")?;
-    let flv_c = CString::new("flv")?;
+    // ── Output format context (FLV over RTMP or MP4 for local recording) ──────
+    let is_record_only = opts.rtmp_url.is_none();
+    let url_str = if is_record_only {
+        opts.record_path.as_deref().unwrap_or("")
+    } else {
+        opts.rtmp_url.as_deref().unwrap_or("")
+    };
+    let url_c = CString::new(url_str).context("invalid target URL/Path")?;
+    let fmt_name = if is_record_only { "mp4" } else { "flv" };
+    let fmt_c = CString::new(fmt_name)?;
     let mut ofmt_ctx: *mut AVFormatContext = ptr::null_mut();
     check(
-        avformat_alloc_output_context2(&mut ofmt_ctx, ptr::null(), flv_c.as_ptr(), url_c.as_ptr()),
+        avformat_alloc_output_context2(&mut ofmt_ctx, ptr::null(), fmt_c.as_ptr(), url_c.as_ptr()),
         "avformat_alloc_output_context2",
     )?;
 
@@ -745,16 +752,16 @@ unsafe fn run_encoder_unsafe(
     };
 
     if audio_enc.is_some() {
-        tracing::warn!("Audio stream added to RTMP output");
+        tracing::warn!("Audio stream added to output");
     } else {
         tracing::warn!(
-            "No audio stream in RTMP output — streaming video-only (had_audio_source={had_audio_source}). \
+            "No audio stream in output — writing video-only (had_audio_source={had_audio_source}). \
              Some platforms (YouTube in particular) accept the publish but never surface it as live for \
              a video-only stream."
         );
     }
 
-    // ── Open RTMP output & write header ───────────────────────────────────────
+    // ── Open output & write header ──────────────────────────────────────────
     // rw_timeout (µs): caps how long avio blocks on a single TCP read/write.
     // Without this, av_interleaved_write_frame can block indefinitely on a
     // stalled RTMP server. 5 s is generous for live streaming.
@@ -765,9 +772,9 @@ unsafe fn run_encoder_unsafe(
     let ret = avio_open2(&mut (*ofmt_ctx).pb, url_c.as_ptr(), AVIO_FLAG_WRITE as i32,
                          ptr::null(), &mut io_opts);
     av_dict_free(&mut io_opts);
-    check(ret, "avio_open2 - check RTMP URL and network")?;
+    check(ret, "avio_open2 - check target path/RTMP URL and network")?;
     check(avformat_write_header(ofmt_ctx, ptr::null_mut()),
-          "avformat_write_header - RTMP server rejected connection")?;
+          "avformat_write_header - target rejected connection or failed to write file header")?;
 
     if let Some(ref mut enc) = audio_enc {
         unsafe { enc.update_stream_timebase(ofmt_ctx); }
@@ -776,7 +783,9 @@ unsafe fn run_encoder_unsafe(
     // ── Optional MP4 recording context (stream copy) ──────────────────────────
     // Build a second output context mirroring the RTMP context's streams.
     // Packets written to RTMP will also be cloned and written here.
-    let rec_fmt_send: Option<FormatCtxSend> = if let Some(ref rec_path) = opts.record_path {
+    // Only allocated if we are streaming AND a recording path was requested.
+    let rec_fmt_send: Option<FormatCtxSend> = if !is_record_only && opts.record_path.is_some() {
+        let rec_path = opts.record_path.as_ref().unwrap();
         let result: Option<FormatCtxSend> = (|| unsafe {
             let path_c = CString::new(rec_path.as_str()).ok()?;
             let mp4_c = CString::new("mp4").ok()?;
@@ -819,9 +828,10 @@ unsafe fn run_encoder_unsafe(
     };
 
     tracing::info!(
-        "Stream started: {}x{} (mode: {})  {}x{} @{}fps via {} at {}kbps{}",
+        "{} started: {}x{} (mode: {})  {}x{} @{}fps via {} at {}kbps{}",
+        if is_record_only { "Recording" } else { "Stream" },
         src_w, src_h, fit_mode, out_w, out_h, target_fps, opts.encoder, opts.bitrate_kbps,
-        if opts.record_path.is_some() { " [recording]" } else { "" }
+        if !is_record_only && opts.record_path.is_some() { " [recording]" } else { "" }
     );
     event_tx.send(StreamEvent::Started { width: out_w as u32, height: out_h as u32 }).ok();
 
@@ -985,7 +995,8 @@ unsafe fn run_encoder_unsafe(
                 // owned drops here  av_packet_free called
             }
 
-            tracing::info!("RTMP writer done: {total_pkts} pkts written, {slow_writes} slow (>50ms)");
+            let writer_name = if is_record_only { "Recording" } else { "RTMP" };
+            tracing::info!("{writer_name} writer done: {total_pkts} pkts written, {slow_writes} slow (>50ms)");
             unsafe {
                 av_write_trailer(ofmt_ctx);
                 avio_closep(&mut (*ofmt_ctx).pb);

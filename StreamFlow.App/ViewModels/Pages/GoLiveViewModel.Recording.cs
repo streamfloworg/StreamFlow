@@ -15,8 +15,25 @@ public partial class GoLiveViewModel
     [ObservableProperty]
     private string? _recordFolderPath;
 
-    partial void OnIsRecordingEnabledChanged(bool value) => ScheduleSaveSettings();
+    [ObservableProperty]
+    private bool _isRecordOnlyMode;
+
+    public bool IsRecordingFolderVisible => IsRecordOnlyMode || IsRecordingEnabled;
+
+    partial void OnIsRecordingEnabledChanged(bool value)
+    {
+        ScheduleSaveSettings();
+        OnPropertyChanged(nameof(IsRecordingFolderVisible));
+    }
+
     partial void OnRecordFolderPathChanged(string? value) => ScheduleSaveSettings();
+
+    partial void OnIsRecordOnlyModeChanged(bool value)
+    {
+        ScheduleSaveSettings();
+        RefreshStartStreamAvailability();
+        OnPropertyChanged(nameof(IsRecordingFolderVisible));
+    }
 
     [RelayCommand]
     private void BrowseRecordFolder()
@@ -31,8 +48,8 @@ public partial class GoLiveViewModel
 
     /// <summary>Null when recording isn't enabled or no folder has been picked — StartStreamAsync
     /// passes this straight through as StartStreamCommand.RecordPath.</summary>
-    internal string? BuildRecordPathIfEnabled() =>
-        IsRecordingEnabled && !string.IsNullOrEmpty(RecordFolderPath)
+    internal string? BuildRecordPathIfEnabled(bool force = false) =>
+        (force || IsRecordingEnabled) && !string.IsNullOrEmpty(RecordFolderPath)
             ? System.IO.Path.Combine(RecordFolderPath, $"StreamFlow_{DateTime.Now:yyyyMMdd_HHmmss}.mp4")
             : null;
 }

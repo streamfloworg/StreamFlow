@@ -11,9 +11,11 @@ using Microsoft.Extensions.Configuration;
 
 using StreamFlow.Core.Helpers;
 
+using Microsoft.Extensions.Logging;
+
 namespace StreamFlow.App.Services;
 
-public sealed record TwitchAuthResult(string AccessToken, string Username);
+public sealed record TwitchAuthResult(string AccessToken, string Username, string UserId);
 
 /// <summary>
 /// Twitch sign-in via the Implicit Grant flow (no client secret — Twitch's recommended
@@ -27,15 +29,19 @@ public sealed class TwitchAuthService
     private const string RedirectUri = "http://localhost:3990/callback";
     private readonly string _clientId;
     private readonly HttpClient _http = new();
+    private readonly ILogger<TwitchAuthService> _logger;
 
     private static string TokenFilePath => Path.Combine(AppDataPaths.RootFolder, "twitch_token.dat");
 
-    public TwitchAuthService(IConfiguration config)
+    public TwitchAuthService(IConfiguration config, ILogger<TwitchAuthService> logger)
     {
         _clientId = config["Twitch:ClientId"] ?? "";
+        _logger = logger;
     }
 
     public bool IsConfigured => !string.IsNullOrEmpty(_clientId);
+
+    public string? GetAccessToken() => LoadToken();
 
     /// <summary>Tries to resume a previous session from the saved token, if any.</summary>
     public async Task<TwitchAuthResult?> TryRestoreAsync(CancellationToken ct = default)
@@ -60,7 +66,7 @@ public sealed class TwitchAuthService
             $"?client_id={Uri.EscapeDataString(_clientId)}" +
             $"&redirect_uri={Uri.EscapeDataString(RedirectUri)}" +
             "&response_type=token" +
-            "&scope=" +
+            "&scope=channel:manage:broadcast+channel:read:stream_key" +
             $"&state={state}";
 
         Process.Start(new ProcessStartInfo(authorizeUrl) { UseShellExecute = true });
@@ -135,7 +141,8 @@ public sealed class TwitchAuthService
 
         using var doc = JsonDocument.Parse(await resp.Content.ReadAsStreamAsync(ct));
         var login = doc.RootElement.TryGetProperty("login", out var loginProp) ? loginProp.GetString() : null;
-        return login is null ? null : new TwitchAuthResult(token, login);
+        var userId = doc.RootElement.TryGetProperty("user_id", out var idProp) ? idProp.GetString() : null;
+        return login is null || userId is null ? null : new TwitchAuthResult(token, login, userId);
     }
 
     private static void SaveToken(string token)
@@ -177,4 +184,132 @@ public sealed class TwitchAuthService
 
     private static string ErrorHtml(string message) =>
         $"<html><body style=\"{PageStyle}\">Twitch sign-in failed: {WebUtility.HtmlEncode(message)}</body></html>";
+
+    /// <summary>Updates the Twitch stream's title and category/game name.</summary>
+    public async Task<bool> UpdateStreamInfoAsync(string token, string userId, string title, string gameName, CancellationToken ct = default)
+    {
+        try
+        {
+            string? gameId = null;
+            if (!string.IsNullOrWhiteSpace(gameName))
+            {
+                // Search for the game category to get the category ID
+                var searchUrl = $"https://api.twitch.tv/helix/search/categories?query={Uri.EscapeDataString(gameName)}";
+                using var searchReq = new HttpRequestMessage(HttpMethod.Get, searchUrl);
+                searchReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+                searchReq.Headers.Add("Client-Id", _clientId);
+
+                using var searchResp = await _http.SendAsync(searchReq, ct);
+                if (searchResp.IsSuccessStatusCode)
+                {
+                    using var searchDoc = JsonDocument.Parse(await searchResp.Content.ReadAsStreamAsync(ct));
+                    if (searchDoc.RootElement.TryGetProperty("data", out var data) && data.GetArrayLength() > 0)
+                    {
+                        // Match game by exact name or use the first search result
+                        gameId = data[0].GetProperty("id").GetString();
+                        for (int i = 0; i < data.GetArrayLength(); i++)
+                        {
+                            var name = data[i].GetProperty("name").GetString();
+                            if (string.Equals(name, gameName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                gameId = data[i].GetProperty("id").GetString();
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Update channel information
+            var updateUrl = $"https://api.twitch.tv/helix/channels?broadcaster_id={Uri.EscapeDataString(userId)}";
+            var bodyObj = new Dictionary<string, object>();
+            if (!string.IsNullOrWhiteSpace(title))
+                bodyObj["title"] = title;
+            if (!string.IsNullOrWhiteSpace(gameId))
+                bodyObj["game_id"] = gameId;
+
+            if (bodyObj.Count == 0) return true;
+
+            var jsonBody = JsonSerializer.Serialize(bodyObj);
+            using var patchReq = new HttpRequestMessage(HttpMethod.Patch, updateUrl)
+            {
+                Content = new StringContent(jsonBody, Encoding.UTF8, "application/json")
+            };
+            patchReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            patchReq.Headers.Add("Client-Id", _clientId);
+
+            using var patchResp = await _http.SendAsync(patchReq, ct);
+            return patchResp.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update Twitch channel info");
+            return false;
+        }
+    }
+
+    /// <summary>Fetches the Twitch channel's stream key via Helix API.</summary>
+    public async Task<string?> TryFetchStreamKeyAsync(string token, string userId, CancellationToken ct = default)
+    {
+        try
+        {
+            var url = $"https://api.twitch.tv/helix/streams/key?broadcaster_id={Uri.EscapeDataString(userId)}";
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            req.Headers.Add("Client-Id", _clientId);
+
+            using var resp = await _http.SendAsync(req, ct);
+            if (!resp.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Twitch streams/key API failed: {Status}", resp.StatusCode);
+                return null;
+            }
+
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStreamAsync(ct));
+            if (doc.RootElement.TryGetProperty("data", out var data) && data.GetArrayLength() > 0)
+            {
+                return data[0].GetProperty("stream_key").GetString();
+            }
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to fetch Twitch stream key");
+            return null;
+        }
+    }
+
+    /// <summary>Fetches the active Twitch channel's title and category/game name.</summary>
+    public async Task<(string Title, string GameName)?> TryFetchChannelInfoAsync(string token, string userId, CancellationToken ct = default)
+    {
+        try
+        {
+            var url = $"https://api.twitch.tv/helix/channels?broadcaster_id={Uri.EscapeDataString(userId)}";
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            req.Headers.Add("Client-Id", _clientId);
+
+            using var resp = await _http.SendAsync(req, ct);
+            if (!resp.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Twitch channels API failed: {Status}", resp.StatusCode);
+                return null;
+            }
+
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStreamAsync(ct));
+            if (doc.RootElement.TryGetProperty("data", out var data) && data.GetArrayLength() > 0)
+            {
+                var item = data[0];
+                var title = item.GetProperty("title").GetString() ?? "";
+                var gameName = item.GetProperty("game_name").GetString() ?? "";
+                return (title, gameName);
+            }
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to fetch Twitch channel info");
+            return null;
+        }
+    }
 }

@@ -1,4 +1,4 @@
-﻿using StreamFlow.App.Services;
+using StreamFlow.App.Services;
 
 namespace StreamFlow.App.ViewModels.Pages;
 
@@ -32,6 +32,9 @@ public partial class StreamingProfile : ObservableObject
 
     [ObservableProperty]
     private string? _connectedAccountLabel;
+
+    [ObservableProperty]
+    private string? _connectedUserId;
 
     public Dictionary<string, List<SceneSettings>> SceneSetOverrides { get; set; } = [];
 

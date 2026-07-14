@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Reflection;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -63,12 +63,12 @@ public partial class PropertiesEditor : UserControl, INotifyPropertyChanged
     {
         if (Audio != null)
         {
-            using var dialog = new OpenFileDialog();
+            var dialog = new Microsoft.Win32.OpenFileDialog();
             dialog.Title = "Choose icon image";
             dialog.Filter = "Image Files|" + FileExtension.GetDialogExtensions(AppModel.Instance.ValidImageExtensions);
             dialog.Multiselect = false;
             var result = dialog.ShowDialog();
-            if (result == DialogResult.OK)
+            if (result == true)
             {
                 SetSelectedAudioIconFromFile(Audio, dialog.FileName);
             }

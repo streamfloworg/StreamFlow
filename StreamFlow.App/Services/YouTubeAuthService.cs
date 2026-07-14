@@ -478,4 +478,112 @@ public sealed class YouTubeAuthService
 
     private static string ErrorHtml(string message) =>
         $"<html><body style=\"{PageStyle}\">YouTube sign-in failed: {WebUtility.HtmlEncode(message)}</body></html>";
+
+    /// <summary>Updates the YouTube channel's active or upcoming broadcast title and description.</summary>
+    public async Task<bool> UpdateStreamInfoAsync(string token, string title, string description, CancellationToken ct = default)
+    {
+        try
+        {
+            // 1. Fetch the most recent broadcast
+            var listUrl = "https://www.googleapis.com/youtube/v3/liveBroadcasts?part=id,snippet,status&mine=true&maxResults=1";
+            using var getReq = new HttpRequestMessage(HttpMethod.Get, listUrl);
+            getReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            using var getResp = await _http.SendAsync(getReq, ct);
+            if (!getResp.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("YouTube list liveBroadcasts failed: {Status}", getResp.StatusCode);
+                return false;
+            }
+
+            using var getDoc = JsonDocument.Parse(await getResp.Content.ReadAsStreamAsync(ct));
+            if (!getDoc.RootElement.TryGetProperty("items", out var items) || items.GetArrayLength() == 0)
+            {
+                _logger.LogWarning("No YouTube broadcasts found to update.");
+                return false;
+            }
+
+            var broadcastItem = items[0];
+            var broadcastId = broadcastItem.GetProperty("id").GetString();
+            var snippet = broadcastItem.GetProperty("snippet");
+            var status = broadcastItem.GetProperty("status");
+
+            // Extract existing snippet properties to avoid wiping them
+            var scheduledStartTime = snippet.TryGetProperty("scheduledStartTime", out var sst) ? sst.GetString() : null;
+            var privacyStatus = status.TryGetProperty("privacyStatus", out var ps) ? ps.GetString() : "unlisted";
+
+            // 2. Perform the update PUT request
+            var updateBody = JsonSerializer.Serialize(new
+            {
+                id = broadcastId,
+                snippet = new
+                {
+                    title = title,
+                    description = description,
+                    scheduledStartTime = scheduledStartTime ?? DateTime.UtcNow.ToString("o")
+                },
+                status = new
+                {
+                    privacyStatus = privacyStatus
+                }
+            });
+
+            var updateUrl = "https://www.googleapis.com/youtube/v3/liveBroadcasts?part=id,snippet,status";
+            using var putReq = new HttpRequestMessage(HttpMethod.Put, updateUrl)
+            {
+                Content = new StringContent(updateBody, Encoding.UTF8, "application/json")
+            };
+            putReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            using var putResp = await _http.SendAsync(putReq, ct);
+            if (!putResp.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("YouTube liveBroadcasts.update failed: {Status} {Body}", 
+                    putResp.StatusCode, await putResp.Content.ReadAsStringAsync(ct));
+                return false;
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update YouTube broadcast info");
+            return false;
+        }
+    }
+
+    /// <summary>Fetches the YouTube channel's most recent broadcast title and description.</summary>
+    public async Task<(string Title, string Description)?> TryFetchBroadcastInfoAsync(string token, CancellationToken ct = default)
+    {
+        try
+        {
+            var listUrl = "https://www.googleapis.com/youtube/v3/liveBroadcasts?part=id,snippet,status&mine=true&maxResults=1";
+            using var getReq = new HttpRequestMessage(HttpMethod.Get, listUrl);
+            getReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            using var getResp = await _http.SendAsync(getReq, ct);
+            if (!getResp.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("YouTube list liveBroadcasts failed: {Status}", getResp.StatusCode);
+                return null;
+            }
+
+            using var getDoc = JsonDocument.Parse(await getResp.Content.ReadAsStreamAsync(ct));
+            if (!getDoc.RootElement.TryGetProperty("items", out var items) || items.GetArrayLength() == 0)
+            {
+                return null;
+            }
+
+            var broadcastItem = items[0];
+            var snippet = broadcastItem.GetProperty("snippet");
+            var title = snippet.TryGetProperty("title", out var t) ? t.GetString() : "";
+            var description = snippet.TryGetProperty("description", out var d) ? d.GetString() : "";
+            return (title ?? "", description ?? "");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to fetch YouTube broadcast info");
+            return null;
+        }
+    }
 }
