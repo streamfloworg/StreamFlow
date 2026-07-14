@@ -538,6 +538,7 @@ public partial class GoLiveViewModel : ViewModel
                     if (_lastKnownPrimaryResolution is not null && currentPrimaryRes != _lastKnownPrimaryResolution)
                         _ = SceneEditor.RefreshStaticOverlaySizesAsync();
                     _lastKnownPrimaryResolution = currentPrimaryRes;
+                    _ = SceneEditor.ForceReacquireActiveCapturesAsync();
                     _hasReceivedFirstSourcesEvent = true;
                     break;
                 case AudioDevicesEvent audioDevices:

@@ -1567,6 +1567,16 @@ public partial class SceneEditorViewModel : ObservableObject
             await ReleaseCaptureAsync(slot);
     }
 
+    public async Task ForceReacquireActiveCapturesAsync()
+    {
+        if (ActiveScene is null) return;
+        foreach (var slot in ActiveScene.Slots.Where(s => !string.IsNullOrEmpty(s.SourceId) && !s.IsStaticOverlay))
+        {
+            await ReleaseCaptureAsync(slot);
+        }
+        await StartAllSlotCapturesAsync(ActiveScene);
+    }
+
     /// <summary>Starts capture sessions for a scene's slots and pushes a fresh Config so it
     /// actually becomes what's composited. <paramref name="animate"/> is false for the very
     /// first scene activation (app/session startup — nothing composited yet to transition from
