@@ -574,6 +574,24 @@ impl StreamSession {
                             }
                         }
 
+                        // ── Output backpressure ───────────────────────────────────────────
+                        // The output ring buffer is consumed by the encoder at wall-clock rate
+                        // (once per video tick, ~16-33ms). The mixer has no inherent rate limit
+                        // of its own — if any source (e.g. VoiceMeeter) delivers audio faster
+                        // than real-time, the mixer will happily keep processing, flooding the
+                        // output buffer. The encoder then sees audio >1s ahead of wall-clock and
+                        // hard-discards input every tick, creating constant audible cuts.
+                        //
+                        // Fix: high-water gate on the output ring buffer. 200ms = 19200 samples
+                        // at 48kHz/stereo. If more than that is already queued, the encoder is
+                        // behind and we must let it drain rather than flooding further. Sleep 1ms
+                        // (a single OS scheduler quantum) which keeps CPU near-zero while idle.
+                        const HWM_SAMPLES: usize = TARGET_RATE as usize * TARGET_CHANNELS as usize / 5; // 200ms
+                        if mix_prod.vacant_len() < (mix_buf_samples - HWM_SAMPLES) {
+                            std::thread::sleep(std::time::Duration::from_millis(1));
+                            continue;
+                        }
+
                         mix_prod.push_slice(&mixed);
                     }
                 })
