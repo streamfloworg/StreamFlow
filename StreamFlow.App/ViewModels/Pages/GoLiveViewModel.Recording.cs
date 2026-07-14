@@ -30,9 +30,11 @@ public partial class GoLiveViewModel
 
     partial void OnIsRecordOnlyModeChanged(bool value)
     {
+        if (value) IsTestModeEnabled = false;
         ScheduleSaveSettings();
         RefreshStartStreamAvailability();
         OnPropertyChanged(nameof(IsRecordingFolderVisible));
+        OnPropertyChanged(nameof(IsTestModeSelectorVisible));
     }
 
     [RelayCommand]
