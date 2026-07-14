@@ -1,4 +1,4 @@
-﻿mod buffer_pool;
+mod buffer_pool;
 mod capture;
 mod capture_mf;
 mod compositor;
@@ -17,7 +17,7 @@ mod waveform;
 
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Arc,
+    Arc, Mutex,
 };
 
 use anyhow::{anyhow, Context, Result};
@@ -261,7 +261,36 @@ async fn run_stdin_commands(
     // own audio captures: opening the same device twice (once monitored, once streamed) is
     // fine, so no dedup/ref-counting is needed between the two.
     let mut audio_monitor_sessions: std::collections::HashMap<String, crate::audio::ActiveStream> = std::collections::HashMap::new();
-    let mut last_keepalive = tokio::time::Instant::now();
+    let last_keepalive = Arc::new(Mutex::new(std::time::Instant::now()));
+
+    // Runs on its own OS thread, entirely independent of the tokio tasks/select loop below —
+    // deliberately, not as a `sleep_until` branch inside the same `select!` this loop already
+    // runs (which is how this watchdog used to work). That version shared its fate with every
+    // other branch in the loop: a `stdout.write_all(...).await` that blocks (the write end's
+    // buffer fills because nothing is draining the read end anymore, e.g. once the C# host's own
+    // reader has stopped servicing it) stalls the *whole* select loop indefinitely, including the
+    // timeout branch that was supposed to be this process's last line of defense — so the one
+    // thing the watchdog exists to catch (a host that's gone away and stopped keeping this
+    // process alive) is exactly the condition most likely to also wedge the loop meant to check
+    // for it. Verified directly: a standalone core process with its stdout pipe left undrained
+    // ran 40+ seconds past the old 30s deadline with memory and CPU both climbing, never exiting.
+    // A separate thread that only ever touches this shared instant can't be blocked by anything
+    // happening on the tokio side.
+    {
+        let last_keepalive = Arc::clone(&last_keepalive);
+        std::thread::Builder::new()
+            .name("watchdog".into())
+            .spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                let elapsed = last_keepalive.lock().unwrap().elapsed();
+                if elapsed >= std::time::Duration::from_secs(30) {
+                    tracing::info!("Watchdog timeout: no keep-alive received in {elapsed:?}. Exiting.");
+                    voicemeeter::shutdown();
+                    std::process::exit(1);
+                }
+            })
+            .expect("failed to spawn watchdog thread");
+    }
 
     // Periodic resource snapshot for the C# host's status bar (see ipc::Event::CoreStats) —
     // deliberately coarse (every 3s), nothing here is time-sensitive. The DXGI adapter is
@@ -273,14 +302,7 @@ async fn run_stdin_commands(
     stats_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
     loop {
-        let timeout = tokio::time::sleep_until(last_keepalive + std::time::Duration::from_secs(30));
-
         let line = tokio::select! {
-            _ = timeout => {
-                info!("Watchdog timeout: no keep-alive received in 30s. Exiting.");
-                voicemeeter::shutdown();
-                std::process::exit(1);
-            }
             _ = stats_interval.tick() => {
                 let stats = stats_sampler.sample();
                 let (vram_used_mb, vram_total_mb) = dxgi_adapter.as_ref()
@@ -383,7 +405,7 @@ async fn run_stdin_commands(
                         std::process::exit(0);
                     }
                     Ok(Command::Standby) => {
-                        last_keepalive = tokio::time::Instant::now();
+                        *last_keepalive.lock().unwrap() = std::time::Instant::now();
                         if verbose {
                             let frame = encode_event(&Event::Acknowledge { command: "Standby".into() })?;
                             stdout.write_all(&frame).await?;
@@ -391,7 +413,7 @@ async fn run_stdin_commands(
                         }
                     }
                     Ok(Command::Config { sources, canvas_width, canvas_height, transition }) => {
-                        last_keepalive = tokio::time::Instant::now();
+                        *last_keepalive.lock().unwrap() = std::time::Instant::now();
                         // Elevated to warn! (not info!) so this is visible in the C# Core
                         // Diagnostics panel by default — that panel only shows warn+ (the app
                         // runs without --verbose normally), and there was previously no signal
@@ -418,7 +440,7 @@ async fn run_stdin_commands(
                         }
                     }
                     Ok(Command::SetSpoutOutput { enabled, sender_name }) => {
-                        last_keepalive = tokio::time::Instant::now();
+                        *last_keepalive.lock().unwrap() = std::time::Instant::now();
                         {
                             let mut cfg = compositor_cfg.lock().unwrap();
                             cfg.spout_enabled = enabled;
@@ -583,16 +605,19 @@ async fn run_stdin_commands(
                         audio_sources,
                         record_path,
                     }) => {
-                        // A primary-less scene can still stream from a synthesized blank canvas
-                        // (see compositor.rs) as long as a canvas resolution is actually known —
-                        // either a primary is configured (its capture session will deliver real
-                        // dimensions shortly) or one was set manually/pre-selected from a device.
                         let has_known_canvas = {
                             let cfg = compositor_cfg.lock().unwrap();
                             cfg.sources.iter().any(|s| s.is_primary)
                                 || (cfg.canvas_width.is_some() && cfg.canvas_height.is_some())
                         };
-                        if active_sessions.is_empty() && !has_known_canvas {
+                        if rtmp_url.is_none() && record_path.is_none() {
+                            let frame = encode_event(&Event::Error {
+                                code: ErrorCode::EncoderError,
+                                message: "StartStream requires either a RTMP URL or a local record path to run".into(),
+                            })?;
+                            stdout.write_all(&frame).await?;
+                            stdout.flush().await?;
+                        } else if active_sessions.is_empty() && !has_known_canvas {
                             let frame = encode_event(&Event::Error {
                                 code: ErrorCode::EncoderError,
                                 message: "StartStream requires either an active capture session or a configured canvas resolution".into(),

@@ -1,4 +1,4 @@
-﻿#![forbid(unsafe_code)]
+#![forbid(unsafe_code)]
 //! IPC message protocol between the Electron UI and `streamflow-core`.
 //!
 //! ## Transport layers
@@ -110,7 +110,7 @@ pub enum Command {
     /// Begin encoding the active capture session and pushing to RTMP.
     /// Core responds with [`Event::StreamStarted`] or [`Event::Error`].
     StartStream {
-        rtmp_url: String,
+        rtmp_url: Option<String>,
         bitrate_kbps: u32,
         fps: u32,
         output_width: Option<u32>,

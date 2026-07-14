@@ -479,7 +479,7 @@ public partial class AudioViewModel : ViewModel
     [RelayCommand]
     private static async Task AddAudio()
     {
-        OpenFileDialog FileDialog = new()
+        Microsoft.Win32.OpenFileDialog FileDialog = new()
         {
             RestoreDirectory = true,
             DefaultExt = FileExtension.GetDialogExtensions(AppModel.Instance.ValidAudioExtensions).Split(",").FirstOrDefault(),
@@ -489,7 +489,7 @@ public partial class AudioViewModel : ViewModel
             Filter = "Audio Files | " + FileExtension.GetDialogExtensions(AppModel.Instance.ValidAudioExtensions),
             Title = "Select Audio File(s)"
         };
-        if (FileDialog.ShowDialog() == DialogResult.OK)
+        if (FileDialog.ShowDialog() == true)
         {
             foreach (var file in FileDialog.FileNames)
             {
@@ -510,7 +510,7 @@ public partial class AudioViewModel : ViewModel
     [RelayCommand]
     private async Task TestXmpFormat()
     {
-        OpenFileDialog fileDialog = new()
+        Microsoft.Win32.OpenFileDialog fileDialog = new()
         {
             RestoreDirectory = true,
             CheckFileExists = true,
@@ -520,7 +520,7 @@ public partial class AudioViewModel : ViewModel
             Title = "Select Module File to Test"
         };
 
-        if (fileDialog.ShowDialog() != DialogResult.OK)
+        if (fileDialog.ShowDialog() != true)
             return;
 
         var result = XmpTestService.TestModuleFormat(fileDialog.FileName);
@@ -551,7 +551,7 @@ public partial class AudioViewModel : ViewModel
     [RelayCommand]
     private async Task TestXmpStreaming()
     {
-        OpenFileDialog fileDialog = new()
+        Microsoft.Win32.OpenFileDialog fileDialog = new()
         {
             RestoreDirectory = true,
             CheckFileExists = true,
@@ -561,7 +561,7 @@ public partial class AudioViewModel : ViewModel
             Title = "Select Module File to Play"
         };
 
-        if (fileDialog.ShowDialog() != DialogResult.OK)
+        if (fileDialog.ShowDialog() != true)
             return;
 
         var (success, player, result, resources) = await XmpTestService.TestModuleStreaming(fileDialog.FileName);
@@ -670,7 +670,7 @@ public partial class AudioViewModel : ViewModel
     [RelayCommand]
     private async Task TestXmpNativePlaying()
     {
-        OpenFileDialog fileDialog = new()
+        Microsoft.Win32.OpenFileDialog fileDialog = new()
         {
             RestoreDirectory = true,
             CheckFileExists = true,
@@ -680,7 +680,7 @@ public partial class AudioViewModel : ViewModel
             Title = "Select Module File to Test"
         };
 
-        if (fileDialog.ShowDialog() != DialogResult.OK)
+        if (fileDialog.ShowDialog() != true)
             return;
 
         var filePath = fileDialog.FileName;

@@ -36,6 +36,7 @@
         <conv:NullVisibilityConverter x:Key="NullToVisibility"/>
         <conv:InvertedNullVisibilityConverter x:Key="InvertedNullToVisibility"/>
         <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
+        <conv:BooleanInvertConverter x:Key="BooleanInvertConverter"/>
         <conv:CornerClipConverter x:Key="CornerClip"/>
         <conv:ColorToBrushConverter x:Key="ColorToBrush"/>
         <conv:PercentToFractionConverter x:Key="PercentToFraction"/>
@@ -138,31 +139,42 @@
             </StackPanel>
         </DataTemplate>
 
-        <!-- Tally-pill status dot: gray/standby by default, pulses red while live -->
+        <!-- Tally-pill status dot: gray/standby by default, pulses red while live, solid green when recording-only -->
         <Style x:Key="TallyDotStyle" TargetType="Ellipse">
             <Setter Property="Fill" Value="{StaticResource StandbyBrush}"/>
             <Style.Triggers>
-                <DataTrigger Binding="{Binding ViewModel.IsStreaming}" Value="True">
+                <!-- Streaming live (pulses red) -->
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding ViewModel.IsStreaming}" Value="True"/>
+                        <Condition Binding="{Binding ViewModel.IsRecordOnlyMode}" Value="False"/>
+                    </MultiDataTrigger.Conditions>
                     <Setter Property="Fill" Value="{StaticResource LiveBrush}"/>
-                    <DataTrigger.EnterActions>
+                    <MultiDataTrigger.EnterActions>
                         <BeginStoryboard x:Name="PulseStoryboard">
                             <Storyboard>
                                 <DoubleAnimation Storyboard.TargetProperty="Opacity" From="1.0" To="0.3" Duration="0:0:0.9" AutoReverse="True" RepeatBehavior="Forever"/>
                             </Storyboard>
                         </BeginStoryboard>
-                    </DataTrigger.EnterActions>
-                    <DataTrigger.ExitActions>
+                    </MultiDataTrigger.EnterActions>
+                    <MultiDataTrigger.ExitActions>
                         <StopStoryboard BeginStoryboardName="PulseStoryboard"/>
-                    </DataTrigger.ExitActions>
-                </DataTrigger>
+                    </MultiDataTrigger.ExitActions>
+                </MultiDataTrigger>
+                <!-- Recording standalone (solid green) -->
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding ViewModel.IsStreaming}" Value="True"/>
+                        <Condition Binding="{Binding ViewModel.IsRecordOnlyMode}" Value="True"/>
+                    </MultiDataTrigger.Conditions>
+                    <Setter Property="Fill" Value="{StaticResource RecordingBrush}"/>
+                </MultiDataTrigger>
             </Style.Triggers>
         </Style>
 
-        <!-- Primary CTA: accent when idle, on-air red once live; label and command swap together.
-             Which of "Go Live"/"Test Stream" it is while idle is decided by the Test Mode toggle
-             (IsTestModeEnabled) beside it; which of "End Stream"/"End Test" it is once streaming
-             reflects IsTestStreaming — the mode the *running* stream actually started in, which
-             can't change mid-stream even if the toggle is flipped afterward. -->
+        <!-- Primary CTA: accent when idle, on-air red once live, green once recording; label and command swap together.
+             Which of "Go Live"/"Test Stream"/"Start Recording" it is while idle is decided by the active mode/toggle;
+             which of "End Stream"/"End Test"/"Stop Recording" it is once active reflects IsRecordOnlyMode/IsTestStreaming. -->
         <Style x:Key="GoLiveButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
             <Setter Property="Content" Value="Go Live"/>
             <Setter Property="Command" Value="{Binding ViewModel.StartStreamCommand}"/>
@@ -171,20 +183,41 @@
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Padding" Value="28,12"/>
             <Style.Triggers>
+                <!-- Test Mode Idle -->
                 <DataTrigger Binding="{Binding ViewModel.IsTestModeEnabled}" Value="True">
                     <Setter Property="Content" Value="Test Stream"/>
                 </DataTrigger>
+                
+                <!-- Record Only Mode Idle -->
+                <DataTrigger Binding="{Binding ViewModel.IsRecordOnlyMode}" Value="True">
+                    <Setter Property="Content" Value="Start Recording"/>
+                </DataTrigger>
+
+                <!-- Streaming Live -->
                 <DataTrigger Binding="{Binding ViewModel.IsStreaming}" Value="True">
                     <Setter Property="Content" Value="End Stream"/>
                     <Setter Property="Command" Value="{Binding ViewModel.StopStreamCommand}"/>
                     <Setter Property="Background" Value="{StaticResource LiveBrush}"/>
                 </DataTrigger>
+
+                <!-- Test Streaming Live -->
                 <MultiDataTrigger>
                     <MultiDataTrigger.Conditions>
                         <Condition Binding="{Binding ViewModel.IsStreaming}" Value="True"/>
                         <Condition Binding="{Binding ViewModel.IsTestStreaming}" Value="True"/>
                     </MultiDataTrigger.Conditions>
                     <Setter Property="Content" Value="End Test"/>
+                </MultiDataTrigger>
+
+                <!-- Recording Standalone Active -->
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding ViewModel.IsStreaming}" Value="True"/>
+                        <Condition Binding="{Binding ViewModel.IsRecordOnlyMode}" Value="True"/>
+                    </MultiDataTrigger.Conditions>
+                    <Setter Property="Content" Value="Stop Recording"/>
+                    <Setter Property="Command" Value="{Binding ViewModel.StopStreamCommand}"/>
+                    <Setter Property="Background" Value="{StaticResource RecordingBrush}"/>
                 </MultiDataTrigger>
             </Style.Triggers>
         </Style>
@@ -425,7 +458,7 @@
 
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0"
-                            Visibility="{Binding ViewModel.IsTestModeSupported, Converter={StaticResource BoolToVisibility}}"
+                            Visibility="{Binding ViewModel.IsTestModeSelectorVisible, Converter={StaticResource BoolToVisibility}}"
                             ToolTip="When on, Go Live verifies the full pipeline without going visible to followers/subscribers — a bandwidth-test flag on Twitch, or an unlisted throwaway broadcast on YouTube">
                     <TextBlock Text="Test Mode" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}"/>
                     <ToggleButton Style="{StaticResource TestModeToggleStyle}" VerticalAlignment="Center"
@@ -1398,11 +1431,47 @@
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
-                    <TextBlock Grid.Row="0" Text="Streaming Profiles" Style="{StaticResource PanelHeaderStyle}"/>
+                    <!-- Segmented tab selector -->
+                    <Grid Grid.Row="0" Margin="12,12,12,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <RadioButton Grid.Column="0" Content="Settings"
+                                     GroupName="SidebarTabs"
+                                     Style="{StaticResource SegmentedButtonStyle}"
+                                     IsChecked="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsSettingsTabActive, Mode=TwoWay}"/>
+                        <RadioButton Grid.Column="1" Content="Manager"
+                                     GroupName="SidebarTabs"
+                                     Style="{StaticResource SegmentedButtonStyle}"
+                                     IsChecked="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsManagerTabActive, Mode=TwoWay}"/>
+                    </Grid>
 
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <!-- Settings Tab Panel -->
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                                  Visibility="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsSettingsTabActive, Converter={StaticResource BoolToVisibility}}">
                         <StackPanel Margin="12,0,12,12">
-                            <!-- Profile dropdown and actions -->
+                            
+                            <!-- Mode selection (Stream vs Record Only) -->
+                            <TextBlock Text="Output Mode" Style="{StaticResource FieldLabelStyle}"/>
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <RadioButton Grid.Column="0" Content="📺 Stream"
+                                             GroupName="OutputModeGroup"
+                                             Style="{StaticResource SegmentedButtonStyle}"
+                                             IsChecked="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsRecordOnlyMode, Converter={StaticResource BooleanInvertConverter}, Mode=TwoWay}"/>
+                                <RadioButton Grid.Column="1" Content="💾 Record Only"
+                                             GroupName="OutputModeGroup"
+                                             Style="{StaticResource SegmentedButtonStyle}"
+                                             IsChecked="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsRecordOnlyMode, Mode=TwoWay}"/>
+                            </Grid>
+
+                            <!-- Profile Settings Panel (hidden in Record Only mode) -->
+                            <StackPanel Visibility="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsRecordOnlyMode, Converter={StaticResource InverseBoolToVisibility}}">
+                                <!-- Profile dropdown and actions -->
                             <TextBlock Text="Active Profile" Style="{StaticResource FieldLabelStyle}"/>
                             <Grid Margin="0,0,0,12">
                                 <Grid.ColumnDefinitions>
@@ -1475,14 +1544,14 @@
                                 <StackPanel Visibility="{Binding SupportsOAuth, Converter={StaticResource InverseBoolToVisibility}}">
                                     <TextBlock Text="Server URL" Style="{StaticResource FieldLabelStyle}"/>
                                     <TextBox Text="{Binding ServerUrl, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,12"/>
-                                </StackPanel>
 
-                                <TextBlock Text="Stream Key" Style="{StaticResource FieldLabelStyle}"/>
-                                <PasswordBox behaviors:PasswordBoxHelper.Attach="True"
-                                             behaviors:PasswordBoxHelper.BoundPassword="{Binding StreamKey, UpdateSourceTrigger=PropertyChanged}"/>
-                                <TextBlock Text="{Binding KeyHelpText}" Foreground="{StaticResource TextSecondaryBrush}"
-                                           FontSize="11" TextWrapping="Wrap" Margin="0,4,0,12"
-                                           Visibility="{Binding KeyHelpText, Converter={StaticResource NullToVisibility}}"/>
+                                    <TextBlock Text="Stream Key" Style="{StaticResource FieldLabelStyle}"/>
+                                    <PasswordBox behaviors:PasswordBoxHelper.Attach="True"
+                                                 behaviors:PasswordBoxHelper.BoundPassword="{Binding StreamKey, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <TextBlock Text="{Binding KeyHelpText}" Foreground="{StaticResource TextSecondaryBrush}"
+                                               FontSize="11" TextWrapping="Wrap" Margin="0,4,0,12"
+                                               Visibility="{Binding KeyHelpText, Converter={StaticResource NullToVisibility}}"/>
+                                </StackPanel>
 
                                 <Separator Margin="0,8,0,12" Background="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}"/>
 
@@ -1538,57 +1607,111 @@
                                         </ItemsControl>
                                     </StackPanel>
                                 </Expander>
+                            </StackPanel>
+                        </StackPanel>
 
-                                <Separator Margin="0,8,0,12" Background="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}"/>
+                            <Separator Margin="0,8,0,12" Background="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}"/>
 
-                                <!-- Common Stream Parameters -->
+                            <!-- Common Stream/Record Parameters -->
+                            <TextBlock Text="Quality Preset" Style="{StaticResource FieldLabelStyle}"/>
+                            <ComboBox ItemsSource="{x:Static vm:GoLiveViewModel.QualityPresets}"
+                                      SelectedItem="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.SelectedQualityPreset, Mode=TwoWay}"
+                                      DisplayMemberPath="Name" Margin="0,0,0,12"/>
+
+                            <!-- Custom settings visible only when Custom is active -->
+                            <StackPanel Visibility="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsCustomQualityActive, Converter={StaticResource BoolToVisibility}}">
                                 <TextBlock Text="Bitrate (kbps)" Style="{StaticResource FieldLabelStyle}"/>
                                 <TextBox Text="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.BitrateKbps, Mode=TwoWay}" Margin="0,0,0,12"/>
 
                                 <TextBlock Text="FPS" Style="{StaticResource FieldLabelStyle}"/>
                                 <TextBox Text="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.Fps, Mode=TwoWay}" Margin="0,0,0,12"/>
+                            </StackPanel>
 
-                                <TextBlock Text="Encoder" Style="{StaticResource FieldLabelStyle}"/>
-                                <ComboBox ItemsSource="{x:Static vm:GoLiveViewModel.EncoderOptions}"
-                                          SelectedItem="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.Encoder, Mode=TwoWay}" Margin="0,0,0,12"/>
+                            <TextBlock Text="Encoder" Style="{StaticResource FieldLabelStyle}"/>
+                            <ComboBox ItemsSource="{x:Static vm:GoLiveViewModel.EncoderOptions}"
+                                      SelectedValuePath="Code"
+                                      DisplayMemberPath="Name"
+                                      SelectedValue="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.Encoder, Mode=TwoWay}" Margin="0,0,0,12"/>
 
-                                <!-- Drives both halves of the Spout2 Integration Plan under one switch: publishes the
-                                     composited output as a named GPU-shared source for other apps on this machine (OBS +
-                                     obs-spout2-plugin, TouchDesigner, Resolume, the SpoutReceiver demo) to pick up directly
-                                     (Option A), AND replaces the primary preview's CPU pipe+WriteableBitmap path with that
-                                     same shared texture rendered straight into a D3DImage (Option B) — see
-                                     SpoutPreviewRenderer/GoLiveView.xaml.cs. PiP thumbnails are unaffected either way. -->
-                                <CheckBox Content="Show Preview" Margin="0,4,0,8"
-                                          ToolTip="Also publishes the composited output as a named Spout2 source other apps (OBS, TouchDesigner, Resolume) can pick up directly"
-                                          IsChecked="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsSpoutOutputEnabled, Mode=TwoWay}"/>
-                                <StackPanel Visibility="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsSpoutOutputEnabled, Converter={StaticResource BoolToVisibility}}">
-                                    <TextBlock Text="Spout Sender Name" Style="{StaticResource FieldLabelStyle}"/>
-                                    <TextBox Text="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.SpoutSenderName, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"/>
-                                </StackPanel>
-
-                                <!-- Local MP4 recording, always alongside an active stream, not standalone —
-                                     see GoLiveSettingsService.IsRecordingEnabled's own doc comment for why
-                                     (the native encoder currently requires a real RTMP target to start at all). -->
-                                <CheckBox Content="Record while live" Margin="0,4,0,8"
-                                          ToolTip="Also writes a local MP4 (same encoded packets sent to the stream) while streaming — requires a folder below"
-                                          IsChecked="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsRecordingEnabled, Mode=TwoWay}"/>
-                                <StackPanel Visibility="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsRecordingEnabled, Converter={StaticResource BoolToVisibility}}">
-                                    <TextBlock Text="Recording Folder" Style="{StaticResource FieldLabelStyle}"/>
-                                    <Grid Margin="0,0,0,8">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.RecordFolderPath, FallbackValue='(none selected)', TargetNullValue='(none selected)'}"
-                                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
-                                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,8,0"/>
-                                        <Button Grid.Column="1" Content="Browse…" Padding="8,4"
-                                                Command="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.BrowseRecordFolderCommand}"/>
-                                    </Grid>
-                                </StackPanel>
+                            <!-- Local MP4 recording settings -->
+                            <CheckBox Content="Keep a local copy" Margin="0,4,0,8"
+                                      ToolTip="Also writes a local MP4 while streaming — requires selecting a folder below"
+                                      Visibility="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsRecordOnlyMode, Converter={StaticResource InverseBoolToVisibility}}"
+                                      IsChecked="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsRecordingEnabled, Mode=TwoWay}"/>
+                            
+                            <StackPanel Visibility="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsRecordingFolderVisible, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="Recording Folder" Style="{StaticResource FieldLabelStyle}"/>
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.RecordFolderPath, FallbackValue='(none selected)', TargetNullValue='(none selected)'}"
+                                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                               Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,8,0"/>
+                                    <Button Grid.Column="1" Content="Browse…" Padding="8,4"
+                                            Command="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.BrowseRecordFolderCommand}"/>
+                                </Grid>
                             </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
+
+                    <!-- Stream Manager Panel -->
+                    <Grid Grid.Row="1" Margin="12,4,12,12"
+                          Visibility="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsManagerTabActive, Converter={StaticResource BoolToVisibility}}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/> <!-- Update Info fields -->
+                            <RowDefinition Height="*"/>    <!-- Chat Feed -->
+                        </Grid.RowDefinitions>
+
+                        <!-- Stream Info Update (Twitch / YouTube details) -->
+                        <StackPanel Grid.Row="0" Margin="0,0,0,12"
+                                    Visibility="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsRecordOnlyMode, Converter={StaticResource InverseBoolToVisibility}}">
+                            <TextBlock Text="Stream Title" Style="{StaticResource FieldLabelStyle}"/>
+                            <TextBox Text="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.StreamTitle, Mode=TwoWay}" Margin="0,0,0,8"/>
+
+                            <TextBlock Text="Game / Category (Twitch) or Description (YouTube)" Style="{StaticResource FieldLabelStyle}"/>
+                            <TextBox Text="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.StreamCategory, Mode=TwoWay}" Margin="0,0,0,12"/>
+
+                            <Button Content="Update Stream Info"
+                                    Command="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.UpdateStreamInfoCommand}"
+                                    Padding="0,6" Margin="0,0,0,6"/>
+
+                            <TextBlock Text="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.UpdateInfoStatus}"
+                                       Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                        
+                        <TextBlock Grid.Row="0" Text="Info updates are disabled in Record Only mode." 
+                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" HorizontalAlignment="Center" Margin="0,20"
+                                   Visibility="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsRecordOnlyMode, Converter={StaticResource BoolToVisibility}}"/>
+
+                        <!-- Live Chat Feed -->
+                        <Grid Grid.Row="1">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Text="Live Chat Log" Style="{StaticResource FieldLabelStyle}" Margin="0,4,0,4"/>
+                            
+                            <Border Grid.Row="1" Background="{DynamicResource {x:Static adonisUi:Brushes.Layer2BackgroundBrush}}" 
+                                    BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer2BorderBrush}}" 
+                                    BorderThickness="1" CornerRadius="4" Padding="6">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl ItemsSource="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.LiveChatMessages}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type services:ChatMessage}">
+                                                <TextBlock TextWrapping="Wrap" Margin="0,2,0,2" FontSize="12">
+                                                    <Run Text="{Binding Username}" FontWeight="Bold" Foreground="{Binding Color, Converter={StaticResource ColorToBrush}}"/>
+                                                    <Run Text=": " Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                    <Run Text="{Binding Text}"/>
+                                                </TextBlock>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </Border>
+                        </Grid>
+                    </Grid>
                 </Grid>
             </Border>
         </Grid>

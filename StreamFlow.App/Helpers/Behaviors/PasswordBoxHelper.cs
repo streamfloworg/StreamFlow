@@ -56,13 +56,18 @@ public static class PasswordBoxHelper
     {
         if (d is not PasswordBox box) return;
 
-        if (!GetIsUpdating(box))
-            box.Password = e.NewValue as string ?? string.Empty;
+        if (GetIsUpdating(box)) return;
+
+        SetIsUpdating(box, true);
+        box.Password = e.NewValue as string ?? string.Empty;
+        SetIsUpdating(box, false);
     }
 
     private static void OnPasswordChanged(object sender, RoutedEventArgs e)
     {
         var box = (PasswordBox)sender;
+        if (GetIsUpdating(box)) return;
+
         SetIsUpdating(box, true);
         SetBoundPassword(box, box.Password);
         SetIsUpdating(box, false);

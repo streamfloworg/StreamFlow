@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.Globalization;
 
 using StreamFlow.App.Services;
@@ -12,9 +12,17 @@ namespace StreamFlow.App.ViewModels.Pages;
 /// "what does the layout look like." Also owns loading a Scene Set's raw scenes into the shared
 /// SceneEditor — that's a streaming-profile concept (which named set is linked to which
 /// profile), not a pure editing concern.</summary>
+public sealed record EncoderOption(string Code, string Name);
+public sealed record QualityPreset(string Name, uint BitrateKbps, uint Fps);
+
 public partial class GoLiveViewModel
 {
-    public static readonly string[] EncoderOptions = ["libx264", "h264_nvenc", "h264_amf", "h264_qsv"];
+    public static readonly EncoderOption[] EncoderOptions = [
+        new EncoderOption("libx264", "Standard CPU (Software - x264)"),
+        new EncoderOption("h264_nvenc", "NVIDIA NVENC (Hardware Accelerated)"),
+        new EncoderOption("h264_amf", "AMD AMF (Hardware Accelerated)"),
+        new EncoderOption("h264_qsv", "Intel QuickSync (Hardware Accelerated)")
+    ];
     public static StreamServiceKind[] ServiceKindOptions { get; } = [StreamServiceKind.Twitch, StreamServiceKind.YouTube, StreamServiceKind.Custom];
 
     /// <summary>Short tally-pill label: "Idle", "Live", or "Error".</summary>
@@ -68,6 +76,8 @@ public partial class GoLiveViewModel
         _ => false,
     };
 
+    public bool IsTestModeSelectorVisible => IsTestModeSupported && !IsRecordOnlyMode;
+
     /// <summary>Set by StartStreamCoreAsync when a YouTube test stream creates an ephemeral
     /// unlisted broadcast, so EndActiveYouTubeTestBroadcastIfAny (called from the
     /// StreamStoppedEvent handler in GoLiveViewModel.cs) knows what to tear down — that handler
@@ -120,6 +130,17 @@ public partial class GoLiveViewModel
 
     private List<SceneSettings> _localDefaultScenes = [];
 
+    public static readonly QualityPreset[] QualityPresets = [
+        new QualityPreset("High (1080p 60fps - 6000 kbps)", 6000, 60),
+        new QualityPreset("Medium (1080p 30fps - 4500 kbps)", 4500, 30),
+        new QualityPreset("Standard (720p 60fps - 3500 kbps)", 3500, 60),
+        new QualityPreset("Low (720p 30fps - 2500 kbps)", 2500, 30),
+        new QualityPreset("Custom (Manual configuration)", 0, 0)
+    ];
+
+    [ObservableProperty]
+    private QualityPreset _selectedQualityPreset = QualityPresets[0];
+
     [ObservableProperty]
     private uint _bitrateKbps = 6000;
 
@@ -127,18 +148,59 @@ public partial class GoLiveViewModel
     private uint _fps = 30;
 
     [ObservableProperty]
-    private string _encoder = EncoderOptions[0];
+    private string _encoder = EncoderOptions[0].Code;
+
+    private bool _isUpdatingPreset;
+
+    partial void OnSelectedQualityPresetChanged(QualityPreset value)
+    {
+        if (_isUpdatingPreset) return;
+        _isUpdatingPreset = true;
+        try
+        {
+            if (value.BitrateKbps > 0)
+            {
+                BitrateKbps = value.BitrateKbps;
+                Fps = value.Fps;
+            }
+        }
+        finally
+        {
+            _isUpdatingPreset = false;
+        }
+        OnPropertyChanged(nameof(IsCustomQualityActive));
+    }
+
+    public bool IsCustomQualityActive => SelectedQualityPreset?.BitrateKbps == 0;
+
+    private void SyncQualityPresetSelection()
+    {
+        if (_isUpdatingPreset) return;
+        _isUpdatingPreset = true;
+        try
+        {
+            var match = QualityPresets.FirstOrDefault(p => p.BitrateKbps == BitrateKbps && p.Fps == Fps);
+            SelectedQualityPreset = match ?? QualityPresets[^1];
+        }
+        finally
+        {
+            _isUpdatingPreset = false;
+        }
+        OnPropertyChanged(nameof(IsCustomQualityActive));
+    }
 
     partial void OnBitrateKbpsChanged(uint value)
     {
         if (ActiveProfile is not null) ActiveProfile.BitrateKbps = value;
         ScheduleSaveSettings();
+        SyncQualityPresetSelection();
     }
 
     partial void OnFpsChanged(uint value)
     {
         if (ActiveProfile is not null) ActiveProfile.Fps = value;
         ScheduleSaveSettings();
+        SyncQualityPresetSelection();
     }
 
     partial void OnEncoderChanged(string value)
@@ -177,14 +239,18 @@ public partial class GoLiveViewModel
     {
         if (value is not null)
         {
-            _bitrateKbps = value.BitrateKbps;
-            _fps = value.Fps;
-            _encoder = value.Encoder ?? "libx264";
+             _bitrateKbps = value.BitrateKbps;
+             _fps = value.Fps;
+             _encoder = value.Encoder ?? "libx264";
+             SyncQualityPresetSelection();
 
-            if (value.ServiceKind == StreamServiceKind.Twitch)
-                _ = RestoreTwitchSessionAsync();
-            else if (value.ServiceKind == StreamServiceKind.YouTube)
-                _ = RestoreYouTubeSessionAsync();
+             if (value.ServiceKind == StreamServiceKind.Twitch)
+                 _ = RestoreTwitchSessionAsync();
+             else if (value.ServiceKind == StreamServiceKind.YouTube)
+                 _ = RestoreYouTubeSessionAsync();
+
+             if (value.IsConnected)
+                 _ = FetchAndApplyChannelMetadataAsync();
         }
 
         OnPropertyChanged(nameof(BitrateKbps));
@@ -192,6 +258,7 @@ public partial class GoLiveViewModel
         OnPropertyChanged(nameof(Encoder));
 
         OnPropertyChanged(nameof(IsTestModeSupported));
+        OnPropertyChanged(nameof(IsTestModeSelectorVisible));
         if (!IsTestModeSupported) IsTestModeEnabled = false;
 
         UpdateChatConnection();
@@ -389,6 +456,12 @@ public partial class GoLiveViewModel
             foreach (var p in Profiles.Where(p => p.ServiceKind == StreamServiceKind.Twitch))
             {
                 p.ConnectedAccountLabel = result.Username;
+                p.ConnectedUserId = result.UserId;
+                await ApplyTwitchStreamKeyAsync(p, result.AccessToken, result.UserId);
+            }
+            if (ActiveProfile?.ServiceKind == StreamServiceKind.Twitch)
+            {
+                _ = FetchAndApplyChannelMetadataAsync();
             }
         }
     }
@@ -403,6 +476,10 @@ public partial class GoLiveViewModel
             p.ConnectedAccountLabel = result.ChannelName;
             await ApplyYouTubeStreamKeyAsync(p, result.AccessToken);
         }
+        if (ActiveProfile?.ServiceKind == StreamServiceKind.YouTube)
+        {
+            _ = FetchAndApplyChannelMetadataAsync();
+        }
     }
 
     /// <summary>Re-derives a profile's connection status (and, for YouTube, its stream key)
@@ -416,12 +493,23 @@ public partial class GoLiveViewModel
             case StreamServiceKind.Twitch:
                 var twitchResult = await _twitchAuth.TryRestoreAsync();
                 profile.ConnectedAccountLabel = twitchResult?.Username;
+                profile.ConnectedUserId = twitchResult?.UserId;
+                if (twitchResult is not null)
+                {
+                    await ApplyTwitchStreamKeyAsync(profile, twitchResult.AccessToken, twitchResult.UserId);
+                    if (ReferenceEquals(profile, ActiveProfile))
+                        _ = FetchAndApplyChannelMetadataAsync();
+                }
                 break;
             case StreamServiceKind.YouTube:
                 var youTubeResult = await _youTubeAuth.TryRestoreAsync();
                 profile.ConnectedAccountLabel = youTubeResult?.ChannelName;
                 if (youTubeResult is not null)
+                {
                     await ApplyYouTubeStreamKeyAsync(profile, youTubeResult.AccessToken);
+                    if (ReferenceEquals(profile, ActiveProfile))
+                        _ = FetchAndApplyChannelMetadataAsync();
+                }
                 break;
             default:
                 profile.ConnectedAccountLabel = null;
@@ -436,6 +524,49 @@ public partial class GoLiveViewModel
         {
             profile.ServerUrl = key.IngestionAddress;
             profile.StreamKey = key.StreamName;
+        }
+    }
+
+    private async Task ApplyTwitchStreamKeyAsync(StreamingProfile profile, string accessToken, string userId)
+    {
+        var key = await _twitchAuth.TryFetchStreamKeyAsync(accessToken, userId);
+        if (key is not null)
+        {
+            profile.ServerUrl = "rtmp://live.twitch.tv/app";
+            profile.StreamKey = key;
+        }
+    }
+
+    private async Task FetchAndApplyChannelMetadataAsync()
+    {
+        if (ActiveProfile is null || !ActiveProfile.IsConnected) return;
+
+        if (ActiveProfile.ServiceKind == StreamServiceKind.Twitch)
+        {
+            var token = _twitchAuth.GetAccessToken();
+            var userId = ActiveProfile.ConnectedUserId;
+            if (!string.IsNullOrEmpty(token) && !string.IsNullOrEmpty(userId))
+            {
+                var info = await _twitchAuth.TryFetchChannelInfoAsync(token, userId);
+                if (info is not null)
+                {
+                    StreamTitle = info.Value.Title;
+                    StreamCategory = info.Value.GameName;
+                }
+            }
+        }
+        else if (ActiveProfile.ServiceKind == StreamServiceKind.YouTube)
+        {
+            var token = await _youTubeAuth.GetAccessTokenAsync();
+            if (!string.IsNullOrEmpty(token))
+            {
+                var info = await _youTubeAuth.TryFetchBroadcastInfoAsync(token);
+                if (info is not null)
+                {
+                    StreamTitle = info.Value.Title;
+                    StreamCategory = info.Value.Description;
+                }
+            }
         }
     }
 
@@ -491,6 +622,7 @@ public partial class GoLiveViewModel
                 {
                     UpdateChatConnection();
                     OnPropertyChanged(nameof(IsTestModeSupported));
+                    OnPropertyChanged(nameof(IsTestModeSelectorVisible));
                     if (!IsTestModeSupported) IsTestModeEnabled = false;
                     // StreamingProfile.OnServiceKindChanged already cleared the stale key/label
                     // synchronously — this re-derives the real ones for whichever service the
@@ -534,6 +666,7 @@ public partial class GoLiveViewModel
                 break;
         }
         UpdateChatConnection();
+        _ = FetchAndApplyChannelMetadataAsync();
     }
 
     private async Task ConnectTwitchAsync(StreamingProfile profile)
@@ -544,6 +677,7 @@ public partial class GoLiveViewModel
             foreach (var p in Profiles.Where(p => p.ServiceKind == StreamServiceKind.Twitch))
             {
                 p.ConnectedAccountLabel = null;
+                p.ConnectedUserId = null;
             }
             return;
         }
@@ -554,6 +688,8 @@ public partial class GoLiveViewModel
             foreach (var p in Profiles.Where(p => p.ServiceKind == StreamServiceKind.Twitch))
             {
                 p.ConnectedAccountLabel = result.Username;
+                p.ConnectedUserId = result.UserId;
+                await ApplyTwitchStreamKeyAsync(p, result.AccessToken, result.UserId);
             }
         }
         else
@@ -792,13 +928,27 @@ public partial class GoLiveViewModel
         _isInitializing = false;
         _lastLoadedSceneSetId = reg?.Id;
         BakeOverridesToSceneSetCommand.NotifyCanExecuteChanged();
+        RefreshStartStreamAvailability();
     }
 
-    private bool CanStartStream() =>
-        !IsStreaming && SceneEditor.Slots.Count > 0 && SceneEditor.Slots.All(s => s.IsOverlay || !string.IsNullOrEmpty(s.SourceId)) &&
-        ActiveProfile is not null &&
-        !string.IsNullOrWhiteSpace(ActiveProfile.ServerUrl) &&
-        !string.IsNullOrWhiteSpace(ActiveProfile.StreamKey);
+    private bool CanStartStream()
+    {
+        if (IsStreaming) return false;
+        
+        var baseValid = SceneEditor.Slots.Count > 0 && SceneEditor.Slots.All(s => s.IsOverlay || !string.IsNullOrEmpty(s.SourceId));
+        if (!baseValid) return false;
+
+        if (IsRecordOnlyMode)
+        {
+            return !string.IsNullOrWhiteSpace(RecordFolderPath);
+        }
+        else
+        {
+            return ActiveProfile is not null &&
+                   !string.IsNullOrWhiteSpace(ActiveProfile.ServerUrl) &&
+                   !string.IsNullOrWhiteSpace(ActiveProfile.StreamKey);
+        }
+    }
 
     /// <summary>Human-readable reason Go Live/Test Stream are disabled — null once
     /// <see cref="CanStartStream"/> is satisfied. Bound to both buttons' ToolTips so "why won't
@@ -816,15 +966,23 @@ public partial class GoLiveViewModel
             else if (unassigned > 0)
                 reasons.Add($"{unassigned} source slot(s) have no source selected");
 
-            if (ActiveProfile is null)
-                reasons.Add("no streaming profile is selected");
+            if (IsRecordOnlyMode)
+            {
+                if (string.IsNullOrWhiteSpace(RecordFolderPath))
+                    reasons.Add("no recording folder has been selected");
+            }
             else
             {
-                if (string.IsNullOrWhiteSpace(ActiveProfile.ServerUrl)) reasons.Add("the profile's Server URL is empty");
-                if (string.IsNullOrWhiteSpace(ActiveProfile.StreamKey)) reasons.Add("the profile's Stream Key is empty");
+                if (ActiveProfile is null)
+                    reasons.Add("no streaming profile is selected");
+                else
+                {
+                    if (string.IsNullOrWhiteSpace(ActiveProfile.ServerUrl)) reasons.Add("the profile's Server URL is empty");
+                    if (string.IsNullOrWhiteSpace(ActiveProfile.StreamKey)) reasons.Add("the profile's Stream Key is empty");
+                }
             }
 
-            return reasons.Count == 0 ? null : "Can't start streaming: " + string.Join("; ", reasons) + ".";
+            return reasons.Count == 0 ? null : (IsRecordOnlyMode ? "Can't start recording: " : "Can't start streaming: ") + string.Join("; ", reasons) + ".";
         }
     }
 
@@ -834,17 +992,29 @@ public partial class GoLiveViewModel
     /// the button's actual enabled state.</summary>
     private void RefreshStartStreamAvailability()
     {
-        StartStreamCommand.NotifyCanExecuteChanged();
-        OnPropertyChanged(nameof(StartStreamBlockedReason));
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            dispatcher.BeginInvoke(new Action(() =>
+            {
+                StartStreamCommand.NotifyCanExecuteChanged();
+                OnPropertyChanged(nameof(StartStreamBlockedReason));
+            }));
+        }
+        else
+        {
+            StartStreamCommand.NotifyCanExecuteChanged();
+            OnPropertyChanged(nameof(StartStreamBlockedReason));
+        }
     }
 
     /// <summary>Whether this goes out as a real stream or a bandwidth test is decided by the
     /// "Test Mode" toggle (<see cref="IsTestModeEnabled"/>) rather than a separate button/command
     /// — see StartStreamCoreAsync's testMode param for what that actually changes.</summary>
     [RelayCommand(CanExecute = nameof(CanStartStream))]
-    private Task StartStreamAsync() => StartStreamCoreAsync(testMode: IsTestModeEnabled);
+    private Task StartStreamAsync() => StartStreamCoreAsync(testMode: IsTestModeEnabled, recordOnly: IsRecordOnlyMode);
 
-    private async Task StartStreamCoreAsync(bool testMode)
+    private async Task StartStreamCoreAsync(bool testMode, bool recordOnly = false)
     {
         // Capture sources are started as soon as they're picked (UpdateSlotCaptureAsync), so
         // the active scene's live preview keeps running whether or not you're actually
@@ -859,7 +1029,34 @@ public partial class GoLiveViewModel
         // knows the current primary/PiP layout once Config is sent.
         await _core.SendCommandAsync(SceneEditor.BuildConfigCommand());
 
-        if (ActiveProfile is null) return;
+        string? rtmpUrl = null;
+        if (!recordOnly)
+        {
+            if (ActiveProfile is null) return;
+
+            // Twitch's test mode is just a URL variant (BuildRtmpUrl appends the query param) —
+            // YouTube has no such flag, so it needs an actual ephemeral unlisted broadcast to
+            // publish into instead (see IsTestModeSupported's doc comment for why these can't share
+            // one code path).
+            if (testMode && ActiveProfile.ServiceKind == StreamServiceKind.YouTube)
+            {
+                var accessToken = await _youTubeAuth.GetAccessTokenAsync();
+                var testBroadcast = accessToken is null ? null : await _youTubeAuth.CreateTestBroadcastAsync(accessToken);
+                if (testBroadcast is null)
+                {
+                    ErrorMessage = "Couldn't create a YouTube test broadcast — check that YouTube is connected and try again.";
+                    ScheduleErrorDismiss();
+                    return;
+                }
+
+                _activeYouTubeTestBroadcastId = testBroadcast.BroadcastId;
+                rtmpUrl = $"{testBroadcast.IngestionAddress.TrimEnd('/')}/{testBroadcast.StreamName}";
+            }
+            else
+            {
+                rtmpUrl = ActiveProfile.BuildRtmpUrl(testMode);
+            }
+        }
 
         // Whatever's checked in the Audio Sources panel (see AudioSources/RebuildAudioSources),
         // with each device's channel-strip gain/mute/solo — previously hardcoded to [] (no
@@ -882,35 +1079,11 @@ public partial class GoLiveViewModel
             .Select(a => new AudioSourceConfig(a.Device.Id, EffectiveGain(a), a.IsMuted, a.IsSolo))
             .ToArray();
 
-        // Twitch's test mode is just a URL variant (BuildRtmpUrl appends the query param) —
-        // YouTube has no such flag, so it needs an actual ephemeral unlisted broadcast to
-        // publish into instead (see IsTestModeSupported's doc comment for why these can't share
-        // one code path).
-        string rtmpUrl;
-        if (testMode && ActiveProfile.ServiceKind == StreamServiceKind.YouTube)
-        {
-            var accessToken = await _youTubeAuth.GetAccessTokenAsync();
-            var testBroadcast = accessToken is null ? null : await _youTubeAuth.CreateTestBroadcastAsync(accessToken);
-            if (testBroadcast is null)
-            {
-                ErrorMessage = "Couldn't create a YouTube test broadcast — check that YouTube is connected and try again.";
-                ScheduleErrorDismiss();
-                return;
-            }
-
-            _activeYouTubeTestBroadcastId = testBroadcast.BroadcastId;
-            rtmpUrl = $"{testBroadcast.IngestionAddress.TrimEnd('/')}/{testBroadcast.StreamName}";
-        }
-        else
-        {
-            rtmpUrl = ActiveProfile.BuildRtmpUrl(testMode);
-        }
-
-        IsTestStreaming = testMode;
+        IsTestStreaming = testMode && !recordOnly;
         await _core.SendCommandAsync(new StartStreamCommand(
             rtmpUrl, BitrateKbps, Fps,
             OutputWidth: null, OutputHeight: null, FitMode: null,
-            Encoder, sources, audioSourceConfigs, RecordPath: BuildRecordPathIfEnabled()));
+            Encoder, sources, audioSourceConfigs, RecordPath: BuildRecordPathIfEnabled(force: recordOnly)));
     }
 
     [RelayCommand(CanExecute = nameof(IsStreaming))]

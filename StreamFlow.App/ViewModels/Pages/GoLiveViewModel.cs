@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 using System.IO;
@@ -183,19 +183,16 @@ public partial class GoLiveViewModel : ViewModel
         _persistedSelectedAudioDeviceIds = saved.SelectedAudioDeviceIds;
         _persistedAudioDeviceDisplayNames = saved.AudioDeviceDisplayNames;
 
-        _isSpoutOutputEnabled = saved.IsSpoutOutputEnabled;
-        _spoutSenderName = saved.SpoutSenderName;
+        _isSpoutOutputEnabled = true; // Always enable Spout2
+        _spoutSenderName = string.IsNullOrEmpty(saved.SpoutSenderName) ? "StreamFlow" : saved.SpoutSenderName;
 
         _isRecordingEnabled = saved.IsRecordingEnabled;
-        _recordFolderPath = saved.RecordFolderPath;
-        // CoreBridgeService queues commands sent before core's Ready event and flushes them once
-        // it arrives, so it's safe to push this here even though the core process may not have
-        // started yet — same reasoning that already lets other ViewModel constructors send
-        // commands eagerly (see CoreBridgeService's own doc comment).
-        if (_isSpoutOutputEnabled)
-        {
-            _ = _core.SendCommandAsync(new SetSpoutOutputCommand(true, _spoutSenderName));
-        }
+        _recordFolderPath = string.IsNullOrEmpty(saved.RecordFolderPath)
+            ? Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyVideos), "StreamFlow")
+            : saved.RecordFolderPath;
+
+        // Force spout output to active
+        _ = _core.SendCommandAsync(new SetSpoutOutputCommand(true, _spoutSenderName));
 
         SceneEditor.TransitionKind = SceneEditorViewModel.TransitionKindFromWire(saved.TransitionKind);
         SceneEditor.TransitionDurationMs = (int)saved.TransitionDurationMs;
@@ -334,6 +331,8 @@ public partial class GoLiveViewModel : ViewModel
             SpoutSenderName = SpoutSenderName,
             IsRecordingEnabled = IsRecordingEnabled,
             RecordFolderPath = RecordFolderPath,
+            BitrateKbps = BitrateKbps,
+            Fps = Fps,
             IsStreamDeckServerEnabled = currentOnDisk.IsStreamDeckServerEnabled,
             StreamDeckServerPort = currentOnDisk.StreamDeckServerPort,
             StreamDeckApiKey = currentOnDisk.StreamDeckApiKey
@@ -496,7 +495,7 @@ public partial class GoLiveViewModel : ViewModel
                     // IsTestStreaming was already set by StartStreamCoreAsync before this event
                     // ever arrives (it drives which RTMP URL variant got sent in the first
                     // place), so it's safe to just read it here for the label.
-                    StatusLabel = IsTestStreaming ? "Testing" : "Live";
+                    StatusLabel = IsRecordOnlyMode ? "Recording" : (IsTestStreaming ? "Testing" : "Live");
                     _errorDismissCts?.Cancel();
                     ErrorMessage = null;
                     _eventBus.Publish(new GoLiveStartedEvent());
