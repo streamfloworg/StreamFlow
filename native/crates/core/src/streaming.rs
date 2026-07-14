@@ -332,32 +332,112 @@ impl StreamSession {
         let (audio_cons, audio_config, audio_streams) = if raw_captures.is_empty() {
             (None, None, Vec::new())
         } else {
-            let primary_channels = raw_captures[0].2.channels;
-            let primary_rate     = raw_captures[0].2.sample_rate;
+            // All sources are normalised to this format before mixing — avoids both the
+            // silent-drop problem (mismatched sources were discarded entirely) and the
+            // clock-skew crackling problem (sources at different rates consumed at different
+            // speeds, producing periodic zero-pad silence bursts in the mix).
+            // 48000 Hz: AAC encoder preferred rate, native rate for most physical mics
+            // (CPAL), so the passthrough case is the common one. Stereo (2 ch) throughout.
+            const TARGET_RATE: u32 = 48000;
+            const TARGET_CHANNELS: u16 = 2;
 
-            let mut streams: Vec<crate::audio::ActiveStream> = Vec::new();
-            let mut consumers: Vec<ringbuf::HeapCons<f32>> = Vec::new();
-            let mut states: Vec<MixState> = Vec::new();
-            for (stream, cons, config, device_id, gain, is_muted, is_solo) in raw_captures {
-                if config.channels == primary_channels && config.sample_rate == primary_rate {
-                    streams.push(stream);
-                    consumers.push(cons);
-                    states.push(MixState { device_id, gain, muted: is_muted, solo: is_solo });
-                } else {
-                    tracing::warn!(
-                        "audio mixer: skipping device with mismatched format \
-                         ({} ch @ {}Hz vs primary {} ch @ {}Hz)",
-                        config.channels, config.sample_rate.0,
-                        primary_channels, primary_rate.0,
-                    );
-                    // stream drops here → that capture thread stops
+            // Per-source resampler wrapper. swr == null means the source already matches the
+            // target format — pop directly without conversion (zero-cost passthrough).
+            struct ResamplingSource {
+                cons:     ringbuf::HeapCons<f32>,
+                swr:      *mut ffmpeg_sys_next::SwrContext,  // null = passthrough
+                src_ch:   usize,
+                // Input samples to request per output chunk: scaled by the ratio src/dst.
+                // For a 512-output-sample chunk: 44100Hz → ⌈512 * 44100/48000⌉ = 471 in.
+                in_per_chunk: usize,
+            }
+            // Safety: ResamplingSource is only used inside the single mixer thread.
+            unsafe impl Send for ResamplingSource {}
+
+            impl Drop for ResamplingSource {
+                fn drop(&mut self) {
+                    unsafe {
+                        if !self.swr.is_null() {
+                            ffmpeg_sys_next::swr_free(&mut self.swr);
+                        }
+                    }
                 }
             }
+
+            let mut streams: Vec<crate::audio::ActiveStream> = Vec::new();
+            let mut resampling_sources: Vec<ResamplingSource> = Vec::new();
+            let mut states: Vec<MixState> = Vec::new();
+
+            for (stream, cons, config, device_id, gain, is_muted, is_solo) in raw_captures {
+                let src_rate = config.sample_rate.0;
+                let src_ch   = config.channels as usize;
+                let needs_resample = src_rate != TARGET_RATE || config.channels != TARGET_CHANNELS;
+
+                let swr_ctx = if needs_resample {
+                    // Build a SwrContext: src_ch interleaved f32 @ src_rate
+                    //                  → TARGET_CHANNELS interleaved f32 @ TARGET_RATE
+                    // AV_SAMPLE_FMT_FLT is packed/interleaved f32 (what cpal/WASAPI give us).
+                    let swr = unsafe {
+                        use ffmpeg_sys_next::*;
+                        let mut ctx: *mut SwrContext = std::ptr::null_mut();
+                        let mut in_layout:  AVChannelLayout = std::mem::zeroed();
+                        let mut out_layout: AVChannelLayout = std::mem::zeroed();
+                        av_channel_layout_default(&mut in_layout,  src_ch as i32);
+                        av_channel_layout_default(&mut out_layout, TARGET_CHANNELS as i32);
+                        let ret = swr_alloc_set_opts2(
+                            &mut ctx,
+                            &out_layout,
+                            AVSampleFormat::AV_SAMPLE_FMT_FLT,
+                            TARGET_RATE as i32,
+                            &in_layout,
+                            AVSampleFormat::AV_SAMPLE_FMT_FLT,
+                            src_rate as i32,
+                            0,
+                            std::ptr::null_mut(),
+                        );
+                        av_channel_layout_uninit(&mut in_layout);
+                        av_channel_layout_uninit(&mut out_layout);
+                        if ret < 0 || ctx.is_null() || swr_init(ctx) < 0 {
+                            if !ctx.is_null() { swr_free(&mut ctx); }
+                            tracing::error!(
+                                "audio mixer: failed to create resampler for device '{}' \
+                                 ({} ch @ {} Hz → {} ch @ {} Hz) — source skipped",
+                                device_id, src_ch, src_rate, TARGET_CHANNELS, TARGET_RATE,
+                            );
+                            continue; // skip this source only if SwrContext alloc fails
+                        }
+                        tracing::info!(
+                            "audio mixer: resampling device '{}' from {} ch @ {} Hz \
+                             → {} ch @ {} Hz",
+                            device_id, src_ch, src_rate, TARGET_CHANNELS, TARGET_RATE,
+                        );
+                        ctx
+                    };
+                    swr
+                } else {
+                    std::ptr::null_mut() // passthrough
+                };
+
+                // How many input samples to pop per 512-output-sample chunk (ceiling so
+                // we never underfeed swr_convert). Output chunk = CHUNK/TARGET_CHANNELS
+                // frames; input frames = ⌈output_frames × src_rate / TARGET_RATE⌉;
+                // input samples = input_frames × src_ch.
+                const CHUNK: usize = 512;
+                let out_frames = CHUNK / TARGET_CHANNELS as usize; // 256 for stereo
+                let in_per_chunk = (out_frames * src_rate as usize)
+                    .div_ceil(TARGET_RATE as usize) // input frames (ceiling)
+                    * src_ch;                        // → input samples
+
+                streams.push(stream);
+                resampling_sources.push(ResamplingSource { cons, swr: swr_ctx, src_ch, in_per_chunk });
+                states.push(MixState { device_id, gain, muted: is_muted, solo: is_solo });
+            }
+
             let shared_state = Arc::new(Mutex::new(states));
             mix_state = Some(shared_state.clone());
 
-            let n_ch = primary_channels as usize;
-            let mix_buf_samples = primary_rate.0 as usize * n_ch * 4; // 4-second ring
+            // Mix ring buffer: TARGET_RATE * TARGET_CHANNELS, 4-second depth.
+            let mix_buf_samples = TARGET_RATE as usize * TARGET_CHANNELS as usize * 4;
             let mix_rb = ringbuf::HeapRb::<f32>::new(mix_buf_samples);
             let (mut mix_prod, mix_cons) = {
                 use ringbuf::traits::Split;
@@ -378,9 +458,14 @@ impl StreamSession {
                     unsafe { let _ = SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL); }
                     use ringbuf::traits::{Consumer as _, Observer as _, Producer as _};
                     use std::sync::mpsc::TryRecvError;
-                    const CHUNK: usize = 512;
-                    let mut sources = consumers;
-                    let mut bufs: Vec<Vec<f32>> = (0..sources.len())
+                    const CHUNK: usize = 512; // output samples (TARGET_CHANNELS interleaved)
+                    let mut sources = resampling_sources;
+                    // Per-source scratch buffers (raw input before resampling).
+                    let mut raw_bufs: Vec<Vec<f32>> = sources.iter()
+                        .map(|s| vec![0.0f32; s.in_per_chunk.max(CHUNK)])
+                        .collect();
+                    // Per-source resampled output (TARGET_CHANNELS interleaved f32).
+                    let mut out_bufs: Vec<Vec<f32>> = (0..sources.len())
                         .map(|_| vec![0.0f32; CHUNK])
                         .collect();
 
@@ -398,11 +483,11 @@ impl StreamSession {
                         // selected device could permanently stall `available` at 0, which starved
                         // every other source's contribution too — the entire mix would produce
                         // nothing until that one device resumed, easily the whole stream if it
-                        // never did. Each source below now only contributes what it actually has
-                        // this chunk and is zero-padded otherwise, instead of every source being
-                        // required to keep pace with the busiest one.
+                        // never did. Each source below only contributes what it actually has
+                        // this chunk and is zero-padded otherwise, so a muted-but-capturing
+                        // source's ring buffer doesn't back up.
                         let available = sources.iter()
-                            .map(|c| c.occupied_len())
+                            .map(|s| s.cons.occupied_len())
                             .max()
                             .unwrap_or(0);
 
@@ -411,8 +496,7 @@ impl StreamSession {
                             continue;
                         }
 
-                        let to_mix = available.min(CHUNK);
-                        let mut mixed = vec![0.0f32; to_mix];
+                        let mut mixed = vec![0.0f32; CHUNK];
 
                         // Re-read live so a mid-stream Command::SetAudioMix (see
                         // StreamSession::set_audio_mix) takes effect on the very next chunk —
@@ -427,22 +511,48 @@ impl StreamSession {
                         };
 
                         for (i, src) in sources.iter_mut().enumerate() {
-                            let buf = &mut bufs[i];
-                            buf.clear();
-                            buf.resize(to_mix, 0.0);
-                            // Pop only what this source actually has ready (may be less than
-                            // to_mix if it's idle/lagging this chunk) and leave the remainder
-                            // zero-filled — draining still happens every iteration regardless of
-                            // audibility, same as before, so a muted-but-still-capturing source's
-                            // ring buffer doesn't back up.
-                            let have = src.occupied_len().min(to_mix);
+                            let raw_buf  = &mut raw_bufs[i];
+                            let out_buf  = &mut out_bufs[i];
+                            out_buf.fill(0.0);
+
+                            // Pop at most in_per_chunk input samples (zero-pad remainder).
+                            let want = src.in_per_chunk;
+                            raw_buf.resize(want.max(CHUNK), 0.0);
+                            raw_buf.fill(0.0);
+                            let have = src.cons.occupied_len().min(want);
                             if have > 0 {
-                                src.pop_slice(&mut buf[..have]);
+                                src.cons.pop_slice(&mut raw_buf[..have]);
                             }
+
+                            // Resample if needed, else copy directly to out_buf.
+                            let out_samples = if !src.swr.is_null() {
+                                unsafe {
+                                    use ffmpeg_sys_next::*;
+                                    // Both input and output are packed/interleaved f32 (FLT).
+                                    // swr_convert treats them as single-plane (1 pointer).
+                                    let in_ptr:  *const u8 = raw_buf.as_ptr() as *const u8;
+                                    let out_ptr: *mut   u8 = out_buf.as_mut_ptr() as *mut u8;
+                                    let in_samples = (have / src.src_ch).max(0) as i32;
+                                    let n = swr_convert(
+                                        src.swr,
+                                        &mut (out_ptr as *mut u8) as *mut *mut u8,
+                                        (CHUNK / TARGET_CHANNELS as usize) as i32,
+                                        &(in_ptr as *const u8) as *const *const u8,
+                                        in_samples,
+                                    );
+                                    if n > 0 { n as usize * TARGET_CHANNELS as usize } else { 0 }
+                                }
+                            } else {
+                                // Passthrough: copy raw → out (same format, same rate).
+                                let copy_len = have.min(CHUNK);
+                                out_buf[..copy_len].copy_from_slice(&raw_buf[..copy_len]);
+                                copy_len
+                            };
+
                             if !audible[i] { continue; }
 
                             let gain = gains[i];
-                            for (m, s) in mixed.iter_mut().zip(buf[..to_mix].iter()) {
+                            for (m, s) in mixed.iter_mut().zip(out_buf[..out_samples.min(CHUNK)].iter()) {
                                 *m = (*m + s * gain).clamp(-1.0, 1.0);
                             }
                         }
@@ -453,13 +563,14 @@ impl StreamSession {
                 .ok();
 
             let primary_config = cpal::StreamConfig {
-                channels: primary_channels,
-                sample_rate: primary_rate,
+                channels:    TARGET_CHANNELS,
+                sample_rate: cpal::SampleRate(TARGET_RATE),
                 buffer_size: cpal::BufferSize::Default,
             };
             mixer_stop = Some(mixer_stop_tx);
             (Some(mix_cons), Some(primary_config), streams)
         };
+
 
         // Bridge: async broadcast receiver -> bounded sync channel for the encoder thread.
         let (bridge_tx, bridge_rx) = std::sync::mpsc::sync_channel::<Arc<RawFrame>>(8);
