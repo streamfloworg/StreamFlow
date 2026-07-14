@@ -644,9 +644,15 @@
                         <Border Grid.Row="1" CornerRadius="4" BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer2BorderBrush}}" BorderThickness="1" Background="{DynamicResource {x:Static adonisUi:Brushes.Layer2BackgroundBrush}}">
                             <ListBox ItemsSource="{Binding ViewModel.SceneEditor.Slots}"
                                      SelectedItem="{Binding ViewModel.SceneEditor.SelectedSlot, Mode=TwoWay}"
+                                     SelectionMode="Extended"
                                      behaviors:SlotReorderBehavior.OnReordered="{Binding ViewModel.SceneEditor.NotifySlotsReorderedCommand}"
                                      Background="Transparent" BorderThickness="0"
                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <ListBox.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="New Group" Click="NewGroupFromSelected_Click"/>
+                                    </ContextMenu>
+                                </ListBox.ContextMenu>
                                 <ListBox.ItemContainerStyle>
                                     <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
                                         <Setter Property="AllowDrop" Value="True"/>
@@ -660,7 +666,7 @@
                                 </ListBox.ItemContainerStyle>
                                 <ListBox.ItemTemplate>
                                     <DataTemplate DataType="{x:Type vm:SourceSlot}">
-                                        <Grid Margin="4,2">
+                                        <Grid Margin="{Binding VisualLeftMargin}">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="Auto"/>
                                                 <ColumnDefinition Width="Auto"/>

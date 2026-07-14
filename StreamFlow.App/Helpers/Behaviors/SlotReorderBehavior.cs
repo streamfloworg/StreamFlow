@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -76,6 +76,25 @@ public static class SlotReorderBehavior
         e.Handled = true;
     }
 
+    private static SceneEditorViewModel? GetSceneEditor(ListBox listBox)
+    {
+        var dataContext = listBox.DataContext;
+        if (dataContext is null) return null;
+        
+        try
+        {
+            var prop = dataContext.GetType().GetProperty("SceneEditor");
+            if (prop is not null)
+            {
+                return prop.GetValue(dataContext) as SceneEditorViewModel;
+            }
+        }
+        catch
+        {
+        }
+        return null;
+    }
+
     private static void ListBoxItem_Drop(object sender, System.Windows.DragEventArgs e)
     {
         if (sender is not ListBoxItem item || item.DataContext is not SourceSlot targetSlot) return;
@@ -90,10 +109,42 @@ public static class SlotReorderBehavior
         var newIndex = slots.IndexOf(targetSlot);
         if (oldIndex < 0 || newIndex < 0 || oldIndex == newIndex) return;
 
+        var position = e.GetPosition(item);
+        var height = item.ActualHeight;
+
+        // If dropped in the middle of the item, we perform grouping!
+        bool isMiddle = position.Y > height * 0.25 && position.Y < height * 0.75;
+        if (isMiddle && !sourceSlot.IsPrimary && !targetSlot.IsPrimary && sourceSlot.OverlayKind != OverlayKind.Group)
+        {
+            var editor = GetSceneEditor(listBox);
+            if (editor is not null)
+            {
+                if (targetSlot.OverlayKind == OverlayKind.Group || targetSlot.ParentGroup is not null)
+                {
+                    editor.AddSlotToGroup(sourceSlot, targetSlot);
+                }
+                else
+                {
+                    editor.GroupTwoSlots(sourceSlot, targetSlot);
+                }
+
+                var command = GetOnReordered(listBox);
+                if (command?.CanExecute(null) == true) command.Execute(null);
+                return;
+            }
+        }
+
+        // If it's a regular reorder near the edges, remove from parent group if it was in one
+        if (sourceSlot.ParentGroup is not null)
+        {
+            var editor = GetSceneEditor(listBox);
+            editor?.RemoveSlotFromGroup(sourceSlot);
+        }
+
         slots.Move(oldIndex, newIndex);
 
-        var command = GetOnReordered(listBox);
-        if (command?.CanExecute(null) == true) command.Execute(null);
+        var onReorderCommand = GetOnReordered(listBox);
+        if (onReorderCommand?.CanExecute(null) == true) onReorderCommand.Execute(null);
     }
 
     private static T? FindVisualParent<T>(DependencyObject child) where T : DependencyObject

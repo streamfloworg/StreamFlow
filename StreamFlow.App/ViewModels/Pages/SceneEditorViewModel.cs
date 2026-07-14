@@ -433,6 +433,7 @@ public partial class SceneEditorViewModel : ObservableObject
                         if (childSlot is not null)
                         {
                             group.Children.Add(childSlot);
+                            childSlot.ParentGroup = slot;
                         }
                     }
                 }
@@ -913,6 +914,102 @@ public partial class SceneEditorViewModel : ObservableObject
         };
         AttachSlot(slot);
         NotifyChanged();
+    }
+
+    public void GroupSlots(List<SourceSlot> slotsToGroup)
+    {
+        if (slotsToGroup == null || slotsToGroup.Count <= 1) return;
+
+        double minX = slotsToGroup.Min(s => s.XPercent);
+        double minY = slotsToGroup.Min(s => s.YPercent);
+        double maxX = slotsToGroup.Max(s => s.XPercent + s.WPercent);
+        double maxY = slotsToGroup.Max(s => s.YPercent + s.HPercent);
+
+        var newGroupContent = new GroupOverlayContent();
+        var newGroupSourceId = $"overlay:{Guid.NewGuid():N}";
+        var newGroupSlot = new SourceSlot(
+            isPrimary: false, x: minX, y: minY, w: maxX - minX, h: maxY - minY,
+            isOverlay: true, content: newGroupContent)
+        {
+            SourceId = newGroupSourceId,
+            DisplayName = "Overlay Group",
+            IsAspectLocked = false
+        };
+
+        newGroupSlot.PropertyChanged += OnSlotPropertyChanged;
+        HookContentPropertyChanged(newGroupSlot);
+
+        foreach (var slot in slotsToGroup)
+        {
+            if (slot.ParentGroup is not null)
+            {
+                var oldGroup = slot.ParentGroup.Content as GroupOverlayContent;
+                oldGroup?.Children.Remove(slot);
+            }
+            newGroupContent.Children.Add(slot);
+            slot.ParentGroup = newGroupSlot;
+            slot.IsInSelectedGroup = false;
+        }
+
+        var firstIndex = Slots.IndexOf(slotsToGroup[0]);
+        if (firstIndex >= 0)
+        {
+            Slots.Insert(firstIndex, newGroupSlot);
+        }
+        else
+        {
+            Slots.Add(newGroupSlot);
+        }
+
+        int offset = 1;
+        foreach (var slot in slotsToGroup)
+        {
+            Slots.Remove(slot);
+            var groupIndex = Slots.IndexOf(newGroupSlot);
+            Slots.Insert(groupIndex + offset, slot);
+            offset++;
+        }
+
+        NotifyChanged();
+    }
+
+    public void GroupTwoSlots(SourceSlot sourceSlot, SourceSlot targetSlot)
+    {
+        GroupSlots([targetSlot, sourceSlot]);
+    }
+
+    public void AddSlotToGroup(SourceSlot sourceSlot, SourceSlot targetSlotOrGroup)
+    {
+        var groupSlot = targetSlotOrGroup.OverlayKind == OverlayKind.Group ? targetSlotOrGroup : targetSlotOrGroup.ParentGroup;
+        if (groupSlot is null) return;
+        
+        var group = groupSlot.Content as GroupOverlayContent;
+        if (group is not null && !group.Children.Contains(sourceSlot))
+        {
+            if (sourceSlot.ParentGroup is not null)
+            {
+                var oldGroup = sourceSlot.ParentGroup.Content as GroupOverlayContent;
+                oldGroup?.Children.Remove(sourceSlot);
+            }
+            group.Children.Add(sourceSlot);
+            sourceSlot.ParentGroup = groupSlot;
+
+            Slots.Remove(sourceSlot);
+            var targetIdx = Slots.IndexOf(targetSlotOrGroup);
+            Slots.Insert(targetIdx + 1, sourceSlot);
+            NotifyChanged();
+        }
+    }
+
+    public void RemoveSlotFromGroup(SourceSlot sourceSlot)
+    {
+        if (sourceSlot.ParentGroup is not null)
+        {
+            var oldGroup = sourceSlot.ParentGroup.Content as GroupOverlayContent;
+            oldGroup?.Children.Remove(sourceSlot);
+            sourceSlot.ParentGroup = null;
+            NotifyChanged();
+        }
     }
 
     // Nullable despite the command body itself treating slot as always-present: WPF's Button
@@ -1643,6 +1740,14 @@ public partial class SceneEditorViewModel : ObservableObject
             if (otherSlot.Content is GroupOverlayContent group)
             {
                 group.Children.Remove(slot);
+            }
+        }
+
+        if (slot.Content is GroupOverlayContent deletedGroup)
+        {
+            foreach (var child in deletedGroup.Children)
+            {
+                child.ParentGroup = null;
             }
         }
 

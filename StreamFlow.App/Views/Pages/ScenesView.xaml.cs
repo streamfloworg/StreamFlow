@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Windows.Input;
 
 using StreamFlow.App.Services;
@@ -37,6 +37,20 @@ public partial class ScenesView
             btn.ContextMenu.PlacementTarget = btn;
             btn.ContextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
             btn.ContextMenu.IsOpen = true;
+        }
+    }
+
+    private void NewGroupFromSelected_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.MenuItem menuItem && menuItem.Parent is System.Windows.Controls.ContextMenu contextMenu && contextMenu.PlacementTarget is System.Windows.Controls.ListBox listBox)
+        {
+            var selectedSlots = listBox.SelectedItems.Cast<SourceSlot>()
+                .Where(s => s.OverlayKind != OverlayKind.Group && !s.IsPrimary)
+                .ToList();
+            if (selectedSlots.Count > 1)
+            {
+                ViewModel.SceneEditor.GroupSlots(selectedSlots);
+            }
         }
     }
 

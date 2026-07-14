@@ -458,4 +458,15 @@ public partial class SourceSlot : ObservableObject
             }
         }
     }
+
+    [ObservableProperty]
+    private SourceSlot? _parentGroup;
+
+    partial void OnParentGroupChanged(SourceSlot? value)
+    {
+        OnPropertyChanged(nameof(VisualLeftMargin));
+    }
+
+    public System.Windows.Thickness VisualLeftMargin =>
+        ParentGroup is not null ? new System.Windows.Thickness(24, 2, 4, 2) : new System.Windows.Thickness(4, 2, 4, 2);
 }
