@@ -437,7 +437,10 @@ public partial class GoLiveViewModel : ViewModel
                 case SourcesEvent sources:
                     SceneEditor.AvailableSources.Clear();
                     foreach (var s in sources.Items.Where(s => s.Kind is "monitor" or "window" or "webcam"))
-                        SceneEditor.AvailableSources.Add(s);
+                    {
+                        var humanizedName = HumanizeDeviceName(s.Name);
+                        SceneEditor.AvailableSources.Add(s with { Name = humanizedName });
+                    }
 
                     // Slots restored from settings had their SourceId set before the source
                     // list existed, so their display name and aspect ratio couldn't be resolved
@@ -531,6 +534,31 @@ public partial class GoLiveViewModel : ViewModel
             RefreshStartStreamAvailability();
             StopStreamCommand.NotifyCanExecuteChanged();
         }));
+
+    private static string HumanizeDeviceName(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return name;
+
+        if (name.StartsWith(@"\\.\DISPLAY", StringComparison.OrdinalIgnoreCase))
+        {
+            var numPart = name.Substring(11);
+            if (int.TryParse(numPart, out var num))
+            {
+                return $"Display {num}";
+            }
+        }
+        
+        if (name.StartsWith(@"\\.\"))
+        {
+            return name.Substring(4);
+        }
+        if (name.StartsWith(@"\\?\"))
+        {
+            return name.Substring(4);
+        }
+
+        return name;
+    }
 
     private void UpdateCoreStateText()
     {
