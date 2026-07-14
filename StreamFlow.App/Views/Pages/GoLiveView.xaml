@@ -1083,6 +1083,8 @@
                             <ColumnDefinition Width="260"/>
                             <!-- Dropped frames -->
                             <ColumnDefinition Width="150"/>
+                            <!-- Audio Mix Peak -->
+                            <ColumnDefinition Width="190"/>
                             <!-- Remaining space -->
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
@@ -1139,6 +1141,23 @@
                                     Visibility="{Binding ViewModel.IsStreaming, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="DROPPED:" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0"/>
                             <TextBlock Text="{Binding ViewModel.DroppedFrames}" FontSize="13" FontWeight="Bold" Foreground="#EF4444" FontFamily="{StaticResource FontMono}" VerticalAlignment="Center"/>
+                        </StackPanel>
+
+                        <!-- Audio Mix Peak -->
+                        <StackPanel Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0"
+                                    Visibility="{Binding ViewModel.IsStreaming, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="AUDIO MIX:" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="{Binding ViewModel.MasterPeakText}" FontSize="13" FontWeight="Bold" FontFamily="{StaticResource FontMono}" VerticalAlignment="Center" Width="60" TextAlignment="Right"/>
+                            <!-- A tiny level meter indicator! -->
+                            <Border Width="50" Height="8" Background="#33000000" CornerRadius="2" Margin="8,0,0,0" VerticalAlignment="Center" ClipToBounds="True">
+                                <Grid>
+                                    <Border Background="#10B981" CornerRadius="1" RenderTransformOrigin="0,0.5">
+                                        <Border.RenderTransform>
+                                            <ScaleTransform ScaleX="{Binding ViewModel.MasterPeakFraction, Mode=OneWay}"/>
+                                        </Border.RenderTransform>
+                                    </Border>
+                                </Grid>
+                            </Border>
                         </StackPanel>
                     </Grid>
                 </Border>

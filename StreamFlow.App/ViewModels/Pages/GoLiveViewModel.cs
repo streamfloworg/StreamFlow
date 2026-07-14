@@ -120,6 +120,27 @@ public partial class GoLiveViewModel : ViewModel
     [ObservableProperty]
     private string _bitrateGraphPoints = "0,25 120,25";
 
+    [ObservableProperty]
+    private float _masterPeakDb = float.NegativeInfinity;
+
+    public string MasterPeakText => float.IsNegativeInfinity(MasterPeakDb) || MasterPeakDb < -99f ? "-Inf dB" : $"{MasterPeakDb:F1} dB";
+
+    public double MasterPeakFraction
+    {
+        get
+        {
+            if (float.IsNegativeInfinity(MasterPeakDb) || MasterPeakDb < -60.0f)
+                return 0.0;
+            return Math.Clamp((MasterPeakDb + 60.0) / 60.0, 0.0, 1.0);
+        }
+    }
+
+    partial void OnMasterPeakDbChanged(float value)
+    {
+        OnPropertyChanged(nameof(MasterPeakText));
+        OnPropertyChanged(nameof(MasterPeakFraction));
+    }
+
     private void UpdateHistory(double fps, double bitrate)
     {
         _fpsHistory.Enqueue(fps);
@@ -533,6 +554,9 @@ public partial class GoLiveViewModel : ViewModel
                 case AudioDeviceLevelEvent levelEvt:
                     var matchingSource = AudioSources.FirstOrDefault(a => a.Device.Id == levelEvt.DeviceId);
                     if (matchingSource is not null) matchingSource.PeakDb = levelEvt.PeakDb;
+                    break;
+                case AudioLevelEvent levelEvt:
+                    MasterPeakDb = levelEvt.PeakDb;
                     break;
                 case AudioDeviceVolumeEvent volEvt:
                     var matchingVolSource = AudioSources.FirstOrDefault(a => a.Device.Id == volEvt.DeviceId);
