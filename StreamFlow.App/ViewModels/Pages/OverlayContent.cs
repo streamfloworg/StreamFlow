@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.Windows.Media;
 
 using StreamFlow.App.Services;
@@ -300,4 +300,11 @@ public partial class TimerOverlayContent : ObservableObject, IHasTextStyle
     /// OverlayText directly, without a round trip through the core's rasterized pixels.</summary>
     [ObservableProperty]
     private string _timerDisplayText = "";
+}
+
+public partial class GroupOverlayContent : ObservableObject, IOverlayContent
+{
+    public OverlayKind Kind => OverlayKind.Group;
+
+    public ObservableCollection<SourceSlot> Children { get; } = [];
 }

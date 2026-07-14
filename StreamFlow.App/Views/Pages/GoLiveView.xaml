@@ -635,6 +635,7 @@
                                         <MenuItem Header="Chat Overlay" Command="{Binding ViewModel.SceneEditor.AddChatOverlayCommand}"/>
                                         <MenuItem Header="Timer Overlay" Command="{Binding ViewModel.SceneEditor.AddTimerOverlayCommand}"/>
                                         <MenuItem Header="Blur Layer" Command="{Binding ViewModel.SceneEditor.AddBlurOverlayCommand}"/>
+                                        <MenuItem Header="Overlay Group" Command="{Binding ViewModel.SceneEditor.AddGroupOverlayCommand}"/>
                                     </ContextMenu>
                                 </Button.ContextMenu>
                             </Button>
@@ -926,6 +927,23 @@
                                                        Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"
                                                        Text="{Binding Content.BlurRadius, StringFormat={}{0:F0}}"/>
                                         </Grid>
+                                    </StackPanel>
+
+                                    <!-- Overlay Group -->
+                                    <StackPanel Visibility="{Binding IsGroupOverlay, Converter={StaticResource BoolToVisibility}}">
+                                        <TextBlock Text="Group Layers" Style="{StaticResource FieldLabelStyle}"/>
+                                        <TextBlock Text="Select which layers belong to this group:"
+                                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                                        <ListBox ItemsSource="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.SceneEditor.AvailableGroupCandidates}"
+                                                 Background="Transparent" BorderThickness="0" MaxHeight="200" ScrollViewer.VerticalScrollBarVisibility="Auto" Margin="0,0,0,8">
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate DataType="{x:Type vm:SourceSlot}">
+                                                    <CheckBox Content="{Binding DisplayName}"
+                                                              IsChecked="{Binding IsInSelectedGroup, Mode=TwoWay}"
+                                                              Margin="0,2"/>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
                                     </StackPanel>
 
                                     <!-- Precision Layout — a primary slot gets the same layout

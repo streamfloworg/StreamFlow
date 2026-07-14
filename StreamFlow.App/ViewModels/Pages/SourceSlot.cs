@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.Windows.Media;
 
 using StreamFlow.App.Services;
@@ -30,6 +30,7 @@ public enum OverlayKind
     /// mechanism as Chat's message-driven re-renders, just driven by a timer instead of incoming
     /// messages. See SourceSlot.TimerMode/TimerDurationSeconds/IsTimerRunning.</summary>
     Timer,
+    Group,
 }
 
 /// <summary>Whether a Timer overlay slot counts up from zero or down to zero from
@@ -73,18 +74,19 @@ public partial class SourceSlot : ObservableObject
     public bool IsChatOverlay => Content is ChatOverlayContent;
     public bool IsBlurOverlay => Content is BlurOverlayContent;
     public bool IsTimerOverlay => Content is TimerOverlayContent;
+    public bool IsGroupOverlay => Content is GroupOverlayContent;
 
     /// <summary>True for overlay kinds registered once via AddStaticOverlay (image/text/color)
     /// — no ongoing session, so Start/StopCapture are skipped for these. False for video
     /// overlays, which decode/loop continuously in the core exactly like a live capture.</summary>
-    public bool IsStaticOverlay => IsOverlay && !IsVideoOverlay;
+    public bool IsStaticOverlay => IsOverlay && !IsVideoOverlay && !IsGroupOverlay;
 
     /// <summary>Whether GoLiveView should render a live-updating thumbnail for this slot — every
     /// capture source and video overlay gets its own frames forwarded over the data pipe,
     /// primary included (it's just another positioned layer now, no longer shown via a separate
     /// dedicated preview element); static overlays render directly from their own content
     /// instead.</summary>
-    public bool HasLiveThumbnail => !IsStaticOverlay;
+    public bool HasLiveThumbnail => !IsStaticOverlay && !IsGroupOverlay;
 
     /// <summary>Live video thumbnail for a PiP capture source, updated by GoLiveView as raw
     /// frames arrive over the data pipe tagged with this slot's SourceId. Null until the core
@@ -107,6 +109,7 @@ public partial class SourceSlot : ObservableObject
         OnPropertyChanged(nameof(IsChatOverlay));
         OnPropertyChanged(nameof(IsBlurOverlay));
         OnPropertyChanged(nameof(IsTimerOverlay));
+        OnPropertyChanged(nameof(IsGroupOverlay));
         OnPropertyChanged(nameof(IsStaticOverlay));
         OnPropertyChanged(nameof(HasLiveThumbnail));
         OnPropertyChanged(nameof(SupportsChromaKey));
@@ -341,6 +344,117 @@ public partial class SourceSlot : ObservableObject
             finally
             {
                 _isSettingDimensions = false;
+            }
+        }
+    }
+
+    [ObservableProperty]
+    private bool _isInSelectedGroup;
+
+    private bool _isUpdatingGroupChildren;
+
+    partial void OnXPercentChanging(double value)
+    {
+        if (_isUpdatingGroupChildren) return;
+        var oldX = XPercent;
+        var newX = value;
+        var deltaX = newX - oldX;
+
+        if (deltaX != 0 && Content is GroupOverlayContent group)
+        {
+            _isUpdatingGroupChildren = true;
+            try
+            {
+                foreach (var child in group.Children)
+                {
+                    child.XPercent += deltaX;
+                }
+            }
+            finally
+            {
+                _isUpdatingGroupChildren = false;
+            }
+        }
+    }
+
+    partial void OnYPercentChanging(double value)
+    {
+        if (_isUpdatingGroupChildren) return;
+        var oldY = YPercent;
+        var newY = value;
+        var deltaY = newY - oldY;
+
+        if (deltaY != 0 && Content is GroupOverlayContent group)
+        {
+            _isUpdatingGroupChildren = true;
+            try
+            {
+                foreach (var child in group.Children)
+                {
+                    child.YPercent += deltaY;
+                }
+            }
+            finally
+            {
+                _isUpdatingGroupChildren = false;
+            }
+        }
+    }
+
+    partial void OnWPercentChanging(double value)
+    {
+        if (_isUpdatingGroupChildren) return;
+        var oldW = WPercent;
+        var newW = value;
+        if (oldW > 0 && newW > 0 && Content is GroupOverlayContent group)
+        {
+            var scaleX = newW / oldW;
+            if (scaleX != 1.0)
+            {
+                _isUpdatingGroupChildren = true;
+                try
+                {
+                    var groupX = XPercent;
+                    foreach (var child in group.Children)
+                    {
+                        var relativeX = child.XPercent - groupX;
+                        child.WPercent *= scaleX;
+                        child.XPercent = groupX + relativeX * scaleX;
+                    }
+                }
+                finally
+                {
+                    _isUpdatingGroupChildren = false;
+                }
+            }
+        }
+    }
+
+    partial void OnHPercentChanging(double value)
+    {
+        if (_isUpdatingGroupChildren) return;
+        var oldH = HPercent;
+        var newH = value;
+        if (oldH > 0 && newH > 0 && Content is GroupOverlayContent group)
+        {
+            var scaleY = newH / oldH;
+            if (scaleY != 1.0)
+            {
+                _isUpdatingGroupChildren = true;
+                try
+                {
+                    var groupY = YPercent;
+                    foreach (var child in group.Children)
+                    {
+                        var relativeY = child.YPercent - groupY;
+                        child.HPercent *= scaleY;
+                        child.YPercent = groupY + relativeY * scaleY;
+                    }
+                }
+                finally
+                {
+                    _isUpdatingGroupChildren = false;
+                }
             }
         }
     }

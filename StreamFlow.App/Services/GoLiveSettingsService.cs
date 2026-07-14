@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -69,6 +69,7 @@ public sealed class SlotSettings
     /// <summary>Stored as "#AARRGGBB", same convention as <see cref="OverlayColorHex"/>.</summary>
     public string? TextOutlineColorHex { get; set; }
     public double? TextOutlineThickness { get; set; }
+    public List<string>? GroupChildIds { get; set; }
 }
 
 public sealed class SceneSettings

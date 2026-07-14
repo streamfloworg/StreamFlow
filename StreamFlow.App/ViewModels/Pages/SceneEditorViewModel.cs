@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
 
@@ -255,16 +255,40 @@ public partial class SceneEditorViewModel : ObservableObject
     /// are added/removed/the active scene changes.</summary>
     public SourceSlot? PrimarySlot => Slots.FirstOrDefault(s => s.IsPrimary);
 
+    public IEnumerable<SourceSlot> AvailableGroupCandidates =>
+        ActiveScene?.Slots.Where(s => s != SelectedSlot && s.OverlayKind != OverlayKind.Group && !s.IsPrimary) ?? [];
+
     [ObservableProperty]
     private SourceSlot? _selectedSlot;
 
     [RelayCommand]
     private void SelectSlot(SourceSlot slot) => SelectedSlot = slot;
 
+    private bool _isUpdatingSelection;
+
     partial void OnSelectedSlotChanged(SourceSlot? oldValue, SourceSlot? newValue)
     {
         if (oldValue is not null) oldValue.IsSelected = false;
         if (newValue is not null) newValue.IsSelected = true;
+
+        _isUpdatingSelection = true;
+        try
+        {
+            if (ActiveScene is not null)
+            {
+                var selectedGroup = newValue?.Content as GroupOverlayContent;
+                foreach (var slot in ActiveScene.Slots)
+                {
+                    slot.IsInSelectedGroup = selectedGroup?.Children.Contains(slot) ?? false;
+                }
+            }
+        }
+        finally
+        {
+            _isUpdatingSelection = false;
+        }
+
+        OnPropertyChanged(nameof(AvailableGroupCandidates));
     }
 
     public void OnDisplaySettingsChanged(object? sender, EventArgs e)
@@ -278,6 +302,100 @@ public partial class SceneEditorViewModel : ObservableObject
         var scene = new GoLiveSceneViewModel(Guid.NewGuid().ToString("N"), name);
         scene.PropertyChanged += OnScenePropertyChanged;
         return scene;
+    }
+
+    public SourceSlot BuildSlotFromSettings(SlotSettings savedSlot)
+    {
+        OverlayKind? overlayKind = savedSlot.OverlayKind
+            ?? (savedSlot.ImagePath is not null ? OverlayKind.Image
+                : savedSlot.OverlayText is not null ? OverlayKind.Text
+                : savedSlot.OverlayColorHex is not null ? OverlayKind.Color
+                : null);
+
+        var overlayColor = savedSlot.OverlayColorHex is not null
+            ? System.Windows.Media.ColorConverter.ConvertFromString(savedSlot.OverlayColorHex) as System.Windows.Media.Color?
+            : null;
+        var chromaKeyColor = savedSlot.ChromaKeyColorHex is not null
+            && System.Windows.Media.ColorConverter.ConvertFromString(savedSlot.ChromaKeyColorHex) is System.Windows.Media.Color parsedChromaColor
+            ? parsedChromaColor
+            : (System.Windows.Media.Color?)null;
+
+        IOverlayContent? content = overlayKind switch
+        {
+            OverlayKind.Image => new ImageOverlayContent
+            {
+                ImagePath = savedSlot.ImagePath,
+                ChromaKeyEnabled = savedSlot.ChromaKeyEnabled,
+                ChromaKeySimilarity = savedSlot.ChromaKeySimilarity,
+                ChromaKeyColor = chromaKeyColor ?? System.Windows.Media.Color.FromRgb(0x00, 0xB1, 0x40),
+            },
+            OverlayKind.Text => new TextOverlayContent { OverlayText = savedSlot.OverlayText },
+            OverlayKind.Color => new ColorOverlayContent { OverlayColor = overlayColor },
+            OverlayKind.Video => new VideoOverlayContent
+            {
+                VideoPath = savedSlot.VideoPath,
+                LoopVideo = savedSlot.LoopVideo,
+                ChromaKeyEnabled = savedSlot.ChromaKeyEnabled,
+                ChromaKeySimilarity = savedSlot.ChromaKeySimilarity,
+                ChromaKeyColor = chromaKeyColor ?? System.Windows.Media.Color.FromRgb(0x00, 0xB1, 0x40),
+            },
+            OverlayKind.Chat => new ChatOverlayContent(),
+            OverlayKind.Blur => new BlurOverlayContent { BlurRadius = savedSlot.BlurRadius },
+            OverlayKind.Timer => new TimerOverlayContent
+            {
+                TimerMode = savedSlot.TimerMode,
+                TimerDurationSeconds = savedSlot.TimerDurationSeconds,
+                AutoStartOnGoLive = savedSlot.TimerAutoStartOnGoLive,
+            },
+            OverlayKind.Group => new GroupOverlayContent(),
+            _ => null,
+        };
+        if (content is IHasTextStyle hasStyle)
+            ApplyTextStyleFromSettings(hasStyle.Style, savedSlot);
+
+        var slot = new SourceSlot(
+            savedSlot.IsPrimary, savedSlot.XPercent, savedSlot.YPercent, savedSlot.WPercent, savedSlot.HPercent,
+            savedSlot.IsOverlay, content)
+        {
+            CornerRadiusPercent = savedSlot.CornerRadiusPercent,
+            OpacityPercent = savedSlot.OpacityPercent,
+            RotationDegrees = savedSlot.RotationDegrees,
+        };
+        if (slot.IsChatOverlay || slot.IsBlurOverlay || slot.OverlayKind == OverlayKind.Group)
+        {
+            slot.IsAspectLocked = false;
+        }
+        slot.PropertyChanged += OnSlotPropertyChanged;
+        HookContentPropertyChanged(slot);
+
+        if (slot.IsStaticOverlay && savedSlot.SourceId is not null)
+        {
+            slot.SourceId = savedSlot.SourceId;
+            slot.DisplayName = savedSlot.DisplayName ?? (slot.IsImageOverlay ? "Image Overlay"
+                : slot.IsTextOverlay ? "Text Overlay"
+                : slot.IsChatOverlay ? "Chat Overlay"
+                : slot.IsBlurOverlay ? "Blur Layer"
+                : slot.IsTimerOverlay ? "Timer Overlay"
+                : slot.IsColorOverlay ? "Color Overlay"
+                : slot.OverlayKind == OverlayKind.Group ? "Overlay Group"
+                : overlayColor?.ToString(CultureInfo.InvariantCulture) ?? "");
+            if (content is ChatOverlayContent chatContentToRestore)
+                PopulateChatPlaceholder(slot, chatContentToRestore);
+
+            _ = RestoreStaticOverlayAsync(slot, savedSlot.SourceId);
+            ScheduleChromaKeyPreviewUpdate(slot);
+        }
+        else
+        {
+            if (slot.IsVideoOverlay)
+                slot.DisplayName = savedSlot.DisplayName ?? "Video Overlay";
+            else if (slot.OverlayKind == OverlayKind.Group)
+                slot.DisplayName = savedSlot.DisplayName ?? "Overlay Group";
+
+            slot.SourceId = savedSlot.SourceId;
+        }
+
+        return slot;
     }
 
     public GoLiveSceneViewModel BuildSceneFromSettings(SceneSettings saved)
@@ -294,111 +412,36 @@ public partial class SceneEditorViewModel : ObservableObject
         };
         scene.PropertyChanged += OnScenePropertyChanged;
 
+        var slotsList = new List<SourceSlot>();
         foreach (var savedSlot in saved.Slots)
         {
-            OverlayKind? overlayKind = savedSlot.OverlayKind
-                ?? (savedSlot.ImagePath is not null ? OverlayKind.Image
-                    : savedSlot.OverlayText is not null ? OverlayKind.Text
-                    : savedSlot.OverlayColorHex is not null ? OverlayKind.Color
-                    : null);
+            var slot = BuildSlotFromSettings(savedSlot);
+            slotsList.Add(slot);
+        }
 
-            var overlayColor = savedSlot.OverlayColorHex is not null
-                ? System.Windows.Media.ColorConverter.ConvertFromString(savedSlot.OverlayColorHex) as System.Windows.Media.Color?
-                : null;
-            var chromaKeyColor = savedSlot.ChromaKeyColorHex is not null
-                && System.Windows.Media.ColorConverter.ConvertFromString(savedSlot.ChromaKeyColorHex) is System.Windows.Media.Color parsedChromaColor
-                ? parsedChromaColor
-                : (System.Windows.Media.Color?)null;
-
-            IOverlayContent? content = overlayKind switch
+        // Resolve group children
+        foreach (var slot in slotsList)
+        {
+            if (slot.Content is GroupOverlayContent group)
             {
-                OverlayKind.Image => new ImageOverlayContent
+                var savedSlot = saved.Slots.FirstOrDefault(s => s.SourceId == slot.SourceId || (s.DisplayName == slot.DisplayName && s.OverlayKind == OverlayKind.Group));
+                if (savedSlot?.GroupChildIds is not null)
                 {
-                    ImagePath = savedSlot.ImagePath,
-                    ChromaKeyEnabled = savedSlot.ChromaKeyEnabled,
-                    ChromaKeySimilarity = savedSlot.ChromaKeySimilarity,
-                    ChromaKeyColor = chromaKeyColor ?? System.Windows.Media.Color.FromRgb(0x00, 0xB1, 0x40),
-                },
-                OverlayKind.Text => new TextOverlayContent { OverlayText = savedSlot.OverlayText },
-                OverlayKind.Color => new ColorOverlayContent { OverlayColor = overlayColor },
-                OverlayKind.Video => new VideoOverlayContent
-                {
-                    VideoPath = savedSlot.VideoPath,
-                    LoopVideo = savedSlot.LoopVideo,
-                    ChromaKeyEnabled = savedSlot.ChromaKeyEnabled,
-                    ChromaKeySimilarity = savedSlot.ChromaKeySimilarity,
-                    ChromaKeyColor = chromaKeyColor ?? System.Windows.Media.Color.FromRgb(0x00, 0xB1, 0x40),
-                },
-                OverlayKind.Chat => new ChatOverlayContent(),
-                OverlayKind.Blur => new BlurOverlayContent { BlurRadius = savedSlot.BlurRadius },
-                OverlayKind.Timer => new TimerOverlayContent
-                {
-                    TimerMode = savedSlot.TimerMode,
-                    TimerDurationSeconds = savedSlot.TimerDurationSeconds,
-                    AutoStartOnGoLive = savedSlot.TimerAutoStartOnGoLive,
-                },
-                _ => null,
-            };
-            if (content is IHasTextStyle hasStyle)
-                ApplyTextStyleFromSettings(hasStyle.Style, savedSlot);
-
-            var slot = new SourceSlot(
-                savedSlot.IsPrimary, savedSlot.XPercent, savedSlot.YPercent, savedSlot.WPercent, savedSlot.HPercent,
-                savedSlot.IsOverlay, content)
-            {
-                CornerRadiusPercent = savedSlot.CornerRadiusPercent,
-                OpacityPercent = savedSlot.OpacityPercent,
-                RotationDegrees = savedSlot.RotationDegrees,
-            };
-            // Timer is aspect-locked now, same as Text (its rendered digits get the same
-            // ApplyRenderedAspectRatio treatment below via RestoreStaticOverlayAsync) — Chat and
-            // Blur still aren't, since their box size is a deliberate, free-form user choice
-            // rather than something meant to track rendered content dimensions.
-            if (slot.IsChatOverlay || slot.IsBlurOverlay)
-            {
-                slot.IsAspectLocked = false;
+                    foreach (var childId in savedSlot.GroupChildIds)
+                    {
+                        var childSlot = slotsList.FirstOrDefault(s => s.SourceId == childId);
+                        if (childSlot is not null)
+                        {
+                            group.Children.Add(childSlot);
+                        }
+                    }
+                }
             }
-            slot.PropertyChanged += OnSlotPropertyChanged;
-            HookContentPropertyChanged(slot);
+        }
+
+        foreach (var slot in slotsList)
+        {
             scene.Slots.Add(slot);
-
-            if (slot.IsStaticOverlay && savedSlot.SourceId is not null)
-            {
-                slot.SourceId = savedSlot.SourceId;
-                // Prefer the saved custom name (see SourceSlot.DisplayName's rename UI); fall
-                // back to the old content-derived default only for settings files that predate
-                // DisplayName being persisted at all, so loading an old scene doesn't need a
-                // migration step.
-                slot.DisplayName = savedSlot.DisplayName ?? (slot.IsImageOverlay ? "Image Overlay"
-                    : slot.IsTextOverlay ? "Text Overlay"
-                    : slot.IsChatOverlay ? "Chat Overlay"
-                    : slot.IsBlurOverlay ? "Blur Layer"
-                    : slot.IsTimerOverlay ? "Timer Overlay"
-                    : slot.IsColorOverlay ? "Color Overlay"
-                    : overlayColor?.ToString(CultureInfo.InvariantCulture) ?? "");
-                // A loaded chat overlay starts with no messages of its own (ChatMessages is
-                // never persisted — see ChatOverlayContent's own doc comment) — fill it with
-                // placeholder content the same as a freshly-added one, so restoring a saved scene
-                // while idle doesn't show an empty box either.
-                if (content is ChatOverlayContent chatContentToRestore)
-                    PopulateChatPlaceholder(slot, chatContentToRestore);
-
-                // Blur layers have no pixels to restore — RestoreStaticOverlayAsync renders
-                // nothing for them and returns; the Config push on scene activation is all
-                // the core needs.
-                _ = RestoreStaticOverlayAsync(slot, savedSlot.SourceId);
-                // ChromaKeyEnabled etc. were set via the object initializer above, before
-                // PropertyChanged was wired up, so restoring an already-keyed image overlay
-                // needs this called explicitly rather than relying on the property-changed hook.
-                ScheduleChromaKeyPreviewUpdate(slot);
-            }
-            else
-            {
-                if (slot.IsVideoOverlay)
-                    slot.DisplayName = savedSlot.DisplayName ?? "Video Overlay";
-
-                slot.SourceId = savedSlot.SourceId;
-            }
         }
 
         return scene;
@@ -856,6 +899,22 @@ public partial class SceneEditorViewModel : ObservableObject
         NotifyChanged();
     }
 
+    [RelayCommand]
+    private void AddGroupOverlay()
+    {
+        var sourceId = $"overlay:{Guid.NewGuid():N}";
+        var slot = new SourceSlot(
+            isPrimary: false, x: 20, y: 20, w: 20, h: 20,
+            isOverlay: true, content: new GroupOverlayContent())
+        {
+            SourceId = sourceId,
+            DisplayName = "Overlay Group",
+            IsAspectLocked = false
+        };
+        AttachSlot(slot);
+        NotifyChanged();
+    }
+
     // Nullable despite the command body itself treating slot as always-present: WPF's Button
     // probes CanExecute(null) while the CommandParameter binding is still activating, before the
     // real SourceSlot value has resolved — an un-guarded slot.Content access here is a guaranteed
@@ -1122,6 +1181,27 @@ public partial class SceneEditorViewModel : ObservableObject
     private async void OnSlotPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (sender is not SourceSlot slot) return;
+
+        if (e.PropertyName == nameof(SourceSlot.IsInSelectedGroup))
+        {
+            if (!_isUpdatingSelection)
+            {
+                var group = SelectedSlot?.Content as GroupOverlayContent;
+                if (group is not null)
+                {
+                    if (slot.IsInSelectedGroup)
+                    {
+                        if (!group.Children.Contains(slot))
+                            group.Children.Add(slot);
+                    }
+                    else
+                    {
+                        group.Children.Remove(slot);
+                    }
+                    NotifyChanged();
+                }
+            }
+        }
 
         if (e.PropertyName == nameof(SourceSlot.SourceId))
         {
@@ -1426,6 +1506,7 @@ public partial class SceneEditorViewModel : ObservableObject
         OnPropertyChanged(nameof(Slots));
         OnPropertyChanged(nameof(PrimarySlot));
         OnPropertyChanged(nameof(IsActiveSceneDefault));
+        OnPropertyChanged(nameof(AvailableGroupCandidates));
         SelectedSlot = null;
         NotifySlotAvailabilityChanged();
         SetActiveSceneAsDefaultCommand.NotifyCanExecuteChanged();
@@ -1556,6 +1637,14 @@ public partial class SceneEditorViewModel : ObservableObject
 
         if (ReferenceEquals(SelectedSlot, slot))
             SelectedSlot = null;
+
+        foreach (var otherSlot in Slots)
+        {
+            if (otherSlot.Content is GroupOverlayContent group)
+            {
+                group.Children.Remove(slot);
+            }
+        }
 
         // The compositor (and the data pipe's "is this a live PiP thumbnail" check) only ever
         // reads the *last* Config it was sent — without this, a removed PiP/overlay keeps
@@ -1768,6 +1857,8 @@ public partial class SceneEditorViewModel : ObservableObject
         IsOverlay = s.IsOverlay,
         OverlayKind = s.OverlayKind,
         SourceId = s.SourceId,
+        DisplayName = s.DisplayName,
+        GroupChildIds = (s.Content as GroupOverlayContent)?.Children.Select(c => c.SourceId).Where(id => id is not null).ToList()!,
         ImagePath = (s.Content as ImageOverlayContent)?.ImagePath,
         OverlayText = (s.Content as TextOverlayContent)?.OverlayText,
         OverlayColorHex = (s.Content as ColorOverlayContent)?.OverlayColor?.ToString(CultureInfo.InvariantCulture),
