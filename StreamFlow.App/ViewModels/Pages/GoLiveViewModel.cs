@@ -110,6 +110,57 @@ public partial class GoLiveViewModel : ViewModel
 
     private readonly Queue<DateTime> _recentFrameTimes = new();
 
+    private readonly Queue<double> _fpsHistory = new();
+    private readonly Queue<double> _bitrateHistory = new();
+    private const int MaxHistoryPoints = 30;
+
+    [ObservableProperty]
+    private string _fpsGraphPoints = "0,25 120,25";
+
+    [ObservableProperty]
+    private string _bitrateGraphPoints = "0,25 120,25";
+
+    private void UpdateHistory(double fps, double bitrate)
+    {
+        _fpsHistory.Enqueue(fps);
+        while (_fpsHistory.Count > MaxHistoryPoints)
+            _fpsHistory.Dequeue();
+
+        _bitrateHistory.Enqueue(bitrate);
+        while (_bitrateHistory.Count > MaxHistoryPoints)
+            _bitrateHistory.Dequeue();
+
+        var fpsPoints = new System.Collections.Generic.List<string>();
+        int i = 0;
+        foreach (var val in _fpsHistory)
+        {
+            double x = i * 4.0;
+            double y = 25.0 - (Math.Min(val, 60.0) / 60.0 * 25.0);
+            fpsPoints.Add($"{x:F1},{y:F1}");
+            i++;
+        }
+        FpsGraphPoints = string.Join(" ", fpsPoints);
+
+        var bitratePoints = new System.Collections.Generic.List<string>();
+        i = 0;
+        foreach (var val in _bitrateHistory)
+        {
+            double x = i * 4.0;
+            double y = 25.0 - (Math.Min(val, 10000.0) / 10000.0 * 25.0);
+            bitratePoints.Add($"{x:F1},{y:F1}");
+            i++;
+        }
+        BitrateGraphPoints = string.Join(" ", bitratePoints);
+    }
+
+    private void ClearHistory()
+    {
+        _fpsHistory.Clear();
+        _bitrateHistory.Clear();
+        FpsGraphPoints = "0,25 120,25";
+        BitrateGraphPoints = "0,25 120,25";
+    }
+
     [ObservableProperty]
     private bool _hasUnsavedChanges;
 
@@ -510,6 +561,7 @@ public partial class GoLiveViewModel : ViewModel
                     LiveFps = 0;
                     LiveBitrateKbps = 0;
                     DroppedFrames = 0;
+                    ClearHistory();
                     EndActiveYouTubeTestBroadcastIfAny();
                     _eventBus.Publish(new GoLiveStoppedEvent());
                     break;
@@ -517,6 +569,7 @@ public partial class GoLiveViewModel : ViewModel
                     LiveFps = status.Fps;
                     LiveBitrateKbps = status.BitrateKbps;
                     DroppedFrames = status.Dropped;
+                    UpdateHistory(status.Fps, status.BitrateKbps);
                     break;
                 case ErrorEvent error:
                     StatusLabel = "Error";

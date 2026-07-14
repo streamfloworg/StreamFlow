@@ -402,40 +402,7 @@
             </Grid.ColumnDefinitions>
 
             <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                <Border Background="{DynamicResource {x:Static adonisUi:Brushes.Layer2BackgroundBrush}}" BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer2BorderBrush}}" BorderThickness="1"
-                        CornerRadius="12" Padding="10,6" VerticalAlignment="Center">
-                    <StackPanel Orientation="Horizontal">
-                        <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,8,0" Style="{StaticResource TallyDotStyle}"/>
-                        <TextBlock Text="{Binding ViewModel.StatusLabel}" FontWeight="SemiBold" VerticalAlignment="Center"/>
-
-                        <StackPanel Orientation="Horizontal" Margin="14,0,0,0"
-                                    Visibility="{Binding ViewModel.IsStreaming, Converter={StaticResource BoolToVisibility}}">
-                            <TextBlock Style="{StaticResource MonoTimeText}" FontSize="14" Margin="0,0,12,0">
-                                <Run Text="{Binding ViewModel.LiveFps, StringFormat={}{0:F0}}"/><Run Text=" fps"/>
-                            </TextBlock>
-                            <TextBlock Style="{StaticResource MonoTimeText}" FontSize="14" Margin="0,0,12,0">
-                                <Run Text="{Binding ViewModel.LiveBitrateKbps}"/><Run Text=" kbps"/>
-                            </TextBlock>
-                            <TextBlock Style="{StaticResource MonoTimeText}" FontSize="14">
-                                <Run Text="{Binding ViewModel.DroppedFrames}"/><Run Text=" dropped"/>
-                            </TextBlock>
-                        </StackPanel>
-
-                        <!-- Preview fps + primary source's aspect ratio — shown whenever a
-                             primary source exists in the active scene, independent of whether
-                             streaming or where it's positioned in the layer order. -->
-                        <StackPanel Orientation="Horizontal" Margin="14,0,0,0"
-                                    Visibility="{Binding ViewModel.SceneEditor.PrimarySlot, Converter={StaticResource NullToVisibility}}">
-                            <TextBlock Style="{StaticResource MonoTimeText}" FontSize="14" Margin="0,0,12,0">
-                                <Run Text="{Binding ViewModel.PreviewFps, StringFormat={}{0:F0}}"/><Run Text=" fps"/>
-                            </TextBlock>
-                            <TextBlock Style="{StaticResource MonoTimeText}" FontSize="14"
-                                       Text="{Binding ViewModel.SceneEditor.PrimarySlot.AspectRatio, Converter={StaticResource AspectRatioText}}"/>
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-                <ToggleButton Margin="10,0,0,0" VerticalAlignment="Center" Padding="10,6"
+                <ToggleButton Margin="0,0,0,0" VerticalAlignment="Center" Padding="10,6"
                               IsChecked="{Binding ViewModel.IsLiveEditUnlocked, Mode=TwoWay}"
                               Visibility="{Binding ViewModel.IsStreaming, Converter={StaticResource BoolToVisibility}}"
                               ToolTip="While live, dragging/resizing sources is locked to prevent accidental changes to what's on air. Unlock to edit live.">
@@ -1114,10 +1081,89 @@
                     BorderThickness="1" CornerRadius="6" MinWidth="500" SizeChanged="PreviewContainer_SizeChanged">
               <Grid>
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/> <!-- Row 0: Stats Panel -->
+                    <RowDefinition Height="*"/>    <!-- Row 1: Viewbox (Preview Canvas) -->
+                    <RowDefinition Height="Auto"/> <!-- Row 2: Edit Lock Panel -->
+                    <RowDefinition Height="Auto"/> <!-- Row 3: Master Fader & Audio Channels -->
                 </Grid.RowDefinitions>
-                <Viewbox Grid.Row="0" Stretch="Uniform" Margin="1" HorizontalAlignment="Center" VerticalAlignment="Top">
+
+                <!-- Stats Panel (Header of the Live Monitor) -->
+                <Border Grid.Row="0" Background="{DynamicResource {x:Static adonisUi:Brushes.Layer2BackgroundBrush}}"
+                        BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="0,0,0,1"
+                        Height="50" Padding="12,6">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <!-- Live status indicator -->
+                            <ColumnDefinition Width="140"/>
+                            <!-- Preview FPS -->
+                            <ColumnDefinition Width="110"/>
+                            <!-- Stream FPS with Graph -->
+                            <ColumnDefinition Width="220"/>
+                            <!-- Bitrate with Graph -->
+                            <ColumnDefinition Width="220"/>
+                            <!-- Dropped frames -->
+                            <ColumnDefinition Width="130"/>
+                            <!-- Remaining space -->
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Live Status indicator -->
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,8,0" Style="{StaticResource TallyDotStyle}"/>
+                            <TextBlock Text="{Binding ViewModel.StatusLabel}" FontWeight="Bold" FontSize="13" VerticalAlignment="Center" Width="90"/>
+                        </StackPanel>
+
+                        <!-- Preview FPS -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0">
+                            <TextBlock Text="PREVIEW:" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="{Binding ViewModel.PreviewFps, StringFormat={}{0:F0} fps}" FontSize="13" FontWeight="Bold" FontFamily="{StaticResource MonoTimeText}" VerticalAlignment="Center"/>
+                        </StackPanel>
+
+                        <!-- Streaming FPS -->
+                        <Grid Grid.Column="2" VerticalAlignment="Center" Margin="8,0"
+                              Visibility="{Binding ViewModel.IsStreaming, Converter={StaticResource BoolToVisibility}}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="STREAM FPS:" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock Text="{Binding ViewModel.LiveFps, StringFormat={}{0:F0}}" Width="24" TextAlignment="Right" FontSize="13" FontWeight="Bold" FontFamily="{StaticResource MonoTimeText}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <!-- Graph -->
+                            <Canvas Grid.Column="1" Height="25" Width="120" VerticalAlignment="Center" Margin="8,0,0,0" Background="#1A000000" ClipToBounds="True">
+                                <Polyline Points="{Binding ViewModel.FpsGraphPoints}" Stroke="#10B981" StrokeThickness="1.5"/>
+                            </Canvas>
+                        </Grid>
+
+                        <!-- Streaming Bitrate -->
+                        <Grid Grid.Column="3" VerticalAlignment="Center" Margin="8,0"
+                              Visibility="{Binding ViewModel.IsStreaming, Converter={StaticResource BoolToVisibility}}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="BITRATE:" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock Text="{Binding ViewModel.LiveBitrateKbps}" Width="45" TextAlignment="Right" FontSize="13" FontWeight="Bold" FontFamily="{StaticResource MonoTimeText}" VerticalAlignment="Center"/>
+                                <TextBlock Text=" kbps" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <!-- Graph -->
+                            <Canvas Grid.Column="1" Height="25" Width="120" VerticalAlignment="Center" Margin="8,0,0,0" Background="#1A000000" ClipToBounds="True">
+                                <Polyline Points="{Binding ViewModel.BitrateGraphPoints}" Stroke="#3B82F6" StrokeThickness="1.5"/>
+                            </Canvas>
+                        </Grid>
+
+                        <!-- Dropped Frames -->
+                        <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0"
+                                    Visibility="{Binding ViewModel.IsStreaming, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="DROPPED:" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="{Binding ViewModel.DroppedFrames}" FontSize="13" FontWeight="Bold" Foreground="#EF4444" FontFamily="{StaticResource MonoTimeText}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Viewbox Grid.Row="1" Stretch="Uniform" Margin="1" HorizontalAlignment="Center" VerticalAlignment="Top">
                     <!-- Height tracks the scene's real aspect ratio (ActiveScene.CanvasHeight, kept
                          in sync by SceneEditorViewModel.UpdateCanvasReference) rather than being a
                          fixed 16:9 assumption — see GoLiveSceneViewModel.CanvasWidth/CanvasHeight for
@@ -1426,13 +1472,40 @@
                     </Grid>
                 </Viewbox>
 
+                <!-- Edit Lock Panel -->
+                <Border Grid.Row="2" Background="{DynamicResource {x:Static adonisUi:Brushes.Layer2BackgroundBrush}}"
+                        BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="0,1,0,1"
+                        Padding="12,6"
+                        Visibility="{Binding ViewModel.IsStreaming, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <ToggleButton VerticalAlignment="Center" Padding="10,6"
+                                      IsChecked="{Binding ViewModel.IsLiveEditUnlocked, Mode=TwoWay}"
+                                      ToolTip="While live, dragging/resizing sources is locked to prevent accidental changes to what's on air. Unlock to edit live.">
+                            <TextBlock FontWeight="SemiBold" FontSize="12">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="Editing locked"/>
+                                        <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding ViewModel.IsLiveEditUnlocked}" Value="True">
+                                                <Setter Property="Text" Value="Editing unlocked — live"/>
+                                                <Setter Property="Foreground" Value="{StaticResource LiveBrush}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </ToggleButton>
+                    </StackPanel>
+                </Border>
+
                 <!-- Master fader (always visible, controls overall stream-mix gain) + one
                      channel strip per checked Audio Source, appended left-to-right in the order
                      they were checked (SelectedAudioChannels) — see AudioChannelStrip and
                      MasterVolumeControl. Unlike the per-device strips, this row itself is no
                      longer hidden when nothing is selected, since Master is meaningful even with
                      zero channel strips present. -->
-                <Border Grid.Row="1" BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="0,1,0,0">
+                <Border Grid.Row="3" BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="0,1,0,0">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
