@@ -186,6 +186,7 @@ public partial class GoLiveViewModel : ViewModel
     private bool _hasUnsavedChanges;
 
     private bool _isInitializing = true;
+    private bool _hasReceivedFirstSourcesEvent;
     private string? _lastLoadedSceneSetId;
 
     public GoLiveViewModel(
@@ -537,6 +538,7 @@ public partial class GoLiveViewModel : ViewModel
                     if (_lastKnownPrimaryResolution is not null && currentPrimaryRes != _lastKnownPrimaryResolution)
                         _ = SceneEditor.RefreshStaticOverlaySizesAsync();
                     _lastKnownPrimaryResolution = currentPrimaryRes;
+                    _hasReceivedFirstSourcesEvent = true;
                     break;
                 case AudioDevicesEvent audioDevices:
                     AvailableAudioDevices.Clear();
@@ -596,6 +598,10 @@ public partial class GoLiveViewModel : ViewModel
                     UpdateHistory(status.Fps, status.BitrateKbps);
                     break;
                 case ErrorEvent error:
+                    if (error.Code == "capture_error" && !_hasReceivedFirstSourcesEvent)
+                    {
+                        break;
+                    }
                     StatusLabel = "Error";
                     ErrorMessage = error.Message;
                     // Every Event::Error the core sends is non-fatal by its own wire-protocol
