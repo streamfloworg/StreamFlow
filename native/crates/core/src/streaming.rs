@@ -484,39 +484,10 @@ impl StreamSession {
                                 .unzip()
                         };
 
-                        // ── Availability gate ─────────────────────────────────────────────
-                        // Normalize each source's available input samples to output frames so
-                        // sources at different rates are compared on the same scale.
-                        // Gate: at least ONE audible source must have a full chunk's worth of
-                        // data ready. Muted/silent sources are drained below regardless, but
-                        // they never block or gate the mix — only audible sources do.
-                        // If no audible source has enough, sleep briefly and retry.
-                        let any_audible_ready = sources.iter().enumerate().any(|(i, s)| {
-                            if !audible[i] { return false; }
-                            let available_frames = s.cons.occupied_len() / s.src_ch.max(1);
-                            let needed_frames    = s.in_per_chunk / s.src_ch.max(1);
-                            available_frames >= needed_frames
-                        });
-
-                        // Also drain muted sources that have accumulated data, regardless of
-                        // whether we're ready to mix — prevents ring buffer backpressure.
-                        if !any_audible_ready {
-                            // Drain only. If even muted sources are empty too, sleep briefly.
-                            let any_data = sources.iter().any(|s| s.cons.occupied_len() > 0);
-                            if !any_data {
-                                std::thread::sleep(std::time::Duration::from_millis(1));
-                            } else {
-                                // Drain muted sources while waiting for audible ones to fill.
-                                for (i, src) in sources.iter_mut().enumerate() {
-                                    if audible[i] { continue; }
-                                    let have = src.cons.occupied_len().min(src.in_per_chunk);
-                                    if have > 0 {
-                                        let raw_buf = &mut raw_bufs[i];
-                                        raw_buf.resize(have, 0.0);
-                                        src.cons.pop_slice(&mut raw_buf[..have]);
-                                    }
-                                }
-                            }
+                        // Pace the mixer: wait until the output ring buffer has space for a chunk.
+                        // Since TARGET_CHANNELS is 2, CHUNK is 512 samples.
+                        if mix_prod.vacant_len() < CHUNK {
+                            std::thread::sleep(std::time::Duration::from_millis(2));
                             continue;
                         }
 
@@ -572,24 +543,6 @@ impl StreamSession {
                             for (m, s) in mixed.iter_mut().zip(out_buf[..out_samples.min(CHUNK)].iter()) {
                                 *m = (*m + s * gain).clamp(-1.0, 1.0);
                             }
-                        }
-
-                        // ── Output backpressure ───────────────────────────────────────────
-                        // The output ring buffer is consumed by the encoder at wall-clock rate
-                        // (once per video tick, ~16-33ms). The mixer has no inherent rate limit
-                        // of its own — if any source (e.g. VoiceMeeter) delivers audio faster
-                        // than real-time, the mixer will happily keep processing, flooding the
-                        // output buffer. The encoder then sees audio >1s ahead of wall-clock and
-                        // hard-discards input every tick, creating constant audible cuts.
-                        //
-                        // Fix: high-water gate on the output ring buffer. 200ms = 19200 samples
-                        // at 48kHz/stereo. If more than that is already queued, the encoder is
-                        // behind and we must let it drain rather than flooding further. Sleep 1ms
-                        // (a single OS scheduler quantum) which keeps CPU near-zero while idle.
-                        const HWM_SAMPLES: usize = TARGET_RATE as usize * TARGET_CHANNELS as usize / 5; // 200ms
-                        if mix_prod.vacant_len() < (mix_buf_samples - HWM_SAMPLES) {
-                            std::thread::sleep(std::time::Duration::from_millis(1));
-                            continue;
                         }
 
                         mix_prod.push_slice(&mixed);
