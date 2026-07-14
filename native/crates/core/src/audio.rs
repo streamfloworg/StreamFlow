@@ -347,7 +347,7 @@ fn start_cpal_input(
     let sample_format = config.sample_format();
     let config: cpal::StreamConfig = config.into();
 
-    let rb = HeapRb::<f32>::new(config.sample_rate.0 as usize * 4);
+    let rb = HeapRb::<f32>::new(config.sample_rate.0 as usize * config.channels as usize * 4);
     let (mut prod, cons) = rb.split();
     let err_fn = |err| tracing::error!("CPAL input error: {}", err);
 
