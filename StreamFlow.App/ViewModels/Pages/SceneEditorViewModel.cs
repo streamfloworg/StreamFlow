@@ -1524,6 +1524,7 @@ public partial class SceneEditorViewModel : ObservableObject
         // SourceId assigned, so this naturally no-ops for all of them until ApplySettings picks
         // one at the end.
         if (ActiveScene is null || !ActiveScene.Slots.Contains(slot)) return;
+        if (slot.IsGroupOverlay) return;
 
         var newSourceId = slot.SourceId;
         _activeCaptureBySlot.TryGetValue(slot, out var oldSourceId);
@@ -1548,7 +1549,7 @@ public partial class SceneEditorViewModel : ObservableObject
     /// case), rather than tearing down and recreating an already-active session.</summary>
     public async Task StartAllSlotCapturesAsync(GoLiveSceneViewModel scene)
     {
-        foreach (var slot in scene.Slots.Where(s => !string.IsNullOrEmpty(s.SourceId) && !s.IsStaticOverlay))
+        foreach (var slot in scene.Slots.Where(s => !string.IsNullOrEmpty(s.SourceId) && !s.IsStaticOverlay && !s.IsGroupOverlay))
         {
             if (_activeCaptureBySlot.TryGetValue(slot, out var active) && active == slot.SourceId) continue;
             await AcquireCaptureAsync(slot, slot.SourceId!);
@@ -1570,7 +1571,7 @@ public partial class SceneEditorViewModel : ObservableObject
     public async Task ForceReacquireActiveCapturesAsync()
     {
         if (ActiveScene is null) return;
-        foreach (var slot in ActiveScene.Slots.Where(s => !string.IsNullOrEmpty(s.SourceId) && !s.IsStaticOverlay))
+        foreach (var slot in ActiveScene.Slots.Where(s => !string.IsNullOrEmpty(s.SourceId) && !s.IsStaticOverlay && !s.IsGroupOverlay))
         {
             await ReleaseCaptureAsync(slot);
         }
