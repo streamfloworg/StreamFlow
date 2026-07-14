@@ -1529,7 +1529,7 @@
                                 <TextBlock Text="Test Mode" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}"/>
                                 <ToggleButton Style="{StaticResource TestModeToggleStyle}" VerticalAlignment="Center"
                                               IsChecked="{Binding ViewModel.IsTestModeEnabled, Mode=TwoWay}"
-                                              IsEnabled="{Binding ViewModel.IsStreaming, Converter={StaticResource InverseBooleanConverter}}"/>
+                                              IsEnabled="{Binding ViewModel.IsStreaming, Converter={StaticResource BooleanInvertConverter}}"/>
                             </StackPanel>
 
                             <!-- Go Live / Record / Stop Button -->
