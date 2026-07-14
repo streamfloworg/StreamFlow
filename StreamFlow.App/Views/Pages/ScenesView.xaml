@@ -441,7 +441,7 @@
                                         <TextBlock Grid.Column="0" Text="⠿" FontFamily="Segoe UI Symbol" FontSize="14"
                                                    Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0"
                                                    Cursor="SizeAll" behaviors:SlotReorderBehavior.IsGrip="True"/>
-                                        <TextBlock x:Name="IconText" Grid.Column="1" Margin="0,0,8,0" FontSize="12" VerticalAlignment="Center"/>
+                                        <Path x:Name="TypeIcon" Grid.Column="1" Margin="0,0,8,0" Width="14" Height="14" Stretch="Uniform" VerticalAlignment="Center"/>
                                         <TextBlock Grid.Column="2" Text="{Binding DisplayName}" VerticalAlignment="Center" FontWeight="SemiBold"/>
 
                                         <!-- Hover Delete Button -->
@@ -456,32 +456,48 @@
                                             <Setter TargetName="RowDeleteButton" Property="Visibility" Value="Visible"/>
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding IsPrimary}" Value="True">
-                                            <Setter TargetName="IconText" Property="Text" Value="🖥️"/>
+                                            <Setter TargetName="TypeIcon" Property="Data" Value="{StaticResource MonitorIconData}"/>
+                                            <Setter TargetName="TypeIcon" Property="Fill" Value="#06B6D4"/>
                                         </DataTrigger>
                                         <MultiDataTrigger>
                                             <MultiDataTrigger.Conditions>
                                                 <Condition Binding="{Binding IsPrimary}" Value="False"/>
                                                 <Condition Binding="{Binding IsOverlay}" Value="False"/>
                                             </MultiDataTrigger.Conditions>
-                                            <Setter TargetName="IconText" Property="Text" Value="🖼️"/>
+                                            <Setter TargetName="TypeIcon" Property="Data" Value="{StaticResource CameraIconData}"/>
+                                            <Setter TargetName="TypeIcon" Property="Fill" Value="#10B981"/>
                                         </MultiDataTrigger>
                                         <DataTrigger Binding="{Binding OverlayKind}" Value="Image">
-                                            <Setter TargetName="IconText" Property="Text" Value="📷"/>
+                                            <Setter TargetName="TypeIcon" Property="Data" Value="{StaticResource ImageIconData}"/>
+                                            <Setter TargetName="TypeIcon" Property="Fill" Value="#D946EF"/>
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding OverlayKind}" Value="Text">
-                                            <Setter TargetName="IconText" Property="Text" Value="📝"/>
+                                            <Setter TargetName="TypeIcon" Property="Data" Value="{StaticResource TextIconData}"/>
+                                            <Setter TargetName="TypeIcon" Property="Fill" Value="#F59E0B"/>
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding OverlayKind}" Value="Color">
-                                            <Setter TargetName="IconText" Property="Text" Value="🎨"/>
+                                            <Setter TargetName="TypeIcon" Property="Data" Value="{StaticResource PaletteIconData}"/>
+                                            <Setter TargetName="TypeIcon" Property="Fill" Value="#EF4444"/>
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding OverlayKind}" Value="Video">
-                                            <Setter TargetName="IconText" Property="Text" Value="🎬"/>
+                                            <Setter TargetName="TypeIcon" Property="Data" Value="{StaticResource VideoOverlayIconData}"/>
+                                            <Setter TargetName="TypeIcon" Property="Fill" Value="#6366F1"/>
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding OverlayKind}" Value="Chat">
-                                            <Setter TargetName="IconText" Property="Text" Value="💬"/>
+                                            <Setter TargetName="TypeIcon" Property="Data" Value="{StaticResource ChatIconData}"/>
+                                            <Setter TargetName="TypeIcon" Property="Fill" Value="#14B8A6"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding OverlayKind}" Value="Timer">
+                                            <Setter TargetName="TypeIcon" Property="Data" Value="{StaticResource TimerIconData}"/>
+                                            <Setter TargetName="TypeIcon" Property="Fill" Value="#F59E0B"/>
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding OverlayKind}" Value="Blur">
-                                            <Setter TargetName="IconText" Property="Text" Value="🌫️"/>
+                                            <Setter TargetName="TypeIcon" Property="Data" Value="{StaticResource BlurIconData}"/>
+                                            <Setter TargetName="TypeIcon" Property="Fill" Value="#94A3B8"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding OverlayKind}" Value="Group">
+                                            <Setter TargetName="TypeIcon" Property="Data" Value="{StaticResource GroupIconData}"/>
+                                            <Setter TargetName="TypeIcon" Property="Fill" Value="#EC4899"/>
                                         </DataTrigger>
                                     </DataTemplate.Triggers>
                                 </DataTemplate>
