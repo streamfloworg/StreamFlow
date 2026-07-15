@@ -1,4 +1,4 @@
-﻿using StreamFlow.App.Services.Core;
+using StreamFlow.App.Services.Core;
 
 namespace StreamFlow.App.ViewModels.Pages;
 
@@ -57,6 +57,28 @@ public partial class AudioSourceItem : ObservableObject
     /// this app's own stream-mix mute).</summary>
     [ObservableProperty]
     private bool _isDeviceMuted;
+
+    [ObservableProperty]
+    private bool _isDuckingTrigger;
+
+    [ObservableProperty]
+    private bool _isDuckingTarget;
+
+    partial void OnIsDuckingTriggerChanged(bool value)
+    {
+        if (value && IsDuckingTarget)
+        {
+            IsDuckingTarget = false;
+        }
+    }
+
+    partial void OnIsDuckingTargetChanged(bool value)
+    {
+        if (value && IsDuckingTrigger)
+        {
+            IsDuckingTrigger = false;
+        }
+    }
 
     /// <summary>Set by GoLiveViewModel while applying an incoming AudioDeviceVolumeEvent to
     /// DeviceVolumePercent/IsDeviceMuted, so its PropertyChanged subscriber can tell "core just

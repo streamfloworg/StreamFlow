@@ -768,6 +768,11 @@ async fn run_stdin_commands(
                             session.set_audio_mix(&device_id, gain, muted, solo);
                         }
                     }
+                    Ok(Command::SetDucking { rules }) => {
+                        if let Some(session) = &active_stream {
+                            session.set_ducking_rules(rules);
+                        }
+                    }
                     Ok(Command::SetBlurRegions { regions }) => {
                         compositor_cfg.lock().unwrap().blur_regions = regions;
                     }

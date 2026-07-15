@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::ptr;
-use std::sync::atomic::{AtomicI32, AtomicI64, Ordering};
+use std::sync::atomic::{AtomicI32, AtomicI64, AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::time::{Duration, Instant};
 
@@ -251,6 +251,25 @@ pub enum StreamEvent {
     Stopped,
 }
 
+/// A side-chain ducking rule compiled for DSP.
+#[derive(Debug, Clone)]
+struct DuckingRule {
+    trigger_id: String,
+    target_ids: Vec<String>,
+    threshold_lin: f32, // linear RMS threshold
+    duck_depth: f32,    // 0.0 = no duck, 1.0 = full silence
+    attack_coeff: f32,  // one-pole filter coeff for attack
+    release_coeff: f32, // one-pole filter coeff for release
+    hold_chunks: u32,   // hold time in chunks
+}
+
+/// Dynamic envelope state for one ducking rule.
+#[derive(Debug, Clone)]
+struct DuckState {
+    current_gain: f32, // multiplier (1.0 = normal, target_gain = full duck)
+    hold_counter: u32, // chunks remaining in hold state
+}
+
 /// One mixer input's live gain/mute/solo, shared between `StreamSession` and the mixer thread
 /// so [`StreamSession::set_audio_mix`] can update it after the stream has already started
 /// (see `Command::SetAudioMix`) instead of only baking these in once at `StartStream`.
@@ -267,6 +286,8 @@ pub struct StreamSession {
     _audio_streams: Vec<crate::audio::ActiveStream>,
     _mixer_stop_tx: Option<std::sync::mpsc::SyncSender<()>>,
     mix_state: Option<Arc<Mutex<Vec<MixState>>>>,
+    duck_rules: Arc<Mutex<Vec<DuckingRule>>>,
+    duck_rules_dirty: Arc<AtomicBool>,
 }
 
 impl StreamSession {
@@ -276,6 +297,8 @@ impl StreamSession {
         event_tx: mpsc::UnboundedSender<StreamEvent>,
     ) -> Self {
         let (stop_tx, stop_rx) = std::sync::mpsc::sync_channel::<()>(1);
+        let duck_rules = Arc::new(Mutex::new(Vec::<DuckingRule>::new()));
+        let duck_rules_dirty = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
         // ── Audio capture (one per audio_sources entry) ────────────────────────
         // Logged at warn (not info) deliberately — the core only runs at the "warn" tracing
@@ -435,6 +458,8 @@ impl StreamSession {
 
             let shared_state = Arc::new(Mutex::new(states));
             mix_state = Some(shared_state.clone());
+            let shared_duck_rules = duck_rules.clone();
+            let shared_duck_rules_dirty = duck_rules_dirty.clone();
 
             // Mix ring buffer: TARGET_RATE * TARGET_CHANNELS, 4-second depth.
             let mix_buf_samples = TARGET_RATE as usize * TARGET_CHANNELS as usize * 4;
@@ -449,6 +474,8 @@ impl StreamSession {
             std::thread::Builder::new()
                 .name("audio-mixer".into())
                 .spawn(move || {
+                    let mut local_rules = Vec::<DuckingRule>::new();
+                    let mut local_states = Vec::<DuckState>::new();
                     // Sits between capture (mic capture is TIME_CRITICAL via cpal; loopback
                     // capture now matches it — see audio.rs's wasapi_loopback_thread) and the
                     // encoder — starving this thread would reintroduce the same stall/burst
@@ -476,13 +503,26 @@ impl StreamSession {
                         }
 
                         // Re-read mix state once per iteration (cheap — lock is brief).
-                        let (gains, audible): (Vec<f32>, Vec<bool>) = {
+                        let (gains, audible, device_ids): (Vec<f32>, Vec<bool>, Vec<String>) = {
                             let states = shared_state.lock().unwrap();
                             let any_solo = states.iter().any(|s| s.solo);
-                            states.iter()
-                                .map(|s| (s.gain, if any_solo { s.solo } else { !s.muted }))
-                                .unzip()
+                            let mut g = Vec::new();
+                            let mut a = Vec::new();
+                            let mut d = Vec::new();
+                            for s in states.iter() {
+                                g.push(s.gain);
+                                a.push(if any_solo { s.solo } else { !s.muted });
+                                d.push(s.device_id.clone());
+                            }
+                            (g, a, d)
                         };
+
+                        // Check if ducking rules have changed
+                        if shared_duck_rules_dirty.swap(false, Ordering::Relaxed) {
+                            let rules = shared_duck_rules.lock().unwrap();
+                            local_rules = rules.clone();
+                            local_states = vec![DuckState { current_gain: 1.0, hold_counter: 0 }; local_rules.len()];
+                        }
 
                         // Pace the mixer: wait until the output ring buffer has space for a chunk.
                         // Since TARGET_CHANNELS is 2, CHUNK is 512 samples.
@@ -524,6 +564,8 @@ impl StreamSession {
                         }
 
                         let mut mixed = vec![0.0f32; CHUNK];
+                        let mut rms_levels = vec![0.0f32; sources.len()];
+                        let mut out_samples_list = vec![0usize; sources.len()];
 
                         for (i, src) in sources.iter_mut().enumerate() {
                             let raw_buf = &mut raw_bufs[i];
@@ -569,9 +611,56 @@ impl StreamSession {
                                 copy_len
                             };
 
-                            if !audible[i] { continue; }
+                            out_samples_list[i] = out_samples;
 
-                            let gain = gains[i];
+                            // Calculate RMS of this source's resampled output chunk (if audible)
+                            if audible[i] && out_samples > 0 {
+                                let sum: f32 = out_buf[..out_samples.min(CHUNK)].iter().map(|&s| s * s).sum();
+                                rms_levels[i] = (sum / out_samples.min(CHUNK) as f32).sqrt();
+                            }
+                        }
+
+                        // Apply ducking rules to calculate duck gain multiplier per source
+                        let mut duck_gains = vec![1.0f32; sources.len()];
+                        for (rule_idx, rule) in local_rules.iter().enumerate() {
+                            let state = &mut local_states[rule_idx];
+
+                            let trigger_rms = if let Some(t_idx) = device_ids.iter().position(|id| id == &rule.trigger_id) {
+                                rms_levels[t_idx]
+                            } else {
+                                0.0
+                            };
+
+                            let target_gain = 1.0 - rule.duck_depth;
+                            let triggered = trigger_rms > rule.threshold_lin;
+
+                            if triggered {
+                                state.current_gain += (target_gain - state.current_gain) * rule.attack_coeff;
+                                state.hold_counter = rule.hold_chunks;
+                            } else {
+                                if state.hold_counter > 0 {
+                                    state.hold_counter -= 1;
+                                    state.current_gain += (target_gain - state.current_gain) * rule.attack_coeff;
+                                } else {
+                                    state.current_gain += (1.0 - state.current_gain) * rule.release_coeff;
+                                }
+                            }
+
+                            // Scale combined duck gain for all target devices of this rule
+                            for target_id in &rule.target_ids {
+                                if let Some(t_idx) = device_ids.iter().position(|id| id == target_id) {
+                                    duck_gains[t_idx] *= state.current_gain;
+                                }
+                            }
+                        }
+
+                        // Perform the mix with effective gains scaled by ducking modifiers
+                        for (i, src) in sources.iter_mut().enumerate() {
+                            if !audible[i] { continue; }
+                            let out_buf = &out_bufs[i];
+                            let out_samples = out_samples_list[i];
+
+                            let gain = gains[i] * duck_gains[i];
                             for (m, s) in mixed.iter_mut().zip(out_buf[..out_samples.min(CHUNK)].iter()) {
                                 *m = (*m + s * gain).clamp(-1.0, 1.0);
                             }
@@ -624,7 +713,15 @@ impl StreamSession {
             let _ = event_tx.send(StreamEvent::Stopped);
         });
 
-        Self { stop_tx, thread: Some(thread), _audio_streams: audio_streams, _mixer_stop_tx: mixer_stop, mix_state }
+        Self {
+            stop_tx,
+            thread: Some(thread),
+            _audio_streams: audio_streams,
+            _mixer_stop_tx: mixer_stop,
+            mix_state,
+            duck_rules,
+            duck_rules_dirty,
+        }
     }
 
     pub fn stop(&mut self) {
@@ -647,6 +744,32 @@ impl StreamSession {
             entry.muted = muted;
             entry.solo = solo;
         }
+    }
+
+    /// Live-updates side-chain ducking rules for the active stream session.
+    pub fn set_ducking_rules(&self, configs: Vec<streamflow_ipc::DuckingRuleConfig>) {
+        let rules: Vec<DuckingRule> = configs.iter().map(|cfg| {
+            let threshold_lin = 10.0f32.powf(cfg.threshold_db / 20.0);
+            let compute_coeff = |ms: f32| {
+                let chunks = (ms / 5.333333).max(0.1);
+                1.0 - (-1.0 / chunks).exp()
+            };
+            let attack_coeff = compute_coeff(cfg.attack_ms);
+            let release_coeff = compute_coeff(cfg.release_ms);
+            let hold_chunks = (cfg.hold_ms / 5.333333).round() as u32;
+
+            DuckingRule {
+                trigger_id: cfg.trigger_device_id.clone(),
+                target_ids: cfg.target_device_ids.clone(),
+                threshold_lin,
+                duck_depth: cfg.duck_depth,
+                attack_coeff,
+                release_coeff,
+                hold_chunks,
+            }
+        }).collect();
+        *self.duck_rules.lock().unwrap() = rules;
+        self.duck_rules_dirty.store(true, Ordering::Relaxed);
     }
 }
 

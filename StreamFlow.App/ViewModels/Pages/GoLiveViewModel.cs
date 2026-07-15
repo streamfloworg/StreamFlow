@@ -256,6 +256,15 @@ public partial class GoLiveViewModel : ViewModel
         _persistedSelectedAudioDeviceIds = saved.SelectedAudioDeviceIds;
         _persistedAudioDeviceDisplayNames = saved.AudioDeviceDisplayNames;
 
+        _isDuckingEnabled = saved.IsDuckingEnabled;
+        _duckingTriggerDeviceId = saved.DuckingTriggerDeviceId;
+        _duckingThresholdDb = saved.DuckingThresholdDb;
+        _duckingDepth = saved.DuckingDepth;
+        _duckingAttackMs = saved.DuckingAttackMs;
+        _duckingReleaseMs = saved.DuckingReleaseMs;
+        _duckingHoldMs = saved.DuckingHoldMs;
+        _persistedDuckingTargetDeviceIds = saved.DuckingTargetDeviceIds != null ? [.. saved.DuckingTargetDeviceIds] : [];
+
         _isSpoutOutputEnabled = true; // Always enable Spout2
         _spoutSenderName = string.IsNullOrEmpty(saved.SpoutSenderName) ? "StreamFlow" : saved.SpoutSenderName;
 
@@ -408,7 +417,18 @@ public partial class GoLiveViewModel : ViewModel
             Fps = Fps,
             IsStreamDeckServerEnabled = currentOnDisk.IsStreamDeckServerEnabled,
             StreamDeckServerPort = currentOnDisk.StreamDeckServerPort,
-            StreamDeckApiKey = currentOnDisk.StreamDeckApiKey
+            StreamDeckApiKey = currentOnDisk.StreamDeckApiKey,
+
+            IsDuckingEnabled = IsDuckingEnabled,
+            DuckingTriggerDeviceId = DuckingTriggerDeviceId,
+            DuckingThresholdDb = DuckingThresholdDb,
+            DuckingDepth = DuckingDepth,
+            DuckingAttackMs = DuckingAttackMs,
+            DuckingReleaseMs = DuckingReleaseMs,
+            DuckingHoldMs = DuckingHoldMs,
+            DuckingTargetDeviceIds = AudioSources.Count > 0
+                ? AudioSources.Where(a => a.IsSelected && a.IsDuckingTarget).Select(a => a.Device.Id).ToList()
+                : [.. _persistedDuckingTargetDeviceIds]
         };
     }
 

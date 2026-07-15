@@ -986,6 +986,7 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="*" MinHeight="60"/>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
                             <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,4">
@@ -1018,7 +1019,73 @@
                                 </ItemsControl>
                             </ScrollViewer>
 
-                            <Button Grid.Row="2" Content="Refresh" HorizontalAlignment="Left" Padding="10,4" Margin="0,8,0,0"
+                            <!-- Ducking Settings Section -->
+                            <Border Grid.Row="2" Margin="0,8,0,0" BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="0,1,0,0" Padding="0,8,0,0">
+                                <StackPanel>
+                                    <CheckBox Content="Enable Side-Chain Ducking" IsChecked="{Binding ViewModel.IsDuckingEnabled, Mode=TwoWay}"
+                                              FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                    
+                                    <StackPanel Visibility="{Binding ViewModel.IsDuckingEnabled, Converter={StaticResource BoolToVisibility}}">
+                                        <!-- Threshold (dB) Slider -->
+                                        <Grid Margin="0,4,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="40"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="Threshold" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" FontSize="11" Margin="0,0,8,0"/>
+                                            <Slider Grid.Column="1" Minimum="-60" Maximum="0" Value="{Binding ViewModel.DuckingThresholdDb, Mode=TwoWay}" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="2" Text="{Binding ViewModel.DuckingThresholdDb, StringFormat={}{0:F0} dB}" FontSize="11" TextAlignment="Right" VerticalAlignment="Center"
+                                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                                        </Grid>
+
+                                        <!-- Depth (%) Slider -->
+                                        <Grid Margin="0,4,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="40"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="Duck Depth" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" FontSize="11" Margin="0,0,8,0"/>
+                                            <Slider Grid.Column="1" Minimum="0" Maximum="1" Value="{Binding ViewModel.DuckingDepth, Mode=TwoWay}" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="2" Text="{Binding ViewModel.DuckingDepth, StringFormat={}{0:P0}}" FontSize="11" TextAlignment="Right" VerticalAlignment="Center"
+                                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                                        </Grid>
+
+                                        <!-- Attack / Release / Hold times in a single row -->
+                                        <Grid Margin="0,4,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            
+                                            <!-- Attack -->
+                                            <StackPanel Grid.Column="0" Margin="0,0,4,0">
+                                                <TextBlock Text="Attack" FontSize="9" Foreground="{StaticResource TextSecondaryBrush}" HorizontalAlignment="Center"/>
+                                                <Slider Minimum="1" Maximum="100" Value="{Binding ViewModel.DuckingAttackMs, Mode=TwoWay}" Margin="0,2"/>
+                                                <TextBlock Text="{Binding ViewModel.DuckingAttackMs, StringFormat={}{0:F0} ms}" FontSize="9" HorizontalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                            </StackPanel>
+
+                                            <!-- Release -->
+                                            <StackPanel Grid.Column="1" Margin="2,0,2,0">
+                                                <TextBlock Text="Release" FontSize="9" Foreground="{StaticResource TextSecondaryBrush}" HorizontalAlignment="Center"/>
+                                                <Slider Minimum="10" Maximum="1000" Value="{Binding ViewModel.DuckingReleaseMs, Mode=TwoWay}" Margin="0,2"/>
+                                                <TextBlock Text="{Binding ViewModel.DuckingReleaseMs, StringFormat={}{0:F0} ms}" FontSize="9" HorizontalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                            </StackPanel>
+
+                                            <!-- Hold -->
+                                            <StackPanel Grid.Column="2" Margin="4,0,0,0">
+                                                <TextBlock Text="Hold" FontSize="9" Foreground="{StaticResource TextSecondaryBrush}" HorizontalAlignment="Center"/>
+                                                <Slider Minimum="0" Maximum="500" Value="{Binding ViewModel.DuckingHoldMs, Mode=TwoWay}" Margin="0,2"/>
+                                                <TextBlock Text="{Binding ViewModel.DuckingHoldMs, StringFormat={}{0:F0} ms}" FontSize="9" HorizontalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <Button Grid.Row="3" Content="Refresh" HorizontalAlignment="Left" Padding="10,4" Margin="0,8,0,0"
                                     Command="{Binding ViewModel.RefreshAudioDevicesCommand}"/>
                         </Grid>
                     </Border>
