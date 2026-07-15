@@ -1076,7 +1076,7 @@ public partial class GoLiveViewModel
         // devices Voicemeeter genuinely writes mixed audio into.
         var audioSourceConfigs = AudioSources
             .Where(a => a.IsSelected && !IsVoicemeeterRenderDevice(a.Device))
-            .Select(a => new AudioSourceConfig(a.Device.Id, EffectiveGain(a), a.IsMuted, a.IsSolo))
+            .Select(a => new AudioSourceConfig(a.Device.Id, EffectiveGain(a), a.IsMuted, a.IsSolo, IsDuckingTrigger: IsDuckingEnabled && a.Device.Id == DuckingTriggerDeviceId))
             .ToArray();
 
         IsTestStreaming = testMode && !recordOnly;

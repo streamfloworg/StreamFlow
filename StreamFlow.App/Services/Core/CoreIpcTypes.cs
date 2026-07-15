@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Serialization;
+using System.Text.Json.Serialization;
 
 namespace StreamFlow.App.Services.Core;
 
@@ -39,6 +39,7 @@ public enum CoreState
 [JsonDerivedType(typeof(ConfigCommand), "config")]
 [JsonDerivedType(typeof(AddStaticOverlayCommand), "add_static_overlay")]
 [JsonDerivedType(typeof(SetSpoutOutputCommand), "set_spout_output")]
+[JsonDerivedType(typeof(SetDuckingCommand), "set_ducking")]
 public abstract record CoreCommand;
 
 /// <summary>First message on stdin: establishes session credentials.</summary>
@@ -142,7 +143,18 @@ public sealed record ChromaKeyDef(byte R, byte G, byte B, float Similarity);
 /// <summary>One audio device's mix settings for <see cref="StartStreamCommand"/>. Solo/mute are
 /// resolved core-side at mix time: if any source has Solo set, only soloed sources are audible
 /// (muted or not); otherwise every non-muted source mixes in at its own Gain.</summary>
-public sealed record AudioSourceConfig(string DeviceId, float Gain = 1.0f, bool Muted = false, bool Solo = false);
+public sealed record AudioSourceConfig(string DeviceId, float Gain = 1.0f, bool Muted = false, bool Solo = false, bool IsDuckingTrigger = false);
+
+public sealed record DuckingRuleConfig(
+    string TriggerDeviceId,
+    string[] TargetDeviceIds,
+    float ThresholdDb = -30.0f,
+    float DuckDepth = 0.8f,
+    float AttackMs = 10.0f,
+    float ReleaseMs = 300.0f,
+    float HoldMs = 100.0f);
+
+public sealed record SetDuckingCommand(DuckingRuleConfig[] Rules) : CoreCommand;
 
 /// <summary>
 /// Registers a static overlay's already-rendered pixels under <paramref name="SourceId"/> so it

@@ -171,44 +171,64 @@ impl AudioEncoder {
                 "Audio ran {:.2}s ahead of wall-clock - discarding new input instead of rewinding pts",
                 pre_track_time - elapsed_secs
             );
-        } else if self.cons.occupied_len() as i32 / self.channels > 0 {
-            let available = self.cons.occupied_len() as i32 / self.channels;
-            let mut interleaved = vec![0.0f32; (available * self.channels) as usize];
-            let read = self.cons.pop_slice(&mut interleaved);
-            let samples_read = read as i32 / self.channels;
+        } else {
+            // Rate-limit consumption to what wall-clock says we currently need.
+            //
+            // Previously this read ALL available samples unconditionally. That works fine when
+            // sources run at exactly realtime, but a source whose real engine clock runs faster
+            // than realtime (VoiceMeeter observed at ~1.33x: 21ms of audio delivered every 16ms
+            // of wall-clock) pre-loads the FIFO with "future" audio. Each tick, pts advances by
+            // 21ms while wall-clock only advanced 16ms. After ~4 seconds: pts is 1s+ ahead →
+            // the ">1s ahead" hard-discard above fires on every tick → constant audible cuts.
+            //
+            // Fix: only pop as many frames as the current wall-clock deficit allows. Excess audio
+            // stays in the ring buffer; the mixer's HWM backpressure handles draining it. The
+            // encoder stays at wall-clock pace regardless of the source's actual delivery rate.
+            let current_track_secs = (self.pts + pre_fifo_size) as f64 / sample_rate as f64;
+            let deficit_frames = ((elapsed_secs - current_track_secs) * sample_rate as f64)
+                .max(0.0) as usize;
+            let available_frames = self.cons.occupied_len() / self.channels as usize;
+            let frames_to_read = available_frames.min(deficit_frames);
 
-            // Convert and push to FIFO
-            let in_data_ptrs: [*const u8; 1] = [interleaved.as_ptr() as *const u8];
-            let mut out_data: [*mut u8; 8] = [ptr::null_mut(); 8];
-            let mut out_linesize = 0;
-            av_samples_alloc(
-                out_data.as_mut_ptr(),
-                &mut out_linesize,
-                self.channels,
-                samples_read,
-                AVSampleFormat::AV_SAMPLE_FMT_FLTP,
-                0,
-            );
+            if frames_to_read > 0 {
+                let samples_to_read = frames_to_read * self.channels as usize;
+                let mut interleaved = vec![0.0f32; samples_to_read];
+                let read = self.cons.pop_slice(&mut interleaved);
+                let samples_read = read as i32 / self.channels;
 
-            let out_samples = swr_convert(
-                self.swr,
-                out_data.as_mut_ptr(),
-                samples_read,
-                in_data_ptrs.as_ptr(),
-                samples_read,
-            );
-
-            if out_samples > 0 {
-                av_audio_fifo_write(
-                    self.fifo,
-                    out_data.as_mut_ptr() as *mut *mut std::ffi::c_void,
-                    out_samples,
+                // Convert interleaved f32 → planar f32 and write to the AAC encoder FIFO.
+                let in_data_ptrs: [*const u8; 1] = [interleaved.as_ptr() as *const u8];
+                let mut out_data: [*mut u8; 8] = [ptr::null_mut(); 8];
+                let mut out_linesize = 0;
+                av_samples_alloc(
+                    out_data.as_mut_ptr(),
+                    &mut out_linesize,
+                    self.channels,
+                    samples_read,
+                    AVSampleFormat::AV_SAMPLE_FMT_FLTP,
+                    0,
                 );
-            } else if out_samples < 0 {
-                tracing::error!("swr_convert failed with code {}", out_samples);
-            }
 
-            av_freep(&mut out_data[0] as *mut _ as *mut std::ffi::c_void);
+                let out_samples = swr_convert(
+                    self.swr,
+                    out_data.as_mut_ptr(),
+                    samples_read,
+                    in_data_ptrs.as_ptr(),
+                    samples_read,
+                );
+
+                if out_samples > 0 {
+                    av_audio_fifo_write(
+                        self.fifo,
+                        out_data.as_mut_ptr() as *mut *mut std::ffi::c_void,
+                        out_samples,
+                    );
+                } else if out_samples < 0 {
+                    tracing::error!("swr_convert failed with code {}", out_samples);
+                }
+
+                av_freep(&mut out_data[0] as *mut _ as *mut std::ffi::c_void);
+            }
         }
 
         let track_time = (self.pts + av_audio_fifo_size(self.fifo) as i64) as f64 / sample_rate as f64;

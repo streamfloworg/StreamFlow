@@ -120,6 +120,27 @@ public partial class GoLiveViewModel : ViewModel
     [ObservableProperty]
     private string _bitrateGraphPoints = "0,25 120,25";
 
+    [ObservableProperty]
+    private float _masterPeakDb = float.NegativeInfinity;
+
+    public string MasterPeakText => float.IsNegativeInfinity(MasterPeakDb) || MasterPeakDb < -99f ? "-Inf dB" : $"{MasterPeakDb:F1} dB";
+
+    public double MasterPeakFraction
+    {
+        get
+        {
+            if (float.IsNegativeInfinity(MasterPeakDb) || MasterPeakDb < -60.0f)
+                return 0.0;
+            return Math.Clamp((MasterPeakDb + 60.0) / 60.0, 0.0, 1.0);
+        }
+    }
+
+    partial void OnMasterPeakDbChanged(float value)
+    {
+        OnPropertyChanged(nameof(MasterPeakText));
+        OnPropertyChanged(nameof(MasterPeakFraction));
+    }
+
     private void UpdateHistory(double fps, double bitrate)
     {
         _fpsHistory.Enqueue(fps);
@@ -165,6 +186,7 @@ public partial class GoLiveViewModel : ViewModel
     private bool _hasUnsavedChanges;
 
     private bool _isInitializing = true;
+    private bool _hasReceivedFirstSourcesEvent;
     private string? _lastLoadedSceneSetId;
 
     public GoLiveViewModel(
@@ -233,6 +255,15 @@ public partial class GoLiveViewModel : ViewModel
         _masterVolumePercent = saved.MasterVolumePercent;
         _persistedSelectedAudioDeviceIds = saved.SelectedAudioDeviceIds;
         _persistedAudioDeviceDisplayNames = saved.AudioDeviceDisplayNames;
+
+        _isDuckingEnabled = saved.IsDuckingEnabled;
+        _duckingTriggerDeviceId = saved.DuckingTriggerDeviceId;
+        _duckingThresholdDb = saved.DuckingThresholdDb;
+        _duckingDepth = saved.DuckingDepth;
+        _duckingAttackMs = saved.DuckingAttackMs;
+        _duckingReleaseMs = saved.DuckingReleaseMs;
+        _duckingHoldMs = saved.DuckingHoldMs;
+        _persistedDuckingTargetDeviceIds = saved.DuckingTargetDeviceIds != null ? [.. saved.DuckingTargetDeviceIds] : [];
 
         _isSpoutOutputEnabled = true; // Always enable Spout2
         _spoutSenderName = string.IsNullOrEmpty(saved.SpoutSenderName) ? "StreamFlow" : saved.SpoutSenderName;
@@ -386,7 +417,18 @@ public partial class GoLiveViewModel : ViewModel
             Fps = Fps,
             IsStreamDeckServerEnabled = currentOnDisk.IsStreamDeckServerEnabled,
             StreamDeckServerPort = currentOnDisk.StreamDeckServerPort,
-            StreamDeckApiKey = currentOnDisk.StreamDeckApiKey
+            StreamDeckApiKey = currentOnDisk.StreamDeckApiKey,
+
+            IsDuckingEnabled = IsDuckingEnabled,
+            DuckingTriggerDeviceId = DuckingTriggerDeviceId,
+            DuckingThresholdDb = DuckingThresholdDb,
+            DuckingDepth = DuckingDepth,
+            DuckingAttackMs = DuckingAttackMs,
+            DuckingReleaseMs = DuckingReleaseMs,
+            DuckingHoldMs = DuckingHoldMs,
+            DuckingTargetDeviceIds = AudioSources.Count > 0
+                ? AudioSources.Where(a => a.IsSelected && a.IsDuckingTarget).Select(a => a.Device.Id).ToList()
+                : [.. _persistedDuckingTargetDeviceIds]
         };
     }
 
@@ -516,6 +558,14 @@ public partial class GoLiveViewModel : ViewModel
                     if (_lastKnownPrimaryResolution is not null && currentPrimaryRes != _lastKnownPrimaryResolution)
                         _ = SceneEditor.RefreshStaticOverlaySizesAsync();
                     _lastKnownPrimaryResolution = currentPrimaryRes;
+                    // Only attempt recovery on the very first SourcesEvent — that's the moment
+                    // the core has finished enumerating monitors/windows and any capture that
+                    // silently failed during startup (before that enumeration was complete) can
+                    // be safely retried. Subsequent SourcesEvent firings (device hotplug, etc.)
+                    // must NOT trigger this or they'll needlessly stop/restart running captures.
+                    if (!_hasReceivedFirstSourcesEvent)
+                        _ = SceneEditor.RecoverMissingCapturesAsync();
+                    _hasReceivedFirstSourcesEvent = true;
                     break;
                 case AudioDevicesEvent audioDevices:
                     AvailableAudioDevices.Clear();
@@ -533,6 +583,9 @@ public partial class GoLiveViewModel : ViewModel
                 case AudioDeviceLevelEvent levelEvt:
                     var matchingSource = AudioSources.FirstOrDefault(a => a.Device.Id == levelEvt.DeviceId);
                     if (matchingSource is not null) matchingSource.PeakDb = levelEvt.PeakDb;
+                    break;
+                case AudioLevelEvent levelEvt:
+                    MasterPeakDb = levelEvt.PeakDb;
                     break;
                 case AudioDeviceVolumeEvent volEvt:
                     var matchingVolSource = AudioSources.FirstOrDefault(a => a.Device.Id == volEvt.DeviceId);
@@ -572,6 +625,10 @@ public partial class GoLiveViewModel : ViewModel
                     UpdateHistory(status.Fps, status.BitrateKbps);
                     break;
                 case ErrorEvent error:
+                    if (error.Code == "capture_error" && !_hasReceivedFirstSourcesEvent)
+                    {
+                        break;
+                    }
                     StatusLabel = "Error";
                     ErrorMessage = error.Message;
                     // Every Event::Error the core sends is non-fatal by its own wire-protocol

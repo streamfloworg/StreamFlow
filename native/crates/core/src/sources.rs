@@ -1,4 +1,4 @@
-﻿#![allow(unsafe_code)]
+#![allow(unsafe_code)]
 
 use streamflow_ipc::{CaptureSource, CaptureSourceKind};
 use windows::{
@@ -299,11 +299,11 @@ pub fn capture_item_for_id(id: &str) -> windows::core::Result<GraphicsCaptureIte
         capture_item_for_monitor(hmonitor)
     } else if let Some(rest) = id.strip_prefix("window:") {
         let hwnd_val = usize::from_str_radix(rest.trim_start_matches("0x"), 16)
-            .map_err(|_| windows::core::Error::from_win32())?;
+            .map_err(|e| windows::core::Error::new(windows::core::HRESULT(0x80004005_u32 as i32), format!("Invalid window HWND hex string: {}", e)))?;
         let hwnd = HWND(hwnd_val as *mut core::ffi::c_void);
         capture_item_for_hwnd(hwnd)
     } else {
-        Err(windows::core::Error::from_win32())
+        Err(windows::core::Error::new(windows::core::HRESULT(0x80004005_u32 as i32), format!("Invalid capture source format: {}", id)))
     }
 }
 
@@ -352,7 +352,7 @@ fn nth_monitor(index: usize) -> windows::core::Result<HMONITOR> {
     }
     state
         .result
-        .ok_or_else(|| windows::core::Error::from_win32())
+        .ok_or_else(|| windows::core::Error::new(windows::core::HRESULT(0x80004005_u32 as i32), format!("Monitor index out of range: {}", index)))
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

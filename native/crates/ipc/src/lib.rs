@@ -167,6 +167,10 @@ pub enum Command {
         muted: bool,
         solo: bool,
     },
+    /// Live-updates the side-chain ducking rules while streaming is running.
+    SetDucking {
+        rules: Vec<DuckingRuleConfig>,
+    },
     /// Request the waveform peaks for a local audio file.
     /// Core responds with [`Event::WaveformPeaks`].
     GetWaveformPeaks {
@@ -492,6 +496,11 @@ pub struct AudioDeviceDef {
 }
 
 fn default_gain() -> f32 { 1.0 }
+fn default_threshold_db() -> f32 { -30.0 }
+fn default_duck_depth() -> f32 { 0.8 }
+fn default_attack_ms() -> f32 { 10.0 }
+fn default_release_ms() -> f32 { 300.0 }
+fn default_hold_ms() -> f32 { 100.0 }
 
 /// One audio device's mix settings for [`Command::StartStream`]. Solo/mute are resolved at mix
 /// time in the streaming mixer: if any source has `solo` set, only soloed sources are audible
@@ -506,6 +515,26 @@ pub struct AudioSourceConfig {
     pub muted: bool,
     #[serde(default)]
     pub solo: bool,
+    /// Informational hint for UI showing whether this device is actively configured as a trigger.
+    #[serde(default)]
+    pub is_ducking_trigger: bool,
+}
+
+/// A side-chain ducking rule. Ducks target devices when a trigger device exceeds a threshold.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DuckingRuleConfig {
+    pub trigger_device_id: String,
+    pub target_device_ids: Vec<String>,
+    #[serde(default = "default_threshold_db")]
+    pub threshold_db: f32,
+    #[serde(default = "default_duck_depth")]
+    pub duck_depth: f32,
+    #[serde(default = "default_attack_ms")]
+    pub attack_ms: f32,
+    #[serde(default = "default_release_ms")]
+    pub release_ms: f32,
+    #[serde(default = "default_hold_ms")]
+    pub hold_ms: f32,
 }
 
 // ── Data-plane binary framing ─────────────────────────────────────────────────

@@ -182,6 +182,15 @@ public sealed class GoLiveSettings
     /// user only has to paste it into the plugin's config once.</summary>
     public string? StreamDeckApiKey { get; set; }
 
+    public bool IsDuckingEnabled { get; set; }
+    public string? DuckingTriggerDeviceId { get; set; }
+    public float DuckingThresholdDb { get; set; } = -30.0f;
+    public float DuckingDepth { get; set; } = 0.8f;
+    public float DuckingAttackMs { get; set; } = 10.0f;
+    public float DuckingReleaseMs { get; set; } = 300.0f;
+    public float DuckingHoldMs { get; set; } = 100.0f;
+    public List<string> DuckingTargetDeviceIds { get; set; } = [];
+
     // Legacy fields for backwards compatibility
     public string? SceneName { get; set; }
     public List<SlotSettings>? Slots { get; set; }
