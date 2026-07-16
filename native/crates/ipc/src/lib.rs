@@ -116,7 +116,7 @@ pub enum Command {
         output_width: Option<u32>,
         output_height: Option<u32>,
         fit_mode: Option<String>,
-        /// Codec name: "libx264", "h264_nvenc", "h264_amf", "h264_qsv"
+        /// Codec name: "libx264", "h264_nvenc", "h264_amf", "h264_qsv", "h264_vulkan"
         encoder: String,
         sources: Vec<StreamSourceDef>,
         #[serde(default)]

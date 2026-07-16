@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Windows.Data;
@@ -51,6 +51,7 @@ public partial class SettingsViewModel : ViewModel
         _ = RefreshDevicesAsync();
         AudioOutputs = CollectionViewSource.GetDefaultView(Outputs);
         AudioOutputs.Refresh();
+        InitializeViewModel();
     }
 
     public void OutputDeviceSelectionChanged(object sender, RoutedEventArgs e)
@@ -146,7 +147,7 @@ public partial class SettingsViewModel : ViewModel
     [RelayCommand]
     private static async Task OpenImageCacheFolder()
     {
-        Process.Start("explorer.exe", @$"{CacheManager.VisualizationCacheFolder}");
+        Process.Start("explorer.exe", @$"{CacheManager.ImageCacheFolder}");
         await Task.CompletedTask;
     }
 

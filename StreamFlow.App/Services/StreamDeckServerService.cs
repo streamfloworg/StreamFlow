@@ -31,7 +31,6 @@ namespace StreamFlow.App.Services;
 public sealed class StreamDeckServerService : IHostedService
 {
     private readonly GoLiveViewModel _goLive;
-    private readonly GoLiveSettingsService _settingsService;
     private readonly EventBus _eventBus;
     private readonly ILogger<StreamDeckServerService> _logger;
 
@@ -45,10 +44,9 @@ public sealed class StreamDeckServerService : IHostedService
     public int Port { get; private set; }
     public string ApiKey { get; private set; } = "";
 
-    public StreamDeckServerService(GoLiveViewModel goLive, GoLiveSettingsService settingsService, EventBus eventBus, ILogger<StreamDeckServerService> logger)
+    public StreamDeckServerService(GoLiveViewModel goLive, EventBus eventBus, ILogger<StreamDeckServerService> logger)
     {
         _goLive = goLive;
-        _settingsService = settingsService;
         _eventBus = eventBus;
         _logger = logger;
 
@@ -62,7 +60,7 @@ public sealed class StreamDeckServerService : IHostedService
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        var saved = _settingsService.Load();
+        var saved = AppModel.Instance.GoLiveSettings;
         if (!saved.IsStreamDeckServerEnabled) return;
         await StartServerAsync(saved.StreamDeckServerPort, saved.StreamDeckApiKey);
     }
@@ -125,9 +123,9 @@ public sealed class StreamDeckServerService : IHostedService
     private string GenerateAndPersistApiKey()
     {
         var key = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).Replace('+', '-').Replace('/', '_').TrimEnd('=');
-        var saved = _settingsService.Load();
+        var saved = AppModel.Instance.GoLiveSettings;
         saved.StreamDeckApiKey = key;
-        _settingsService.Save(saved);
+        AppModel.Instance.RequestSave();
         return key;
     }
 

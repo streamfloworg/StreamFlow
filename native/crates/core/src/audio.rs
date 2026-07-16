@@ -20,6 +20,34 @@ use streamflow_ipc::AudioDeviceDef;
 /// meaningfully increasing IPC/UI-thread traffic versus the previous 100ms.
 const METER_EMIT_INTERVAL: std::time::Duration = std::time::Duration::from_millis(30);
 
+struct ComGuard {
+    initialized: bool,
+}
+
+impl ComGuard {
+    fn new() -> Self {
+        unsafe {
+            let res = windows::Win32::System::Com::CoInitializeEx(
+                None,
+                windows::Win32::System::Com::COINIT_MULTITHREADED,
+            );
+            Self {
+                initialized: res.is_ok(),
+            }
+        }
+    }
+}
+
+impl Drop for ComGuard {
+    fn drop(&mut self) {
+        if self.initialized {
+            unsafe {
+                windows::Win32::System::Com::CoUninitialize();
+            }
+        }
+    }
+}
+
 // ── Device enumeration ─────────────────────────────────────────────────────
 
 /// Enumerate all active audio endpoints via MMDEVAPI, classifying each as
@@ -45,7 +73,7 @@ unsafe fn enumerate_audio_devices_mmdevapi() -> Result<Vec<AudioDeviceDef>> {
     use windows::Win32::System::Variant::{VT_LPWSTR, VT_UI4};
     use windows::core::GUID;
 
-    let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+    let _com_guard = ComGuard::new();
 
     let enumerator: IMMDeviceEnumerator =
         CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
@@ -162,7 +190,7 @@ unsafe fn resolve_endpoint_volume(device_id: &str) -> Result<windows::Win32::Med
     use windows::Win32::System::Variant::VT_LPWSTR;
     use windows::core::GUID;
 
-    let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+    let _com_guard = ComGuard::new();
 
     let (flow, name) = if let Some(name) = device_id.strip_prefix("output:") {
         (eRender, name)
@@ -492,7 +520,7 @@ unsafe fn query_wasapi_mix_format(dev_name: &str) -> Result<(u32, u32)> {
     use windows::Win32::System::Variant::VT_LPWSTR;
     use windows::core::GUID;
 
-    let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+    let _com_guard = ComGuard::new();
     let enumerator: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
 
     let mm_device = if dev_name.is_empty() {
@@ -588,7 +616,7 @@ unsafe fn wasapi_loopback_thread(
     // (loopback) sources — mic/"input:" capture already goes through cpal, which does this itself.
     let _ = SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
 
-    let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+    let _com_guard = ComGuard::new();
 
     let enumerator: IMMDeviceEnumerator =
         CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;

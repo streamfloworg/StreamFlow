@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
 using System.Linq;
@@ -241,8 +241,21 @@ public sealed class CoreBridgeService : IHostedService, IDisposable
         await _writeLock.WaitAsync();
         try
         {
-            await _stdin!.WriteAsync(bytes);
+            if (_stdin is null)
+            {
+                _logger.LogWarning("Core stdin is null; cannot write command.");
+                return;
+            }
+            await _stdin.WriteAsync(bytes);
             await _stdin.FlushAsync();
+        }
+        catch (IOException ex)
+        {
+            _logger.LogWarning(ex, "Failed to write command to core pipe: pipe is closed or closing.");
+        }
+        catch (ObjectDisposedException ex)
+        {
+            _logger.LogWarning(ex, "Failed to write command to core pipe: stream has been disposed.");
         }
         finally
         {

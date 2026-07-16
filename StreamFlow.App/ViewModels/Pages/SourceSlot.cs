@@ -1,45 +1,8 @@
 using System.Collections.ObjectModel;
 using System.Windows.Media;
-
-using StreamFlow.App.Services;
+using StreamFlow.Core.Data;
 
 namespace StreamFlow.App.ViewModels.Pages;
-
-/// <summary>Which kind of static overlay a slot holds — null for capture-source slots
-/// (primary/PiP). Determines what GoLiveView renders in the box locally and how
-/// GoLiveViewModel re-renders it to send to the core (see AddStaticOverlayCommand).</summary>
-public enum OverlayKind
-{
-    Image,
-    Text,
-    Color,
-    /// <summary>Unlike the other kinds, a video overlay needs an ongoing decode/loop session
-    /// in the core (like a live capture) rather than being registered once — see IsStaticOverlay.</summary>
-    Video,
-    /// <summary>Renders recent chat messages for whichever stream service is currently
-    /// selected — re-rendered to pixels and re-registered (like image/text) each time new
-    /// messages arrive, rather than needing an ongoing core-side session.</summary>
-    Chat,
-    /// <summary>A full-frame effect layer, not pixel content: everything below it in z-order
-    /// gets Gaussian-blurred by the core's compositor, everything above stays sharp. Has no
-    /// meaningful position/size, so it never appears as a box on the placement canvas — only
-    /// in the overlay list, where its z-position is what matters.</summary>
-    Blur,
-    /// <summary>A live-updating digital clock (count up from zero, or count down to zero from a
-    /// configured duration) — registered once and re-registered every second while running, same
-    /// mechanism as Chat's message-driven re-renders, just driven by a timer instead of incoming
-    /// messages. See SourceSlot.TimerMode/TimerDurationSeconds/IsTimerRunning.</summary>
-    Timer,
-    Group,
-}
-
-/// <summary>Whether a Timer overlay slot counts up from zero or down to zero from
-/// <see cref="SourceSlot.TimerDurationSeconds"/>.</summary>
-public enum TimerMode
-{
-    CountDown,
-    CountUp,
-}
 
 /// <summary>
 /// One capture source's placement within the composited output frame.

@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.IO;
 using System.Reactive.Linq;
 
@@ -145,6 +145,22 @@ public partial class AudioEngine : ObservableObject
             newDevice = Engine.InitializePlaybackDevice(configuredDevice, configuredDeviceFormat);
             if (newDevice != null)
             {
+                if (Instance.CurrentPlaybackDevice != null)
+                {
+                    try
+                    {
+                        if (Instance.CurrentPlaybackDevice.IsRunning)
+                        {
+                            Instance.CurrentPlaybackDevice.Stop();
+                        }
+                        Instance.CurrentPlaybackDevice.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.ErrorLog(Instance.GetType(), $"Failed to dispose previous playback device: {ex.Message}");
+                    }
+                }
+
                 Instance.CurrentPlaybackDevice = newDevice;
                 AppModel.Instance.Settings.OutputDevice = ((DeviceInfo)Instance.CurrentPlaybackDevice!.Info!).Name;
                 WaveformAnalyzer = new RealtimeWaveformAnalyzer(configuredDeviceFormat);
@@ -168,6 +184,22 @@ public partial class AudioEngine : ObservableObject
             newDevice = Engine.InitializeCaptureDevice(configuredDevice, configuredDeviceFormat);
             if (newDevice != null)
             {
+                if (Instance.CurrentCaptureDevice != null)
+                {
+                    try
+                    {
+                        if (Instance.CurrentCaptureDevice.IsRunning)
+                        {
+                            Instance.CurrentCaptureDevice.Stop();
+                        }
+                        Instance.CurrentCaptureDevice.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.ErrorLog(Instance.GetType(), $"Failed to dispose previous capture device: {ex.Message}");
+                    }
+                }
+
                 Instance.CurrentCaptureDevice = newDevice;
                 AppModel.Instance.Settings.CaptureDevice = ((DeviceInfo)Instance.CurrentCaptureDevice!.Info!).Name;
             }
@@ -270,7 +302,8 @@ public partial class AudioEngine : ObservableObject
                         ActiveSoundEffectStartTimes[soundEffect.Name] = DateTime.UtcNow;
                     }
 
-                    Instance.CurrentPlaybackDevice.MasterMixer.AddComponent(soundPlayer);
+                    var playbackDevice = Instance.CurrentPlaybackDevice;
+                    playbackDevice.MasterMixer.AddComponent(soundPlayer);
 
                     // Start playing immediately
                     soundPlayer.Play();
@@ -287,7 +320,7 @@ public partial class AudioEngine : ObservableObject
                         // Clean up
                         try
                         {
-                            Instance.CurrentPlaybackDevice.MasterMixer.RemoveComponent(soundPlayer);
+                            playbackDevice.MasterMixer.RemoveComponent(soundPlayer);
                             lock (SoundEffectPlayersLock)
                             {
                                 ActiveSoundEffectPlayers.Remove(soundPlayer);
@@ -405,17 +438,17 @@ public partial class AudioEngine : ObservableObject
     /// </summary>
     public static void StopAudioTrack()
     {
-        TrackPlayer.Stop();
-        if (Instance.CurrentPlaybackDevice?.IsRunning == true)
-        {
-            Instance.CurrentPlaybackDevice?.Stop();
-        }
         if (TrackPlayer.PlayerRouter != null)
         {
             if (Instance.CurrentPlaybackDevice?.MasterMixer.Components.Where(x => x.Name == TrackPlayer.PlayerRouter?.Name).FirstOrDefault() is SoundPlayer player && player != null)
             {
                 Instance.CurrentPlaybackDevice?.MasterMixer.RemoveComponent(player);
             }
+        }
+        TrackPlayer.Stop();
+        if (Instance.CurrentPlaybackDevice?.IsRunning == true)
+        {
+            Instance.CurrentPlaybackDevice?.Stop();
         }
     }
 

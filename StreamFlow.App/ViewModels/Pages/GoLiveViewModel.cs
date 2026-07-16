@@ -31,7 +31,6 @@ public partial class GoLiveViewModel : ViewModel
     private readonly YouTubeAuthService _youTubeAuth;
     private readonly TwitchChatService _twitchChat;
     private readonly YouTubeChatService _youTubeChat;
-    private readonly GoLiveSettingsService _settings;
     private readonly SceneSetService _sceneSetService;
     private readonly EventBus _eventBus;
     private readonly ILogger<GoLiveViewModel> _logger;
@@ -62,11 +61,30 @@ public partial class GoLiveViewModel : ViewModel
     /// users. Doesn't affect --diag-log itself (see CoreBridgeService.DiagLogEnabled): that still
     /// persists the full session to disk in Release builds too, in case its detail is useful for
     /// a submitted issue — this only hides the in-app live-tail UI.</summary>
+    public bool IsDebugBuild
+    {
+        get
+        {
 #if DEBUG
-    public bool IsDebugBuild => true;
+            return true;
 #else
-    public bool IsDebugBuild => false;
+            try
+            {
+                var entryAssembly = System.Reflection.Assembly.GetEntryAssembly();
+                if (entryAssembly != null)
+                {
+                    var attr = (System.Diagnostics.DebuggableAttribute?)Attribute.GetCustomAttribute(entryAssembly, typeof(System.Diagnostics.DebuggableAttribute));
+                    return attr?.IsJITOptimizerDisabled ?? false;
+                }
+            }
+            catch
+            {
+                // Fallback
+            }
+            return false;
 #endif
+        }
+    }
 
     private const int MaxCoreLogLines = 500;
 
@@ -192,7 +210,7 @@ public partial class GoLiveViewModel : ViewModel
     public GoLiveViewModel(
         CoreBridgeService core, IDialogService dialogs, TwitchAuthService twitchAuth, YouTubeAuthService youTubeAuth,
         TwitchChatService twitchChat, YouTubeChatService youTubeChat,
-        GoLiveSettingsService settings, SceneSetService sceneSetService, GpuEncoderDetectionService gpuEncoderDetection,
+        SceneSetService sceneSetService, GpuEncoderDetectionService gpuEncoderDetection,
         SceneEditorViewModel sceneEditor, EventBus eventBus, ILogger<GoLiveViewModel> logger)
     {
         _core = core;
@@ -201,7 +219,6 @@ public partial class GoLiveViewModel : ViewModel
         _youTubeAuth = youTubeAuth;
         _twitchChat = twitchChat;
         _youTubeChat = youTubeChat;
-        _settings = settings;
         _sceneSetService = sceneSetService;
         _eventBus = eventBus;
         _logger = logger;
@@ -236,7 +253,7 @@ public partial class GoLiveViewModel : ViewModel
         SceneEditor.SlotAvailabilityChanged += RefreshStartStreamAvailability;
         SceneEditor.ChatOverlayStateChanged += UpdateChatConnection;
 
-        var saved = _settings.Load();
+        var saved = AppModel.Instance.GoLiveSettings;
         _encoder = saved.Encoder ?? gpuEncoderDetection.DetectBestEncoder();
         ApplySettings(saved);
 
@@ -307,7 +324,7 @@ public partial class GoLiveViewModel : ViewModel
             Profiles.Add(p);
         }
 
-        var streamKeys = _settings.LoadStreamKeys();
+        var streamKeys = AppModel.Instance.LoadStreamKeys();
         foreach (var p in Profiles)
         {
             if (p.Id != "none" && streamKeys.TryGetValue(p.Id, out var key))
@@ -352,7 +369,7 @@ public partial class GoLiveViewModel : ViewModel
         // reset those three fields back to their defaults, wiping whatever the Settings page had
         // just saved. Read once per snapshot rather than cached, so it always reflects the latest
         // value regardless of which page wrote it last.
-        var currentOnDisk = _settings.Load();
+        var currentOnDisk = AppModel.Instance.GoLiveSettings;
 
         return new()
         {
@@ -457,10 +474,11 @@ public partial class GoLiveViewModel : ViewModel
             if (t.IsCanceled) return;
             System.Windows.Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
             {
-                _settings.Save(BuildSettingsSnapshot());
-                _settings.SaveStreamKeys(Profiles
+                AppModel.Instance.GoLiveSettings = BuildSettingsSnapshot();
+                AppModel.Instance.SaveStreamKeys(Profiles
                     .Where(p => p.Id != "none" && !p.KeyRetrievableViaApi && !string.IsNullOrEmpty(p.StreamKey))
                     .ToDictionary(p => p.Id, p => p.StreamKey));
+                AppModel.Instance.RequestSave();
             }));
         }, TaskScheduler.Default);
     }

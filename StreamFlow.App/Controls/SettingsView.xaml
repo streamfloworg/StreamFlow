@@ -1,0 +1,219 @@
+<UserControl
+    x:Class="StreamFlow.App.Controls.SettingsView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:adonisUi="clr-namespace:AdonisUI;assembly=AdonisUI"
+    xmlns:adonisExtensions="clr-namespace:AdonisUI.Extensions;assembly=AdonisUI"
+    xmlns:conv="clr-namespace:StreamFlow.App.Converter"
+    xmlns:vm="clr-namespace:StreamFlow.App.ViewModels.Pages"
+    mc:Ignorable="d"
+    Width="450"
+    FontSize="12"
+    d:DataContext="{d:DesignInstance vm:SettingsViewModel, IsDesignTimeCreatable=False}">
+
+    <UserControl.Resources>
+        <conv:BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+        
+        <!-- Bottom-right dialog button, classic ~75x23 Windows dialog-button proportions -->
+        <Style x:Key="DialogFooterButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="MinWidth" Value="75"/>
+            <Setter Property="Height" Value="23"/>
+            <Setter Property="Margin" Value="8,0,0,0"/>
+        </Style>
+    </UserControl.Resources>
+
+    <Border Style="{StaticResource DialogCard}" Padding="16,14" Grid.IsSharedSizeScope="True">
+        <Grid>
+            <Grid.RowDefinitions>
+                <!-- Title Row -->
+                <RowDefinition Height="Auto" />
+                <!-- Scrollable Content -->
+                <RowDefinition Height="*" />
+                <!-- Separator -->
+                <RowDefinition Height="Auto" />
+                <!-- Footer Button -->
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <TextBlock Grid.Row="0" Text="Settings" FontWeight="Bold" FontSize="16" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Margin="0,0,0,16"/>
+
+            <!-- Settings Content -->
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,0,0,12">
+                <StackPanel Grid.IsSharedSizeScope="True">
+                    
+                    <!-- Audio Output Device Card -->
+                    <Border Background="{DynamicResource {x:Static adonisUi:Brushes.Layer1BackgroundBrush}}" BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="1" CornerRadius="4" Padding="12,10" Margin="0,0,0,6">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Path Grid.Column="0" Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="16" Height="16" Margin="0,0,12,0" VerticalAlignment="Center" Data="{StaticResource SpeakerIconData}" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="Audio Output Device" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"/>
+                            </StackPanel>
+                            <ComboBox Grid.Column="2"
+                                      Width="180"
+                                      VerticalAlignment="Center"
+                                      ItemsSource="{Binding AudioOutputs.SourceCollection, UpdateSourceTrigger=PropertyChanged}"
+                                      DisplayMemberPath="Name"
+                                      SelectedValue="{Binding Settings.OutputDevice, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                      SelectedValuePath="Name"
+                                      SelectionChanged="OutputDevice_SelectionChanged" />
+                        </Grid>
+                    </Border>
+
+                    <!-- Theme Card -->
+                    <Border Background="{DynamicResource {x:Static adonisUi:Brushes.Layer1BackgroundBrush}}" BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="1" CornerRadius="4" Padding="12,10" Margin="0,0,0,6">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Path Grid.Column="0" Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="16" Height="16" Margin="0,0,12,0" VerticalAlignment="Center" Data="{StaticResource SettingsIconData}" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="Theme" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"/>
+                            </StackPanel>
+                            <ComboBox x:Name="cbThemeSelection"
+                                      Grid.Column="2"
+                                      Width="180"
+                                      VerticalAlignment="Center"
+                                      SelectionChanged="CbThemeSelection_SelectionChanged"
+                                      SelectedValue="{Binding Settings.PreferredTheme, UpdateSourceTrigger=PropertyChanged}"
+                                      SelectedValuePath="Tag">
+                                <ComboBoxItem Tag="Default">Use system setting</ComboBoxItem>
+                                <ComboBoxItem Tag="Light">Light</ComboBoxItem>
+                                <ComboBoxItem Tag="Dark">Dark</ComboBoxItem>
+                            </ComboBox>
+                        </Grid>
+                    </Border>
+
+                    <!-- Stream Deck Server Card -->
+                    <Border Background="{DynamicResource {x:Static adonisUi:Brushes.Layer1BackgroundBrush}}" BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="1" CornerRadius="4" Padding="12,10" Margin="0,0,0,6">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Path Grid.Column="0" Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="16" Height="16" Margin="0,0,12,0" VerticalAlignment="Center" Data="{StaticResource SettingsIconData}" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,0">
+                                    <TextBlock Text="Stream Deck Server" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"/>
+                                    <TextBlock Text="Allows Stream Deck integration" FontSize="10" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <CheckBox Grid.Column="2" Content="Enabled" VerticalAlignment="Center"
+                                          IsChecked="{Binding IsStreamDeckServerEnabled, Mode=TwoWay}"/>
+                            </Grid>
+                            <StackPanel Margin="0,10,0,0" Visibility="{Binding IsStreamDeckServerEnabled, Converter={StaticResource BoolToVisibility}}">
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Port" VerticalAlignment="Center" Margin="0,0,12,0" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"/>
+                                    <TextBox Grid.Column="1" Width="80" HorizontalAlignment="Left"
+                                             Text="{Binding StreamDeckServerPort, Mode=TwoWay}"/>
+                                </Grid>
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="API Key" VerticalAlignment="Center" Margin="0,0,12,0" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"/>
+                                    <TextBox Grid.Column="1" IsReadOnly="True" VerticalAlignment="Center"
+                                             Text="{Binding StreamDeckApiKey, Mode=OneWay}"/>
+                                    <Button Grid.Column="2" Content="Copy" Padding="6,2" Margin="4,0,0,0"
+                                            Command="{Binding CopyStreamDeckApiKeyCommand}"/>
+                                    <Button Grid.Column="3" Content="Regen" Padding="6,2" Margin="4,0,0,0"
+                                            Command="{Binding RegenerateStreamDeckApiKeyCommand}"/>
+                                </Grid>
+                                <TextBlock Text="{Binding StreamDeckServerStatusText}" FontSize="10" Foreground="{StaticResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Cache Settings Expander -->
+                    <Expander Background="{DynamicResource {x:Static adonisUi:Brushes.Layer1BackgroundBrush}}" BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="1" Padding="0" Margin="0,0,0,6" IsExpanded="False">
+                        <Expander.Header>
+                            <Grid Margin="4,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Path Grid.Column="0" Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="16" Height="16" Margin="0,0,12,0" VerticalAlignment="Center" Data="{StaticResource DeleteForeverIconData}" />
+                                <TextBlock Grid.Column="1" Text="Cache" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"/>
+                            </Grid>
+                        </Expander.Header>
+                        <StackPanel Margin="12,6">
+                            <!-- Image Cache Sub-card -->
+                            <Border Background="{DynamicResource {x:Static adonisUi:Brushes.Layer2BackgroundBrush}}" BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer2BorderBrush}}" BorderThickness="1" CornerRadius="4" Padding="12,10">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Path Grid.Column="0" Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="16" Height="16" Margin="0,0,12,0" VerticalAlignment="Center" Data="{StaticResource LevelMeterIconData}" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="Image Cache" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"/>
+                                    </StackPanel>
+                                    <Menu Grid.Column="2" x:Name="AudioMenu" Background="Transparent" BorderThickness="0" VerticalAlignment="Center">
+                                        <MenuItem AutomationProperties.Name="Unused Menu" x:Name="AudioMenuItem" FocusVisualStyle="{DynamicResource {x:Static SystemParameters.FocusVisualStyleKey}}">
+                                            <MenuItem.Header>
+                                                <Path Data="{StaticResource SettingsIconData}" Width="14" Height="14" Stretch="Uniform" Fill="{StaticResource TextPrimaryBrush}" />
+                                            </MenuItem.Header>
+                                            <MenuItem x:Name="vc1" Header="Image Cache Folder" Command="{Binding OpenImageCacheFolderCommand}"/>
+                                            <MenuItem x:Name="vc2" Header="Clear Image Cache" Command="{Binding ClearImageCacheCommand}"/>
+                                        </MenuItem>
+                                    </Menu>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </Expander>
+
+                    <!-- About Card -->
+                    <Border Background="{DynamicResource {x:Static adonisUi:Brushes.Layer1BackgroundBrush}}" BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="1" CornerRadius="4" Padding="12,10" Margin="0,0,0,6">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Path Grid.Column="0" Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="16" Height="16" Margin="0,0,12,0" VerticalAlignment="Center" Data="{StaticResource GoLiveIconData}" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,0">
+                                <TextBlock Text="About StreamFlow" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"/>
+                                <TextBlock Text="StreamFlow soundboard application" FontSize="10" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0"
+                                            Visibility="{Binding ShowUpdateCheck, Converter={StaticResource BoolToVisibility}}">
+                                    <Button Content="Check Updates" Padding="6,2" FontSize="10" Command="{Binding CheckForUpdatesCommand}"/>
+                                    <Button Content="Install" Padding="6,2" FontSize="10" Margin="4,0,0,0"
+                                            Command="{Binding InstallUpdateCommand}"/>
+                                    <TextBlock Text="{Binding UpdateStatusText}" FontSize="10" VerticalAlignment="Center" Margin="6,0,0,0"
+                                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <TextBlock Grid.Column="2" Text="{Binding AppVersion}" VerticalAlignment="Center" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" FontSize="11"/>
+                        </Grid>
+                    </Border>
+                    
+                </StackPanel>
+            </ScrollViewer>
+
+            <Border Grid.Row="2" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer2BorderBrush}}" Margin="0,2,0,0"/>
+
+            <!-- Footer close button -->
+            <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                <Button x:Name="SettingsCloseButton" Content="OK" Style="{StaticResource DialogFooterButtonStyle}" IsDefault="True"/>
+            </StackPanel>
+
+        </Grid>
+    </Border>
+</UserControl>

@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Reactive.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows.Data;
@@ -15,6 +15,7 @@ using Microsoft.Toolkit.Uwp.Notifications;
 using StreamFlow.App.ViewModels.Pages;
 using StreamFlow.App.ViewModels.Windows;
 using StreamFlow.App.Views.Pages;
+using StreamFlow.App.Controls;
 using StreamFlow.Core.AudioHandling;
 using StreamFlow.Core.AudioProperties;
 using StreamFlow.Core.Data;
@@ -365,7 +366,6 @@ public partial class MainWindow : AdonisWindow, INotifyPropertyChanged, IDisposa
         }
     }
 
-    private readonly SettingsPage? settingsPage = App.Services.GetService(typeof(SettingsPage)) as SettingsPage;
     private readonly GoLiveView? goLiveView = App.Services.GetService(typeof(GoLiveView)) as GoLiveView;
     private readonly AudioView? audioView = App.Services.GetService(typeof(AudioView)) as AudioView;
     private readonly ScenesView? scenesView = App.Services.GetService(typeof(ScenesView)) as ScenesView;
@@ -423,17 +423,25 @@ public partial class MainWindow : AdonisWindow, INotifyPropertyChanged, IDisposa
         // Deselect main if footer is selected (except if it is SettingsItem, which navigates)
         if (navItem.Name == "SettingsItem")
         {
-            if (NavMenu != null && NavMenu.SelectedItem != null)
-            {
-                NavMenu.SelectionChanged -= NavMenu_SelectionChanged;
-                NavMenu.SelectedItem = null;
-                NavMenu.SelectionChanged += NavMenu_SelectionChanged;
-            }
+            // Reset footer selection so it acts like a button trigger
+            NavMenuFooter.SelectionChanged -= NavMenuFooter_SelectionChanged;
+            NavMenuFooter.SelectedItem = null;
+            NavMenuFooter.SelectionChanged += NavMenuFooter_SelectionChanged;
+
             ViewModel.SearchVisible = false;
-            if (settingsPage is null) return;
-            Navigate(settingsPage);
-            CurrentPage = "Settings";
-            OnPropertyChanged(nameof(CurrentPage));
+            var settingsVm = App.Services.GetService(typeof(SettingsViewModel)) as SettingsViewModel;
+            if (settingsVm is null) return;
+            var settingsView = new SettingsView(settingsVm);
+            var dialog = new SimpleDialog(settingsView, settingsView.SettingsCloseButton)
+            {
+                Title = "Settings",
+                MinHeight = 490,
+                MaxHeight = 490,
+                MinWidth = 470,
+                MaxWidth = 470,
+                Padding = new Thickness(0)
+            };
+            _ = dialog.ShowAsync();
         }
         else
         {

@@ -1,5 +1,8 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.IO;
+using System.Security.Cryptography;
+using System.Text;
 using System.Formats.Tar;
 using System.Reflection.PortableExecutable;
 using System.Runtime.CompilerServices;
@@ -65,6 +68,9 @@ public partial class AppModel : ObservableObject, INotifyPropertyChanged
 
     [ObservableProperty]
     private WindowOptions windowOptions = new();
+
+    [ObservableProperty]
+    private GoLiveSettings _goLiveSettings = new();
 
     [ObservableProperty]
     private ObservableCollection<AudioTag> tags = [];
@@ -141,7 +147,8 @@ public partial class AppModel : ObservableObject, INotifyPropertyChanged
                 Audios = [.. Audios],
                 SceneList = [.. SceneList],
                 Settings = Settings,
-                WindowOptions = WindowOptions
+                WindowOptions = WindowOptions,
+                GoLiveSettings = GoLiveSettings
             };
 
             new Persistence.PersistenceJsonDataManager().Save(persistentData);
@@ -200,6 +207,35 @@ public partial class AppModel : ObservableObject, INotifyPropertyChanged
                 data.SceneList.ForEach(SceneList.Add);
                 Settings = data.Settings;
                 WindowOptions = data.WindowOptions;
+                GoLiveSettings = data.GoLiveSettings ?? new();
+
+                // Migration check:
+                var legacyPath = Path.Combine(AppDataPaths.RootFolder, "golive_settings.json");
+                if (File.Exists(legacyPath))
+                {
+                    try
+                    {
+                        var json = File.ReadAllText(legacyPath);
+                        var legacySettings = JsonConvert.DeserializeObject<GoLiveSettings>(json);
+                        if (legacySettings != null)
+                        {
+                            // If the loaded settings had no scenes/slots, apply legacy scene migration
+                            if (legacySettings.Scenes.Count == 0 && legacySettings.Slots is { Count: > 0 } legacySlots)
+                            {
+                                var scene = new SceneSettings { Name = legacySettings.SceneName ?? "Scene 1", Slots = legacySlots };
+                                legacySettings.Scenes.Add(scene);
+                                legacySettings.DefaultSceneId = scene.Id;
+                            }
+                            GoLiveSettings = legacySettings;
+                        }
+                        File.Delete(legacyPath);
+                        SaveData(); // Save immediately in the unified file and remove the legacy file
+                    }
+                    catch (Exception ex)
+                    {
+                        LoggerService.DebugLog(GetType(), $"Error migrating legacy golive_settings: {ex.Message}");
+                    }
+                }
             }
         }
     }
@@ -312,6 +348,34 @@ public partial class AppModel : ObservableObject, INotifyPropertyChanged
             RequestSave();
         }
     }
+
+    #region Stream Keys
+    public Dictionary<string, string> LoadStreamKeys()
+    {
+        try
+        {
+            var path = Path.Combine(AppDataPaths.RootFolder, "stream_keys.dat");
+            if (!File.Exists(path)) return [];
+            var bytes = ProtectedData.Unprotect(File.ReadAllBytes(path), null, DataProtectionScope.CurrentUser);
+            return JsonConvert.DeserializeObject<Dictionary<string, string>>(Encoding.UTF8.GetString(bytes)) ?? [];
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    public void SaveStreamKeys(Dictionary<string, string> keys)
+    {
+        try
+        {
+            var path = Path.Combine(AppDataPaths.RootFolder, "stream_keys.dat");
+            var bytes = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(keys));
+            File.WriteAllBytes(path, ProtectedData.Protect(bytes, null, DataProtectionScope.CurrentUser));
+        }
+        catch { }
+    }
+    #endregion
 }
 
 

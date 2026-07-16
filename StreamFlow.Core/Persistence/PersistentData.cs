@@ -1,4 +1,4 @@
-﻿using StreamFlow.Core.AudioHandling;
+using StreamFlow.Core.AudioHandling;
 using StreamFlow.Core.AudioProperties;
 using StreamFlow.Core.Data;
 
@@ -12,4 +12,5 @@ public class PersistentData
     public List<Scene> SceneList = [];
     public ApplicationSettings Settings = AppModel.Instance.Settings;
     public WindowOptions WindowOptions = new();
+    public GoLiveSettings GoLiveSettings { get; set; } = new();
 }

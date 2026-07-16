@@ -21,7 +21,8 @@ public partial class GoLiveViewModel
         new EncoderOption("libx264", "Standard CPU (Software - x264)"),
         new EncoderOption("h264_nvenc", "NVIDIA NVENC (Hardware Accelerated)"),
         new EncoderOption("h264_amf", "AMD AMF (Hardware Accelerated)"),
-        new EncoderOption("h264_qsv", "Intel QuickSync (Hardware Accelerated)")
+        new EncoderOption("h264_qsv", "Intel QuickSync (Hardware Accelerated)"),
+        new EncoderOption("h264_vulkan", "Vulkan H.264 (Hardware Accelerated)")
     ];
     public static StreamServiceKind[] ServiceKindOptions { get; } = [StreamServiceKind.Twitch, StreamServiceKind.YouTube, StreamServiceKind.Custom];
 
@@ -359,10 +360,11 @@ public partial class GoLiveViewModel
         }
 
         // Save profiles and global settings configuration
-        _settings.Save(BuildSettingsSnapshot());
-        _settings.SaveStreamKeys(Profiles
+        AppModel.Instance.GoLiveSettings = BuildSettingsSnapshot();
+        AppModel.Instance.SaveStreamKeys(Profiles
             .Where(p => p.Id != "none" && !p.KeyRetrievableViaApi && !string.IsNullOrEmpty(p.StreamKey))
             .ToDictionary(p => p.Id, p => p.StreamKey));
+        AppModel.Instance.RequestSave();
 
         HasUnsavedChanges = false;
         BakeOverridesToSceneSetCommand.NotifyCanExecuteChanged();
@@ -435,7 +437,8 @@ public partial class GoLiveViewModel
         ActiveProfile.SceneSetOverrides.Remove(SceneEditor.ActiveSceneSet.Id);
 
         // Save settings to record the removed override
-        _settings.Save(BuildSettingsSnapshot());
+        AppModel.Instance.GoLiveSettings = BuildSettingsSnapshot();
+        AppModel.Instance.RequestSave();
 
         HasUnsavedChanges = false;
         BakeOverridesToSceneSetCommand.NotifyCanExecuteChanged();

@@ -40,6 +40,8 @@ pub struct EncoderConfig {
     pub h264_amf: EncoderPreset,
     #[serde(default)]
     pub h264_qsv: EncoderPreset,
+    #[serde(default)]
+    pub h264_vulkan: EncoderPreset,
 }
 
 fn load_encoder_config() -> EncoderConfig {
@@ -154,13 +156,15 @@ pub fn start_config_watcher() {
                                          nvenc_opts={:?} \
                                          x264_opts={:?} \
                                          amf_opts={:?} \
-                                         qsv_opts={:?}",
+                                         qsv_opts={:?} \
+                                         vulkan_opts={:?}",
                                         path.display(),
                                         cfg.bitrate_kbps,
                                         cfg.h264_nvenc.options,
                                         cfg.libx264.options,
                                         cfg.h264_amf.options,
                                         cfg.h264_qsv.options,
+                                        cfg.h264_vulkan.options,
                                     );
                                     if let Ok(mut guard) = cache.write() {
                                         *guard = cfg;
@@ -192,14 +196,98 @@ impl Drop for OwnedPacket {
 }
 
 /// Carries the raw AVFormatContext pointer across the thread boundary.
-/// The RTMP write thread takes ownership after the header is written.
-struct FormatCtxSend(*mut AVFormatContext);
+/// The RTMP/Recording write thread takes ownership after the header is written.
+struct FormatCtxSend(Option<*mut AVFormatContext>);
 unsafe impl Send for FormatCtxSend {}
 impl FormatCtxSend {
+    fn new(ctx: *mut AVFormatContext) -> Self {
+        Self(Some(ctx))
+    }
     /// Consumes the wrapper and returns the raw pointer.
     /// Using a method here ensures the closure captures `FormatCtxSend` (Send),
     /// not the inner `*mut AVFormatContext` field (not Send per RFC 2229).
-    fn into_raw(self) -> *mut AVFormatContext { self.0 }
+    fn into_raw(mut self) -> *mut AVFormatContext {
+        self.0.take().unwrap()
+    }
+}
+impl Drop for FormatCtxSend {
+    fn drop(&mut self) {
+        if let Some(ctx) = self.0.take() {
+            unsafe {
+                if !ctx.is_null() {
+                    if !(*ctx).pb.is_null() {
+                        avio_closep(&mut (*ctx).pb);
+                    }
+                    avformat_free_context(ctx);
+                }
+            }
+        }
+    }
+}
+
+struct SafeAVFormatContext(Option<*mut AVFormatContext>);
+impl SafeAVFormatContext {
+    fn into_raw(mut self) -> *mut AVFormatContext {
+        self.0.take().unwrap()
+    }
+}
+impl Drop for SafeAVFormatContext {
+    fn drop(&mut self) {
+        if let Some(ctx) = self.0.take() {
+            unsafe {
+                if !ctx.is_null() {
+                    if !(*ctx).pb.is_null() {
+                        avio_closep(&mut (*ctx).pb);
+                    }
+                    avformat_free_context(ctx);
+                }
+            }
+        }
+    }
+}
+
+struct SafeAVCodecContext(*mut AVCodecContext);
+impl Drop for SafeAVCodecContext {
+    fn drop(&mut self) {
+        unsafe {
+            if !self.0.is_null() {
+                avcodec_free_context(&mut self.0);
+            }
+        }
+    }
+}
+
+struct SafeAVFrame(*mut AVFrame);
+impl Drop for SafeAVFrame {
+    fn drop(&mut self) {
+        unsafe {
+            if !self.0.is_null() {
+                av_frame_free(&mut self.0);
+            }
+        }
+    }
+}
+
+struct SafeAVPacket(*mut AVPacket);
+impl Drop for SafeAVPacket {
+    fn drop(&mut self) {
+        unsafe {
+            if !self.0.is_null() {
+                av_packet_free(&mut self.0);
+            }
+        }
+    }
+}
+
+struct SafeSwsContext(*mut SwsContext);
+impl Drop for SafeSwsContext {
+    fn drop(&mut self) {
+        unsafe {
+            if !self.0.is_null() {
+                sws_freeContext(self.0);
+            }
+        }
+    }
 }
 
 struct PipScaler {
@@ -882,6 +970,7 @@ unsafe fn run_encoder_unsafe(
         avformat_alloc_output_context2(&mut ofmt_ctx, ptr::null(), fmt_c.as_ptr(), url_c.as_ptr()),
         "avformat_alloc_output_context2",
     )?;
+    let ofmt_guard = SafeAVFormatContext(Some(ofmt_ctx));
 
     // ── Find encoder ──────────────────────────────────────────────────────────
     let enc_name = CString::new(opts.encoder.as_str())?;
@@ -905,9 +994,9 @@ unsafe fn run_encoder_unsafe(
 
     let codec_ctx = avcodec_alloc_context3(codec);
     if codec_ctx.is_null() {
-        avformat_free_context(ofmt_ctx);
         return Err(anyhow!("avcodec_alloc_context3 failed"));
     }
+    let _codec_ctx_guard = SafeAVCodecContext(codec_ctx);
 
     (*codec_ctx).codec_id   = (*codec).id;
     (*codec_ctx).bit_rate   = (opts.bitrate_kbps as i64) * 1000;
@@ -915,7 +1004,43 @@ unsafe fn run_encoder_unsafe(
     (*codec_ctx).height     = out_h;
     (*codec_ctx).time_base  = AVRational { num: 1, den: target_fps as i32 };
     (*codec_ctx).framerate  = AVRational { num: target_fps as i32, den: 1 };
-    (*codec_ctx).pix_fmt    = AVPixelFormat::AV_PIX_FMT_YUV420P;
+
+    if opts.encoder == "h264_vulkan" {
+        (*codec_ctx).pix_fmt = AVPixelFormat::AV_PIX_FMT_VULKAN;
+        let mut hw_device_ctx: *mut AVBufferRef = ptr::null_mut();
+        let ret = av_hwdevice_ctx_create(
+            &mut hw_device_ctx,
+            AVHWDeviceType::AV_HWDEVICE_TYPE_VULKAN,
+            ptr::null(),
+            ptr::null_mut(),
+            0,
+        );
+        if ret < 0 {
+            return Err(anyhow!("Failed to create Vulkan hardware device context: FFmpeg error {}", ret));
+        }
+        (*codec_ctx).hw_device_ctx = hw_device_ctx;
+
+        let hw_frames_ref = av_hwframe_ctx_alloc(hw_device_ctx);
+        if hw_frames_ref.is_null() {
+            return Err(anyhow!("Failed to allocate Vulkan hardware frames context"));
+        }
+        let frames_ctx = (*hw_frames_ref).data as *mut AVHWFramesContext;
+        (*frames_ctx).format = AVPixelFormat::AV_PIX_FMT_VULKAN;
+        (*frames_ctx).sw_format = AVPixelFormat::AV_PIX_FMT_NV12;
+        (*frames_ctx).width = out_w as i32;
+        (*frames_ctx).height = out_h as i32;
+        (*frames_ctx).initial_pool_size = 8;
+
+        let init_ret = av_hwframe_ctx_init(hw_frames_ref);
+        if init_ret < 0 {
+            let mut tmp_ref = hw_frames_ref;
+            av_buffer_unref(&mut tmp_ref);
+            return Err(anyhow!("Failed to initialize Vulkan hardware frames context: FFmpeg error {}", init_ret));
+        }
+        (*codec_ctx).hw_frames_ctx = hw_frames_ref;
+    } else {
+        (*codec_ctx).pix_fmt = AVPixelFormat::AV_PIX_FMT_YUV420P;
+    }
 
     if !(*ofmt_ctx).oformat.is_null()
         && ((*(*ofmt_ctx).oformat).flags & AVFMT_GLOBALHEADER as i32) != 0
@@ -927,6 +1052,7 @@ unsafe fn run_encoder_unsafe(
         "h264_nvenc" => &enc_cfg.h264_nvenc,
         "h264_amf"   => &enc_cfg.h264_amf,
         "h264_qsv"   => &enc_cfg.h264_qsv,
+        "h264_vulkan" => &enc_cfg.h264_vulkan,
         _            => &enc_cfg.libx264,   // "libx264" | "" | unknown
     };
 
@@ -1074,7 +1200,7 @@ unsafe fn run_encoder_unsafe(
                 return None;
             }
             tracing::info!("[Recording] Recording to: {}", rec_path);
-            Some(FormatCtxSend(rec_ctx))
+            Some(FormatCtxSend::new(rec_ctx))
         })();
         result
     } else {
@@ -1105,7 +1231,8 @@ unsafe fn run_encoder_unsafe(
     const QUEUE_CAP: i32 = 300;
     const QUEUE_SKIP_THRESHOLD: i32 = 240; // 80%
     let (pkt_tx, pkt_rx) = std::sync::mpsc::sync_channel::<OwnedPacket>(QUEUE_CAP as usize);
-    let fmt_send = FormatCtxSend(ofmt_ctx);
+    let ofmt_raw = ofmt_guard.into_raw();
+    let fmt_send = FormatCtxSend::new(ofmt_raw);
     // ofmt_ctx is now logically owned by rtmp_writer; do not touch it in this thread.
 
     // Approximate queue occupancy shared between encode and RTMP threads.
@@ -1261,31 +1388,68 @@ unsafe fn run_encoder_unsafe(
         })
         .expect("failed to spawn rtmp-writer thread");
 
-    // ── Scaling context (BGRA  YUV420P) ─────────────────────────────────────
+    let dst_format = if opts.encoder == "h264_vulkan" {
+        AVPixelFormat::AV_PIX_FMT_NV12
+    } else {
+        AVPixelFormat::AV_PIX_FMT_YUV420P
+    };
+
+    // ── Scaling context (BGRA  dst_format) ───────────────────────────────────
     let sws = sws_getContext(
         crop_w, crop_h, AVPixelFormat::AV_PIX_FMT_BGRA,
-        dst_w, dst_h, AVPixelFormat::AV_PIX_FMT_YUV420P,
+        dst_w, dst_h, dst_format,
         SwsFlags::SWS_FAST_BILINEAR as i32,
         ptr::null_mut(), ptr::null_mut(), ptr::null(),
     );
     if sws.is_null() {
         return Err(anyhow!("sws_getContext failed"));
     }
+    let _sws_guard = SafeSwsContext(sws);
 
     // ── Allocate reusable YUV frame and packet ────────────────────────────────
     let yuv_frame = av_frame_alloc();
-    (*yuv_frame).format = AVPixelFormat::AV_PIX_FMT_YUV420P as i32;
+    if yuv_frame.is_null() {
+        return Err(anyhow!("av_frame_alloc failed"));
+    }
+    let _yuv_frame_guard = SafeAVFrame(yuv_frame);
+    (*yuv_frame).format = dst_format as i32;
     (*yuv_frame).width  = out_w;
     (*yuv_frame).height = out_h;
     av_frame_get_buffer(yuv_frame, 0);
 
     // Initialize frame to black so that letterboxing/pillarboxing ("contain" mode) 
     // has clean black edges outside the sws_scale target area.
-    std::ptr::write_bytes((*yuv_frame).data[0], 16, ((*yuv_frame).linesize[0] * out_h) as usize);
-    std::ptr::write_bytes((*yuv_frame).data[1], 128, ((*yuv_frame).linesize[1] * out_h / 2) as usize);
-    std::ptr::write_bytes((*yuv_frame).data[2], 128, ((*yuv_frame).linesize[2] * out_h / 2) as usize);
+    if dst_format == AVPixelFormat::AV_PIX_FMT_NV12 {
+        std::ptr::write_bytes((*yuv_frame).data[0], 16, ((*yuv_frame).linesize[0] * out_h) as usize);
+        std::ptr::write_bytes((*yuv_frame).data[1], 128, ((*yuv_frame).linesize[1] * out_h / 2) as usize);
+    } else {
+        std::ptr::write_bytes((*yuv_frame).data[0], 16, ((*yuv_frame).linesize[0] * out_h) as usize);
+        std::ptr::write_bytes((*yuv_frame).data[1], 128, ((*yuv_frame).linesize[1] * out_h / 2) as usize);
+        std::ptr::write_bytes((*yuv_frame).data[2], 128, ((*yuv_frame).linesize[2] * out_h / 2) as usize);
+    }
+
+    // Vulkan encoding needs a real GPU-resident frame (format=AV_PIX_FMT_VULKAN, backed by
+    // codec_ctx's hw_frames_ctx) handed to avcodec_send_frame — sending yuv_frame directly
+    // (a plain CPU-side NV12 buffer from sws_scale, same as every other encoder here gets) means
+    // the Vulkan encoder reads its format/hw_frames_ctx fields expecting real hardware-frame
+    // internals but finds none there, which crashed hard (access violation, no panic - straight
+    // process death) immediately after accepting the very first frame. yuv_frame stays exactly
+    // as it was for every other encoder (the sws_scale target); hw_frame only gets a buffer
+    // pulled from the pool and populated when hw_frames_ctx is actually set (h264_vulkan) - see
+    // encode_frame's own upload step below. Allocated unconditionally rather than gated on the
+    // encoder name so encode_frame's own hw_frames_ctx check is the single source of truth for
+    // which path runs.
+    let hw_frame = av_frame_alloc();
+    if hw_frame.is_null() {
+        return Err(anyhow!("av_frame_alloc failed (hw_frame)"));
+    }
+    let _hw_frame_guard = SafeAVFrame(hw_frame);
 
     let pkt = av_packet_alloc();
+    if pkt.is_null() {
+        return Err(anyhow!("av_packet_alloc failed"));
+    }
+    let _pkt_guard = SafeAVPacket(pkt);
 
     if let Some(ref mut enc) = audio_enc {
         enc.clear_backlog();
@@ -1319,7 +1483,7 @@ unsafe fn run_encoder_unsafe(
     calls_this_interval += 1;
     let mut first_pts = 0i64;
     let mut pip_scalers: HashMap<String, PipScaler> = HashMap::new();
-    encode_frame(codec_ctx, sws, yuv_frame, pkt,
+    encode_frame(codec_ctx, sws, yuv_frame, hw_frame, pkt,
                  crop_h, crop_x, crop_y, dst_h, dst_x, dst_y, &first, &mut frames_this_interval, &mut bytes_since_status,
                  &mut first_pts, &mut sws_ms_acc, &mut nvenc_ms_acc, &mut recv_ms_acc,
                  &pkt_tx, codec_tb, out_stream_tb, out_stream_idx,
@@ -1434,7 +1598,7 @@ unsafe fn run_encoder_unsafe(
         } else {
             calls_this_interval += 1;
             let mut enc_pts_arg = enc_pts;
-            encode_frame(codec_ctx, sws, yuv_frame, pkt,
+            encode_frame(codec_ctx, sws, yuv_frame, hw_frame, pkt,
                          crop_h, crop_x, crop_y, dst_h, dst_x, dst_y, &raw, &mut frames_this_interval,
                          &mut bytes_since_status, &mut enc_pts_arg,
                          &mut sws_ms_acc, &mut nvenc_ms_acc, &mut recv_ms_acc,
@@ -1527,11 +1691,7 @@ unsafe fn run_encoder_unsafe(
     // Signal RTMP thread to drain and exit.
     drop(pkt_tx);
 
-    // ── Cleanup encode resources (ofmt_ctx is owned by rtmp_writer) ──────────
-    av_frame_free(&mut (yuv_frame as *mut _));
-    av_packet_free(&mut (pkt as *mut _));
-    sws_freeContext(sws);
-    avcodec_free_context(&mut (codec_ctx as *mut _));
+    // ── Cleanup encode resources (handled automatically by RAII guards) ──────
 
     // Wait for RTMP thread to write remaining packets, trailer, and close.
     let _ = rtmp_writer.join();
@@ -1552,6 +1712,7 @@ unsafe fn encode_frame(
     codec_ctx: *mut AVCodecContext,
     sws: *mut SwsContext,
     yuv_frame: *mut AVFrame,
+    hw_frame: *mut AVFrame,
     pkt: *mut AVPacket,
     crop_h: i32,
     crop_x: i32,
@@ -1583,15 +1744,26 @@ unsafe fn encode_frame(
     let src_stride: [i32; 4] = [raw.width as i32 * 4, 0, 0, 0];
 
     let dst_offset_y = dst_y * (*yuv_frame).linesize[0] + dst_x;
-    let dst_offset_u = (dst_y / 2) * (*yuv_frame).linesize[1] + (dst_x / 2);
-    let dst_offset_v = (dst_y / 2) * (*yuv_frame).linesize[2] + (dst_x / 2);
+    let is_nv12 = (*yuv_frame).format == AVPixelFormat::AV_PIX_FMT_NV12 as i32;
 
-    let mut dst_data: [*mut u8; 4] = [
-        (*yuv_frame).data[0].add(dst_offset_y as usize),
-        (*yuv_frame).data[1].add(dst_offset_u as usize),
-        (*yuv_frame).data[2].add(dst_offset_v as usize),
-        ptr::null_mut()
-    ];
+    let mut dst_data: [*mut u8; 4] = if is_nv12 {
+        let dst_offset_uv = (dst_y / 2) * (*yuv_frame).linesize[1] + dst_x;
+        [
+            (*yuv_frame).data[0].add(dst_offset_y as usize),
+            (*yuv_frame).data[1].add(dst_offset_uv as usize),
+            ptr::null_mut(),
+            ptr::null_mut()
+        ]
+    } else {
+        let dst_offset_u = (dst_y / 2) * (*yuv_frame).linesize[1] + (dst_x / 2);
+        let dst_offset_v = (dst_y / 2) * (*yuv_frame).linesize[2] + (dst_x / 2);
+        [
+            (*yuv_frame).data[0].add(dst_offset_y as usize),
+            (*yuv_frame).data[1].add(dst_offset_u as usize),
+            (*yuv_frame).data[2].add(dst_offset_v as usize),
+            ptr::null_mut()
+        ]
+    };
 
     sws_scale(
         sws,
@@ -1607,7 +1779,25 @@ unsafe fn encode_frame(
     (*yuv_frame).pts = *pts;
     *pts += 1;
 
-    check(avcodec_send_frame(codec_ctx, yuv_frame), "avcodec_send_frame")?;
+    // Vulkan (and any future hwaccel encoder wired up the same way) needs the frame actually
+    // handed to avcodec_send_frame to be GPU-resident — yuv_frame is always the sws_scale
+    // target (a plain CPU buffer, NV12 for Vulkan / YUV420P otherwise), never suitable to send
+    // directly once hw_frames_ctx is set. hw_frame must be unreferenced before each
+    // av_hwframe_get_buffer call (it still holds last call's buffer reference otherwise, which
+    // that call rejects) - safe to unref unconditionally here since avcodec_send_frame below
+    // takes its own reference to whatever it's given, this function's caller doesn't need
+    // hw_frame's contents to survive past that call either way.
+    let send_frame = if !(*codec_ctx).hw_frames_ctx.is_null() {
+        av_frame_unref(hw_frame);
+        check(av_hwframe_get_buffer((*codec_ctx).hw_frames_ctx, hw_frame, 0), "av_hwframe_get_buffer")?;
+        check(av_hwframe_transfer_data(hw_frame, yuv_frame, 0), "av_hwframe_transfer_data")?;
+        (*hw_frame).pts = (*yuv_frame).pts;
+        hw_frame
+    } else {
+        yuv_frame
+    };
+
+    check(avcodec_send_frame(codec_ctx, send_frame), "avcodec_send_frame")?;
 
     let t2 = Instant::now();
 

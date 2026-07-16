@@ -44,7 +44,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Slider">
-                        <Grid Width="30">
+                        <Grid Width="24">
                             <!-- Slot the cap rides along. Vertical margins keep the cap's center
                                  reachable at both extremes (half the cap's 20px height). The
                                  bottom-anchored fill inside is the at-a-glance level indicator —
@@ -83,7 +83,7 @@
                                          a genuine Thumb property — not a synthetic IsPressed check); the
                                          scale bounce on release uses BackEase for a slight overshoot
                                          instead of stopping dead, echoing the toggle buttons' feel. -->
-                                    <Thumb Width="30" Height="12" Cursor="SizeNS">
+                                    <Thumb Width="24" Height="12" Cursor="SizeNS">
                                         <Thumb.Template>
                                             <ControlTemplate TargetType="Thumb">
                                                 <!-- Track stretches the thumb's own outer bounds to its full cross-axis
@@ -91,7 +91,7 @@
                                                      Width — this inner, explicitly-sized Grid gives the cap and grip
                                                      line a shared, guaranteed-centered coordinate space regardless of
                                                      whatever width Track actually arranges the thumb to. -->
-                                                <Grid RenderTransformOrigin="0.5,0.5" Width="30" HorizontalAlignment="Center">
+                                                <Grid RenderTransformOrigin="0.5,0.5" Width="24" HorizontalAlignment="Center">
                                                     <Grid.RenderTransform>
                                                         <ScaleTransform x:Name="ThumbScale"/>
                                                     </Grid.RenderTransform>
@@ -748,14 +748,14 @@
             <!-- Soft top highlight, like light grazing the panel — most of the "glassy" read
                  from the reference image comes from a single low-opacity radial gradient like
                  this rather than anything more elaborate. -->
-            <Border CornerRadius="6" Height="40" VerticalAlignment="Top" Margin="1" IsHitTestVisible="False">
+            <!--<Border CornerRadius="6" Height="40" VerticalAlignment="Top" Margin="1" IsHitTestVisible="False">
                 <Border.Background>
                     <RadialGradientBrush GradientOrigin="0.5,0" Center="0.5,0" RadiusX="0.9" RadiusY="1.4">
                         <GradientStop Color="#22FFFFFF" Offset="0"/>
                         <GradientStop Color="#00FFFFFF" Offset="1"/>
                     </RadialGradientBrush>
                 </Border.Background>
-            </Border>
+            </Border>-->
 
         <Grid Margin="4">
             <Grid.RowDefinitions>

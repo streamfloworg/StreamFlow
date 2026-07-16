@@ -1,4 +1,4 @@
-﻿namespace StreamFlow.App.ViewModels.Pages;
+namespace StreamFlow.Core.Data;
 
 public enum StreamServiceKind
 {

@@ -8,13 +8,9 @@ namespace StreamFlow.Core.Cache;
 
 public class CacheManager
 {
-    private static string CACHE_FOLDER_PATH { get; set; } = Path.Combine(AppDataPaths.RootFolder, "cache");
-    private static string VISUALIZATION_CACHE_FOLDER_PATH { get; set; } = Path.Combine(CACHE_FOLDER_PATH, "visualizations");
-    private static string AUTH_CACHE_FOLDER_PATH { get; set; } = Path.Combine(CACHE_FOLDER_PATH, "auth");
+    private static string IMAGE_CACHE_FOLDER_PATH { get; set; } = Path.Combine(AppDataPaths.RootFolder, "image_cache");
 
-    public static string CacheFolder => CACHE_FOLDER_PATH;
-    public static string VisualizationCacheFolder => VISUALIZATION_CACHE_FOLDER_PATH;
-    public static string AuthCacheFolder => AUTH_CACHE_FOLDER_PATH;
+    public static string ImageCacheFolder => IMAGE_CACHE_FOLDER_PATH;
 
     private static CacheManager? instance;
 
@@ -33,9 +29,7 @@ public class CacheManager
 
     public CacheManager()
     {
-        Directory.CreateDirectory(CACHE_FOLDER_PATH);
-        Directory.CreateDirectory(AUTH_CACHE_FOLDER_PATH);
-        Directory.CreateDirectory(VISUALIZATION_CACHE_FOLDER_PATH);
+        Directory.CreateDirectory(IMAGE_CACHE_FOLDER_PATH);
     }
 
     public static string GetNewCacheID()
@@ -60,7 +54,7 @@ public class CacheManager
             return;
         }
 
-        using var fileStream = new FileStream(VISUALIZATION_CACHE_FOLDER_PATH + cacheID, FileMode.Create);
+        using var fileStream = new FileStream(IMAGE_CACHE_FOLDER_PATH + cacheID, FileMode.Create);
         BitmapEncoder encoder = new PngBitmapEncoder();
         encoder.Frames.Add(BitmapFrame.Create(source));
         encoder.Save(fileStream);
@@ -68,7 +62,7 @@ public class CacheManager
 
     public static void CleanUpCache()
     {
-        var cachedFiles = Directory.GetFiles(VISUALIZATION_CACHE_FOLDER_PATH);
+        var cachedFiles = Directory.GetFiles(IMAGE_CACHE_FOLDER_PATH);
 
         for (var i = 0; i < cachedFiles.Length; i++)
         {
@@ -81,7 +75,7 @@ public class CacheManager
         {
             try
             {
-                File.Delete(VISUALIZATION_CACHE_FOLDER_PATH + file);
+                File.Delete(IMAGE_CACHE_FOLDER_PATH + file);
             }
             catch (Exception)
             {
@@ -94,12 +88,12 @@ public class CacheManager
     {
         try
         {
-            if (!Directory.Exists(VISUALIZATION_CACHE_FOLDER_PATH))
+            if (!Directory.Exists(IMAGE_CACHE_FOLDER_PATH))
             {
                 return;
             }
 
-            foreach (var file in Directory.GetFiles(VISUALIZATION_CACHE_FOLDER_PATH))
+            foreach (var file in Directory.GetFiles(IMAGE_CACHE_FOLDER_PATH))
             {
                 try { File.Delete(file); } catch { }
             }

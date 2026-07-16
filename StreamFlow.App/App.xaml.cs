@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Windows.Threading;
@@ -63,14 +63,12 @@ public partial class App : IDisposable
             services.AddSingleton<YouTubeAuthService>();
             services.AddSingleton<TwitchChatService>();
             services.AddSingleton<YouTubeChatService>();
-            services.AddSingleton<GoLiveSettingsService>();
             services.AddSingleton<SceneSetService>();
             services.AddSingleton<GpuEncoderDetectionService>();
             services.AddSingleton<UpdateService>();
 
 
             services.AddSingleton<SettingsViewModel>();
-            services.AddSingleton<SettingsPage>();
 #if DEBUG
             services.AddSingleton<DebugViewModel>();
 #endif

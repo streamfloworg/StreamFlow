@@ -11,8 +11,6 @@ namespace StreamFlow.App.ViewModels.Pages;
 public partial class SettingsViewModel
 {
     private readonly StreamDeckServerService _streamDeck = App.Services.GetRequiredService<StreamDeckServerService>();
-    private readonly GoLiveSettingsService _goLiveSettings = App.Services.GetRequiredService<GoLiveSettingsService>();
-
     private bool _streamDeckInitialized;
 
     [ObservableProperty]
@@ -32,7 +30,12 @@ public partial class SettingsViewModel
         if (_streamDeckInitialized) return;
         _streamDeckInitialized = true;
 
-        var saved = _goLiveSettings.Load();
+        RefreshStreamDeckSettings();
+    }
+
+    public void RefreshStreamDeckSettings()
+    {
+        var saved = AppModel.Instance.GoLiveSettings;
 
         // If the hosted service already started the server at launch, its live state (in
         // particular, a freshly-generated key on a first-ever enable) is authoritative over
@@ -116,10 +119,10 @@ public partial class SettingsViewModel
 
     private void SaveStreamDeckSettings()
     {
-        var saved = _goLiveSettings.Load();
+        var saved = AppModel.Instance.GoLiveSettings;
         saved.IsStreamDeckServerEnabled = IsStreamDeckServerEnabled;
         saved.StreamDeckServerPort = StreamDeckServerPort;
         saved.StreamDeckApiKey = StreamDeckApiKey;
-        _goLiveSettings.Save(saved);
+        AppModel.Instance.RequestSave();
     }
 }
