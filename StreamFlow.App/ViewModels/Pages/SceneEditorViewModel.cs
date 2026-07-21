@@ -1944,7 +1944,7 @@ public partial class SceneEditorViewModel : ObservableObject
                 {
                     if (parent.Content is AlertOverlayContent alert)
                     {
-                        var isSelected = parent.IsSelected || s.IsSelected;
+                        var isSelected = !_isLive && (parent.IsSelected || s.IsSelected);
                         var alertOpacity = alert.IsAlertActive 
                             ? alert.AnimatingOpacity 
                             : (isSelected ? (parent.OpacityPercent / 100.0) : 0.0);
@@ -1981,7 +1981,7 @@ public partial class SceneEditorViewModel : ObservableObject
                 {
                     var selfOpacity = selfAlert.IsAlertActive 
                         ? selfAlert.AnimatingOpacity 
-                        : (s.IsSelected ? (s.OpacityPercent / 100.0) : 0.0);
+                        : ((!_isLive && s.IsSelected) ? (s.OpacityPercent / 100.0) : 0.0);
                     opacity = selfOpacity;
 
                     var scale = selfAlert.IsAlertActive ? (selfAlert.AnimatingScalePercent / 100.0) : 1.0;
