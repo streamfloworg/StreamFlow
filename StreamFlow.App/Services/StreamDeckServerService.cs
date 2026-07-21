@@ -338,10 +338,7 @@ public sealed class StreamDeckServerService : IHostedService
     // ── DTOs (camelCase over the wire — see JsonOpts/ConfigureHttpJsonOptions) ─────
 
     private StreamStateResponse BuildStreamState() =>
-        // ViewerCount stubbed at 0 — no Twitch Helix/YouTube Live viewer-count polling exists
-        // anywhere in this app yet; see the Backlog Roadmap plan for why that's deliberately out
-        // of scope here rather than half-implemented.
-        new(_goLive.IsStreaming, _goLive.IsStreaming && _goLive.IsRecordingEnabled, ViewerCount: 0);
+        new(_goLive.IsStreaming, _goLive.IsStreaming && _goLive.IsRecordingEnabled, ViewerCount: _goLive.ViewerCount);
 
     private static AudioStateResponse BuildAudioState(AudioSourceItem item) =>
         new(item.Device.Id, item.VolumePercent, item.IsMuted);

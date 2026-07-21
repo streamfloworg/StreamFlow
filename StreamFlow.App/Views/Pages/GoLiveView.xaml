@@ -187,7 +187,7 @@
                 <DataTrigger Binding="{Binding ViewModel.IsTestModeEnabled}" Value="True">
                     <Setter Property="Content" Value="Test Stream"/>
                 </DataTrigger>
-                
+
                 <!-- Record Only Mode Idle -->
                 <DataTrigger Binding="{Binding ViewModel.IsRecordOnlyMode}" Value="True">
                     <Setter Property="Content" Value="Start Recording"/>
@@ -407,7 +407,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="327" MinWidth="327" MaxWidth="450"/>
                 <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*" MinWidth="500"/>
+                <ColumnDefinition Width="*" MinWidth="600"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="350" MinWidth="350" MaxWidth="450"/>
             </Grid.ColumnDefinitions>
@@ -1024,7 +1024,7 @@
                                 <StackPanel>
                                     <CheckBox Content="Enable Side-Chain Ducking" IsChecked="{Binding ViewModel.IsDuckingEnabled, Mode=TwoWay}"
                                               FontWeight="SemiBold" Margin="0,0,0,6"/>
-                                    
+
                                     <StackPanel Visibility="{Binding ViewModel.IsDuckingEnabled, Converter={StaticResource BoolToVisibility}}">
                                         <!-- Threshold (dB) Slider -->
                                         <Grid Margin="0,4,0,4">
@@ -1059,7 +1059,7 @@
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
-                                            
+
                                             <!-- Attack -->
                                             <StackPanel Grid.Column="0" Margin="0,0,4,0">
                                                 <TextBlock Text="Attack" FontSize="9" Foreground="{StaticResource TextSecondaryBrush}" HorizontalAlignment="Center"/>
@@ -1095,7 +1095,7 @@
             <GridSplitter Grid.Column="1" Style="{StaticResource PanelSplitterStyle}"/>
 
             <Border x:Name="PreviewContainer" Padding="0,2,0,0" Grid.Column="2" Background="{DynamicResource {x:Static adonisUi:Brushes.Layer1BackgroundBrush}}" BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}"
-                    BorderThickness="1" CornerRadius="6" MinWidth="500" SizeChanged="PreviewContainer_SizeChanged">
+                    BorderThickness="1" CornerRadius="6" MinWidth="600" SizeChanged="PreviewContainer_SizeChanged">
               <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/> <!-- Row 0: Stats Panel -->
@@ -1108,95 +1108,71 @@
                 <Border Grid.Row="0" Background="{DynamicResource {x:Static adonisUi:Brushes.Layer2BackgroundBrush}}"
                         BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="0,0,0,1"
                         Height="50" Padding="12,6">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <!-- Live status indicator -->
-                            <ColumnDefinition Width="160"/>
+                    <ScrollViewer Style="{x:Null}" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Focusable="False" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <!-- Live Status indicator -->
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,24,0">
+                                <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,8,0" Style="{StaticResource TallyDotStyle}"/>
+                                <TextBlock Text="{Binding ViewModel.StatusLabel}" FontWeight="Bold" FontSize="13" VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <!-- Viewer Count -->
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,24,0">
+                                <TextBlock Text="Viewers:" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock Text="{Binding ViewModel.ViewerCount}" FontSize="13" FontWeight="Bold" FontFamily="{StaticResource FontMono}" VerticalAlignment="Center"/>
+                            </StackPanel>
+
                             <!-- Preview FPS -->
-                            <ColumnDefinition Width="140"/>
-                            <!-- Stream FPS with Graph -->
-                            <ColumnDefinition Width="260"/>
-                            <!-- Bitrate with Graph -->
-                            <ColumnDefinition Width="260"/>
-                            <!-- Dropped frames -->
-                            <ColumnDefinition Width="150"/>
-                            <!-- Audio Mix Peak -->
-                            <ColumnDefinition Width="190"/>
-                            <!-- Remaining space -->
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,24,0">
+                                <TextBlock Text="PREVIEW:" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock Text="{Binding ViewModel.PreviewFps, StringFormat={}{0:F0} fps}" FontSize="13" FontWeight="Bold" FontFamily="{StaticResource FontMono}" VerticalAlignment="Center"/>
+                            </StackPanel>
 
-                        <!-- Live Status indicator -->
-                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                            <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,8,0" Style="{StaticResource TallyDotStyle}"/>
-                            <TextBlock Text="{Binding ViewModel.StatusLabel}" FontWeight="Bold" FontSize="13" VerticalAlignment="Center" Width="100"/>
-                        </StackPanel>
-
-                        <!-- Preview FPS -->
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0">
-                            <TextBlock Text="PREVIEW:" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <TextBlock Text="{Binding ViewModel.PreviewFps, StringFormat={}{0:F0} fps}" FontSize="13" FontWeight="Bold" FontFamily="{StaticResource FontMono}" VerticalAlignment="Center"/>
-                        </StackPanel>
-
-                        <!-- Streaming FPS -->
-                        <Grid Grid.Column="2" VerticalAlignment="Center" Margin="16,0"
-                              Visibility="{Binding ViewModel.IsStreaming, Converter={StaticResource BoolToVisibility}}">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                            <!-- Streaming FPS -->
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,24,0"
+                                        Visibility="{Binding ViewModel.IsStreaming, Converter={StaticResource BoolToVisibility}}">
                                 <TextBlock Text="STREAM FPS:" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBlock Text="{Binding ViewModel.LiveFps, StringFormat={}{0:F0}}" Width="24" TextAlignment="Right" FontSize="13" FontWeight="Bold" FontFamily="{StaticResource FontMono}" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding ViewModel.LiveFps, StringFormat={}{0:F0}}" TextAlignment="Right" FontSize="13" FontWeight="Bold" FontFamily="{StaticResource FontMono}" VerticalAlignment="Center"/>
+                                <Canvas Height="24" Width="100" VerticalAlignment="Center" Margin="10,0,0,0" Background="#1A000000" ClipToBounds="True">
+                                    <Polyline Points="{Binding ViewModel.FpsGraphPoints}" Stroke="#10B981" StrokeThickness="1.5"/>
+                                </Canvas>
                             </StackPanel>
-                            <!-- Graph -->
-                            <Canvas Grid.Column="1" Height="25" Width="120" VerticalAlignment="Center" Margin="12,0,0,0" Background="#1A000000" ClipToBounds="True">
-                                <Polyline Points="{Binding ViewModel.FpsGraphPoints}" Stroke="#10B981" StrokeThickness="1.5"/>
-                            </Canvas>
-                        </Grid>
 
-                        <!-- Streaming Bitrate -->
-                        <Grid Grid.Column="3" VerticalAlignment="Center" Margin="16,0"
-                              Visibility="{Binding ViewModel.IsStreaming, Converter={StaticResource BoolToVisibility}}">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                            <!-- Streaming Bitrate -->
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,24,0"
+                                        Visibility="{Binding ViewModel.IsStreaming, Converter={StaticResource BoolToVisibility}}">
                                 <TextBlock Text="BITRATE:" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBlock Text="{Binding ViewModel.LiveBitrateKbps}" Width="45" TextAlignment="Right" FontSize="13" FontWeight="Bold" FontFamily="{StaticResource FontMono}" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding ViewModel.LiveBitrateKbps}" TextAlignment="Right" FontSize="13" FontWeight="Bold" FontFamily="{StaticResource FontMono}" VerticalAlignment="Center"/>
                                 <TextBlock Text=" kbps" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" VerticalAlignment="Center"/>
+                                <Canvas Height="24" Width="100" VerticalAlignment="Center" Margin="10,0,0,0" Background="#1A000000" ClipToBounds="True">
+                                    <Polyline Points="{Binding ViewModel.BitrateGraphPoints}" Stroke="#3B82F6" StrokeThickness="1.5"/>
+                                </Canvas>
                             </StackPanel>
-                            <!-- Graph -->
-                            <Canvas Grid.Column="1" Height="25" Width="120" VerticalAlignment="Center" Margin="12,0,0,0" Background="#1A000000" ClipToBounds="True">
-                                <Polyline Points="{Binding ViewModel.BitrateGraphPoints}" Stroke="#3B82F6" StrokeThickness="1.5"/>
-                            </Canvas>
-                        </Grid>
 
-                        <!-- Dropped Frames -->
-                        <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0"
-                                    Visibility="{Binding ViewModel.IsStreaming, Converter={StaticResource BoolToVisibility}}">
-                            <TextBlock Text="DROPPED:" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <TextBlock Text="{Binding ViewModel.DroppedFrames}" FontSize="13" FontWeight="Bold" Foreground="#EF4444" FontFamily="{StaticResource FontMono}" VerticalAlignment="Center"/>
-                        </StackPanel>
+                            <!-- Dropped Frames -->
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,24,0"
+                                        Visibility="{Binding ViewModel.IsStreaming, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="DROPPED:" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock Text="{Binding ViewModel.DroppedFrames}" FontSize="13" FontWeight="Bold" Foreground="#EF4444" FontFamily="{StaticResource FontMono}" VerticalAlignment="Center"/>
+                            </StackPanel>
 
-                        <!-- Audio Mix Peak -->
-                        <StackPanel Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0"
-                                    Visibility="{Binding ViewModel.IsStreaming, Converter={StaticResource BoolToVisibility}}">
-                            <TextBlock Text="AUDIO MIX:" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <TextBlock Text="{Binding ViewModel.MasterPeakText}" FontSize="13" FontWeight="Bold" FontFamily="{StaticResource FontMono}" VerticalAlignment="Center" Width="60" TextAlignment="Right"/>
-                            <!-- A tiny level meter indicator! -->
-                            <Border Width="50" Height="8" Background="#33000000" CornerRadius="2" Margin="8,0,0,0" VerticalAlignment="Center" ClipToBounds="True">
-                                <Grid>
-                                    <Border Background="#10B981" CornerRadius="1" RenderTransformOrigin="0,0.5">
-                                        <Border.RenderTransform>
-                                            <ScaleTransform ScaleX="{Binding ViewModel.MasterPeakFraction, Mode=OneWay}"/>
-                                        </Border.RenderTransform>
-                                    </Border>
-                                </Grid>
-                            </Border>
+                            <!-- Audio Mix Peak -->
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0"
+                                        Visibility="{Binding ViewModel.IsStreaming, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="AUDIO MIX:" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock Text="{Binding ViewModel.MasterPeakText}" FontSize="13" FontWeight="Bold" FontFamily="{StaticResource FontMono}" VerticalAlignment="Center" Width="55" TextAlignment="Right"/>
+                                <Border Width="80" Height="8" Background="#33000000" CornerRadius="2" Margin="8,0,0,0" VerticalAlignment="Center" ClipToBounds="True">
+                                    <Grid>
+                                        <Border Background="#10B981" CornerRadius="1" RenderTransformOrigin="0,0.5">
+                                            <Border.RenderTransform>
+                                                <ScaleTransform ScaleX="{Binding ViewModel.MasterPeakFraction, Mode=OneWay}"/>
+                                            </Border.RenderTransform>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                            </StackPanel>
                         </StackPanel>
-                    </Grid>
+                    </ScrollViewer>
                 </Border>
 
                 <Viewbox Grid.Row="1" Stretch="Uniform" Margin="1" HorizontalAlignment="Center" VerticalAlignment="Top">
@@ -1631,7 +1607,7 @@
                     <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto"
                                   Visibility="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsSettingsTabActive, Converter={StaticResource BoolToVisibility}}">
                         <StackPanel Margin="12,0,12,12">
-                            
+
                             <!-- Mode selection (Stream vs Record Only) -->
                             <TextBlock Text="Output Mode" Style="{StaticResource FieldLabelStyle}"/>
                             <Grid Margin="0,0,0,12">
@@ -1818,7 +1794,7 @@
                                       ToolTip="Also writes a local MP4 while streaming — requires selecting a folder below"
                                       Visibility="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsRecordOnlyMode, Converter={StaticResource InverseBoolToVisibility}}"
                                       IsChecked="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsRecordingEnabled, Mode=TwoWay}"/>
-                            
+
                             <StackPanel Visibility="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsRecordingFolderVisible, Converter={StaticResource BoolToVisibility}}">
                                 <TextBlock Text="Recording Folder" Style="{StaticResource FieldLabelStyle}"/>
                                 <Grid Margin="0,0,0,8">
@@ -1860,8 +1836,8 @@
                             <TextBlock Text="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.UpdateInfoStatus}"
                                        Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" HorizontalAlignment="Center"/>
                         </StackPanel>
-                        
-                        <TextBlock Grid.Row="0" Text="Info updates are disabled in Record Only mode." 
+
+                        <TextBlock Grid.Row="0" Text="Info updates are disabled in Record Only mode."
                                    Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" HorizontalAlignment="Center" Margin="0,20"
                                    Visibility="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsRecordOnlyMode, Converter={StaticResource BoolToVisibility}}"/>
 
@@ -1872,9 +1848,9 @@
                                 <RowDefinition Height="*"/>
                             </Grid.RowDefinitions>
                             <TextBlock Grid.Row="0" Text="Live Chat Log" Style="{StaticResource FieldLabelStyle}" Margin="0,4,0,4"/>
-                            
-                            <Border Grid.Row="1" Background="{DynamicResource {x:Static adonisUi:Brushes.Layer2BackgroundBrush}}" 
-                                    BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer2BorderBrush}}" 
+
+                            <Border Grid.Row="1" Background="{DynamicResource {x:Static adonisUi:Brushes.Layer2BackgroundBrush}}"
+                                    BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer2BorderBrush}}"
                                     BorderThickness="1" CornerRadius="4" Padding="6">
                                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                                     <ItemsControl ItemsSource="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.LiveChatMessages}">

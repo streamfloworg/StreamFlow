@@ -632,6 +632,7 @@ public partial class GoLiveViewModel : ViewModel
                     LiveFps = 0;
                     LiveBitrateKbps = 0;
                     DroppedFrames = 0;
+                    ViewerCount = 0;
                     ClearHistory();
                     EndActiveYouTubeTestBroadcastIfAny();
                     _eventBus.Publish(new GoLiveStoppedEvent());

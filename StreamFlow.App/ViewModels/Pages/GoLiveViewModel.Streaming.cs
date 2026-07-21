@@ -43,6 +43,9 @@ public partial class GoLiveViewModel
     private ulong _droppedFrames;
 
     [ObservableProperty]
+    private int _viewerCount;
+
+    [ObservableProperty]
     private bool _isStreaming;
 
     /// <summary>Whether the *currently active* stream (if any) was started via "Test Stream"
