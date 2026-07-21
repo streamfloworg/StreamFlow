@@ -9,6 +9,7 @@ using StreamFlow.App.Rendering;
 using StreamFlow.App.Services;
 using StreamFlow.App.Services.Core;
 using StreamFlow.Core.AudioProperties;
+using StreamFlow.Core.Data;
 
 namespace StreamFlow.App.ViewModels.Pages;
 
@@ -97,24 +98,76 @@ public partial class SceneEditorViewModel : ObservableObject
                     PopulateChatPlaceholder(slot, chat);
         });
 
-        _eventBus.Subscribe<TwitchFollowerEvent>(e => _ = System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => TriggerAlertsAsync(StreamAlertType.TwitchFollower, $"{e.Username} followed!")));
-        _eventBus.Subscribe<TwitchSubscriberEvent>(e => _ = System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => TriggerAlertsAsync(StreamAlertType.TwitchSubscriber, $"{e.Username} subscribed ({e.Tier})!")));
-        _eventBus.Subscribe<TwitchBitsEvent>(e => _ = System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => TriggerAlertsAsync(StreamAlertType.TwitchBits, $"{e.Username} cheered {e.Amount} bits!")));
-        _eventBus.Subscribe<TwitchRaidEvent>(e => _ = System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => TriggerAlertsAsync(StreamAlertType.TwitchRaid, $"{e.Username} raided with {e.ViewerCount} viewers!")));
+        _eventBus.Subscribe<TwitchFollowerEvent>(e => _ = System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => {
+            var ctx = new AlertTriggerContext(StreamAlertType.TwitchFollower, $"{e.Username} followed!");
+            ctx.AddValue("followerName", e.Username);
+            ctx.AddValue("username", e.Username);
+            return TriggerAlertsAsync(ctx);
+        }));
+
+        _eventBus.Subscribe<TwitchSubscriberEvent>(e => _ = System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => {
+            var ctx = new AlertTriggerContext(StreamAlertType.TwitchSubscriber, $"{e.Username} subscribed ({e.Tier})!");
+            ctx.AddValue("subscriberName", e.Username);
+            ctx.AddValue("username", e.Username);
+            ctx.AddValue("tier", e.Tier);
+            return TriggerAlertsAsync(ctx);
+        }));
+
+        _eventBus.Subscribe<TwitchBitsEvent>(e => _ = System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => {
+            var ctx = new AlertTriggerContext(StreamAlertType.TwitchBits, $"{e.Username} cheered {e.Amount} bits!");
+            ctx.AddValue("username", e.Username);
+            ctx.AddValue("amount", e.Amount.ToString());
+            return TriggerAlertsAsync(ctx);
+        }));
+
+        _eventBus.Subscribe<TwitchRaidEvent>(e => _ = System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => {
+            var ctx = new AlertTriggerContext(StreamAlertType.TwitchRaid, $"{e.Username} raided with {e.ViewerCount} viewers!");
+            ctx.AddValue("raiderName", e.Username);
+            ctx.AddValue("username", e.Username);
+            ctx.AddValue("viewerCount", e.ViewerCount.ToString());
+            ctx.AddValue("viewers", e.ViewerCount.ToString());
+            return TriggerAlertsAsync(ctx);
+        }));
         
-        _eventBus.Subscribe<YouTubeSubscriberEvent>(e => _ = System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => TriggerAlertsAsync(StreamAlertType.YouTubeSubscriber, $"{e.Username} subscribed!")));
-        _eventBus.Subscribe<YouTubeMemberEvent>(e => _ = System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => TriggerAlertsAsync(StreamAlertType.YouTubeMember, $"{e.Username} joined as a Member ({e.Level})!")));
-        _eventBus.Subscribe<YouTubeSuperChatEvent>(e => _ = System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => TriggerAlertsAsync(StreamAlertType.YouTubeSuperChat, $"{e.Username} Super Chatted {e.Amount:C}!")));
+        _eventBus.Subscribe<YouTubeSubscriberEvent>(e => _ = System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => {
+            var ctx = new AlertTriggerContext(StreamAlertType.YouTubeSubscriber, $"{e.Username} subscribed!");
+            ctx.AddValue("subscriberName", e.Username);
+            ctx.AddValue("username", e.Username);
+            return TriggerAlertsAsync(ctx);
+        }));
+
+        _eventBus.Subscribe<YouTubeMemberEvent>(e => _ = System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => {
+            var ctx = new AlertTriggerContext(StreamAlertType.YouTubeMember, $"{e.Username} joined as a Member ({e.Level})!");
+            ctx.AddValue("memberName", e.Username);
+            ctx.AddValue("username", e.Username);
+            ctx.AddValue("level", e.Level);
+            return TriggerAlertsAsync(ctx);
+        }));
+
+        _eventBus.Subscribe<YouTubeSuperChatEvent>(e => _ = System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => {
+            var ctx = new AlertTriggerContext(StreamAlertType.YouTubeSuperChat, $"{e.Username} Super Chatted {e.Amount:C}!");
+            ctx.AddValue("username", e.Username);
+            ctx.AddValue("amount", e.Amount.ToString("C"));
+            ctx.AddValue("currency", e.Currency);
+            return TriggerAlertsAsync(ctx);
+        }));
         
-        _eventBus.Subscribe<GeneralDonationEvent>(e => _ = System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => TriggerAlertsAsync(StreamAlertType.GeneralDonation, $"{e.Username} donated {e.Amount:C}!")));
+        _eventBus.Subscribe<GeneralDonationEvent>(e => _ = System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => {
+            var ctx = new AlertTriggerContext(StreamAlertType.GeneralDonation, $"{e.Username} donated {e.Amount:C}!");
+            ctx.AddValue("donorName", e.Username);
+            ctx.AddValue("username", e.Username);
+            ctx.AddValue("amount", e.Amount.ToString("C"));
+            ctx.AddValue("currency", e.Currency);
+            return TriggerAlertsAsync(ctx);
+        }));
     }
 
-    private async Task TriggerAlertsAsync(StreamAlertType type, string message)
+    private async Task TriggerAlertsAsync(AlertTriggerContext context)
     {
         if (ActiveScene is null) return;
 
         var alertSlots = ActiveScene.Slots
-            .Where(s => s.Content is AlertOverlayContent alert && alert.AlertType == type)
+            .Where(s => s.Content is AlertOverlayContent alert && alert.AlertType == context.AlertType)
             .ToList();
 
         if (alertSlots.Count == 0) return;
@@ -122,7 +175,7 @@ public partial class SceneEditorViewModel : ObservableObject
         var tasks = alertSlots.Select(async slot =>
         {
             var alert = (AlertOverlayContent)slot.Content!;
-            await alert.TriggerAsync(message, async child =>
+            await alert.TriggerAsync(context, async child =>
             {
                 await System.Windows.Application.Current.Dispatcher.InvokeAsync(async () =>
                 {
@@ -140,7 +193,7 @@ public partial class SceneEditorViewModel : ObservableObject
     {
         if (parameter is not SourceSlot slot || slot.Content is not AlertOverlayContent alert) return;
 
-        string testMessage = alert.AlertType switch
+        var context = new AlertTriggerContext(alert.AlertType, alert.AlertType switch
         {
             StreamAlertType.TwitchFollower => "TwitchFollower followed!",
             StreamAlertType.TwitchSubscriber => "TwitchSubscriber subscribed (Tier 1)!",
@@ -151,9 +204,22 @@ public partial class SceneEditorViewModel : ObservableObject
             StreamAlertType.YouTubeSuperChat => "YouTubeViewer sent $10.00 Super Chat!",
             StreamAlertType.GeneralDonation => "GenerousDonor donated $25.00!",
             _ => "Test Alert Triggered!"
-        };
+        });
 
-        await alert.TriggerAsync(testMessage, async child =>
+        context.AddValue("followerName", "TwitchFollower");
+        context.AddValue("subscriberName", "TwitchSubscriber");
+        context.AddValue("raiderName", "RaidHost");
+        context.AddValue("donorName", "GenerousDonor");
+        context.AddValue("memberName", "YouTubeMember");
+        context.AddValue("username", "TestUser");
+        context.AddValue("tier", "Tier 1");
+        context.AddValue("amount", "$10.00");
+        context.AddValue("currency", "USD");
+        context.AddValue("level", "Level 2");
+        context.AddValue("viewerCount", "42");
+        context.AddValue("viewers", "42");
+
+        await alert.TriggerAsync(context, async child =>
         {
             await System.Windows.Application.Current.Dispatcher.InvokeAsync(async () =>
             {

@@ -11,6 +11,7 @@
     xmlns:conv="clr-namespace:StreamFlow.App.Converter"
     xmlns:services="clr-namespace:StreamFlow.App.Services"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:core="clr-namespace:StreamFlow.Core.Data;assembly=StreamFlow.Core"
     xmlns:behaviors="clr-namespace:StreamFlow.App.Helpers.Behaviors"
     Title="ScenesPage"
     d:DataContext="{d:DesignInstance local:ScenesView, IsDesignTimeCreatable=False}"
@@ -722,6 +723,21 @@
                                         <TextBlock Text="Trigger Type" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
                                         <ComboBox Grid.Column="1" ItemsSource="{Binding Source={x:Static vm:AlertOverlayContent.AllAlertTypes}}" SelectedItem="{Binding Content.AlertType, Mode=TwoWay}"/>
                                     </Grid>
+
+                                    <StackPanel Margin="110,0,0,8">
+                                        <TextBlock Text="Available variables (case-insensitive):" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" FontWeight="SemiBold" Margin="0,0,0,2"/>
+                                        <ItemsControl ItemsSource="{Binding Content.AvailableVariables}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate DataType="{x:Type core:AlertVariable}">
+                                                    <TextBlock TextWrapping="Wrap" Margin="0,1,0,1" FontSize="10">
+                                                        <Run Text="%" Foreground="{StaticResource TextSecondaryBrush}"/><Run Text="{Binding Key}" FontWeight="SemiBold" Foreground="{DynamicResource {x:Static adonisUi:Brushes.AccentBrush}}"/><Run Text="%" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                        <Run Text=" - " Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                        <Run Text="{Binding Description}" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                    </TextBlock>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
 
                                     <Grid Margin="0,0,0,8">
                                         <Grid.ColumnDefinitions>

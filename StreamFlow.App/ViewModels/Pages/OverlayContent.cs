@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows.Media;
 
 using StreamFlow.App.Services;
+using StreamFlow.Core.Data;
 
 namespace StreamFlow.App.ViewModels.Pages;
 
@@ -316,7 +317,10 @@ public partial class AlertOverlayContent : ObservableObject, IOverlayContent
     public ObservableCollection<SourceSlot> Children { get; } = [];
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AvailableVariables))]
     private StreamAlertType _alertType = StreamAlertType.TwitchFollower;
+
+    public IReadOnlyList<AlertVariable> AvailableVariables => AlertVariableRegistry.GetVariablesForType(AlertType);
 
     [ObservableProperty]
     private int _durationSeconds = 5;
@@ -348,7 +352,7 @@ public partial class AlertOverlayContent : ObservableObject, IOverlayContent
 
     private readonly object _triggerLock = new();
 
-    public async Task TriggerAsync(string messageText, Func<SourceSlot, Task> onContentUpdate)
+    public async Task TriggerAsync(AlertTriggerContext context, Func<SourceSlot, Task> onContentUpdate)
     {
         lock (_triggerLock)
         {
@@ -371,7 +375,7 @@ public partial class AlertOverlayContent : ObservableObject, IOverlayContent
             {
                 var tc = (TextOverlayContent)to.Content!;
                 originalTexts[to] = tc.OverlayText ?? "";
-                tc.OverlayText = messageText;
+                tc.OverlayText = context.ReplaceVariables(tc.OverlayText ?? "");
                 await onContentUpdate(to);
             }
 
