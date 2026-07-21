@@ -37,7 +37,8 @@ public partial class SourceSlot : ObservableObject
     public bool IsChatOverlay => Content is ChatOverlayContent;
     public bool IsBlurOverlay => Content is BlurOverlayContent;
     public bool IsTimerOverlay => Content is TimerOverlayContent;
-    public bool IsGroupOverlay => Content is GroupOverlayContent;
+    public bool IsAlertOverlay => Content is AlertOverlayContent;
+    public bool IsGroupOverlay => Content is GroupOverlayContent || Content is AlertOverlayContent;
 
     /// <summary>True for overlay kinds registered once via AddStaticOverlay (image/text/color)
     /// — no ongoing session, so Start/StopCapture are skipped for these. False for video
@@ -72,6 +73,7 @@ public partial class SourceSlot : ObservableObject
         OnPropertyChanged(nameof(IsChatOverlay));
         OnPropertyChanged(nameof(IsBlurOverlay));
         OnPropertyChanged(nameof(IsTimerOverlay));
+        OnPropertyChanged(nameof(IsAlertOverlay));
         OnPropertyChanged(nameof(IsGroupOverlay));
         OnPropertyChanged(nameof(IsStaticOverlay));
         OnPropertyChanged(nameof(HasLiveThumbnail));

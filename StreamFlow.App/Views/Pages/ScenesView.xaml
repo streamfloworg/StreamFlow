@@ -407,6 +407,7 @@
                                     <MenuItem Header="Timer Overlay" Command="{Binding ViewModel.SceneEditor.AddTimerOverlayCommand}"/>
                                     <MenuItem Header="Blur Layer" Command="{Binding ViewModel.SceneEditor.AddBlurOverlayCommand}"/>
                                     <MenuItem Header="Overlay Group" Command="{Binding ViewModel.SceneEditor.AddGroupOverlayCommand}"/>
+                                    <MenuItem Header="Stream Alert" Command="{Binding ViewModel.SceneEditor.AddAlertOverlayCommand}"/>
                                 </ContextMenu>
                             </Button.ContextMenu>
                         </Button>
@@ -498,6 +499,10 @@
                                         <DataTrigger Binding="{Binding OverlayKind}" Value="Group">
                                             <Setter TargetName="TypeIcon" Property="Data" Value="{StaticResource GroupIconData}"/>
                                             <Setter TargetName="TypeIcon" Property="Fill" Value="#EC4899"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding OverlayKind}" Value="Alert">
+                                            <Setter TargetName="TypeIcon" Property="Data" Value="{StaticResource BellIconData}"/>
+                                            <Setter TargetName="TypeIcon" Property="Fill" Value="#EF4444"/>
                                         </DataTrigger>
                                     </DataTemplate.Triggers>
                                 </DataTemplate>
@@ -695,6 +700,83 @@
                                                Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,6"/>
                                     <ListBox ItemsSource="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.AvailableGroupCandidates}"
                                              Background="Transparent" BorderThickness="0" MaxHeight="200" ScrollViewer.VerticalScrollBarVisibility="Auto" Margin="0,0,0,8">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type vm:SourceSlot}">
+                                                <CheckBox Content="{Binding DisplayName}"
+                                                          IsChecked="{Binding IsInSelectedGroup, Mode=TwoWay}"
+                                                          Margin="0,2"/>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                </StackPanel>
+
+                                <!-- Stream Alert -->
+                                <StackPanel Visibility="{Binding IsAlertOverlay, Converter={StaticResource BoolToVisibility}}">
+                                    <TextBlock Text="Stream Alert Settings" Style="{StaticResource FieldLabelStyle}"/>
+                                    
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="110"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Trigger Type" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                                        <ComboBox Grid.Column="1" ItemsSource="{Binding Source={x:Static vm:AlertOverlayContent.AllAlertTypes}}" SelectedItem="{Binding Content.AlertType, Mode=TwoWay}"/>
+                                    </Grid>
+
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="110"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="30"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Duration (sec)" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                                        <Slider Grid.Column="1" Minimum="1" Maximum="30" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding Content.DurationSeconds, Mode=TwoWay}" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding Content.DurationSeconds}" VerticalAlignment="Center" TextAlignment="Right" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                                    </Grid>
+
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="110"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Entrance Transition" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                                        <ComboBox Grid.Column="1" ItemsSource="{Binding Source={x:Static vm:AlertOverlayContent.AllEntranceAnimations}}" SelectedItem="{Binding Content.EntranceAnimation, Mode=TwoWay}"/>
+                                    </Grid>
+
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="110"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Exit Transition" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                                        <ComboBox Grid.Column="1" ItemsSource="{Binding Source={x:Static vm:AlertOverlayContent.AllExitAnimations}}" SelectedItem="{Binding Content.ExitAnimation, Mode=TwoWay}"/>
+                                    </Grid>
+
+                                    <TextBlock Text="Test Triggers" Style="{StaticResource FieldLabelStyle}" Margin="0,8,0,4"/>
+                                    
+                                    <TextBlock Text="Twitch:" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" FontWeight="Bold" Margin="0,2,0,2"/>
+                                    <WrapPanel Margin="0,0,0,6">
+                                        <Button Content="Follower" Margin="0,0,4,4" Padding="8,3" FontSize="10" Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.TestAlertWithTypeAndTriggerCommand}" CommandParameter="TwitchFollower"/>
+                                        <Button Content="Subscriber" Margin="0,0,4,4" Padding="8,3" FontSize="10" Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.TestAlertWithTypeAndTriggerCommand}" CommandParameter="TwitchSubscriber"/>
+                                        <Button Content="Bits" Margin="0,0,4,4" Padding="8,3" FontSize="10" Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.TestAlertWithTypeAndTriggerCommand}" CommandParameter="TwitchBits"/>
+                                        <Button Content="Raid" Margin="0,0,4,4" Padding="8,3" FontSize="10" Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.TestAlertWithTypeAndTriggerCommand}" CommandParameter="TwitchRaid"/>
+                                    </WrapPanel>
+
+                                    <TextBlock Text="YouTube:" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" FontWeight="Bold" Margin="0,2,0,2"/>
+                                    <WrapPanel Margin="0,0,0,6">
+                                        <Button Content="Subscriber" Margin="0,0,4,4" Padding="8,3" FontSize="10" Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.TestAlertWithTypeAndTriggerCommand}" CommandParameter="YouTubeSubscriber"/>
+                                        <Button Content="Member" Margin="0,0,4,4" Padding="8,3" FontSize="10" Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.TestAlertWithTypeAndTriggerCommand}" CommandParameter="YouTubeMember"/>
+                                        <Button Content="Super Chat" Margin="0,0,4,4" Padding="8,3" FontSize="10" Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.TestAlertWithTypeAndTriggerCommand}" CommandParameter="YouTubeSuperChat"/>
+                                    </WrapPanel>
+
+                                    <TextBlock Text="Other:" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" FontWeight="Bold" Margin="0,2,0,2"/>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <Button Content="Donation" Margin="0,0,4,4" Padding="8,3" FontSize="10" Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.TestAlertWithTypeAndTriggerCommand}" CommandParameter="GeneralDonation"/>
+                                    </WrapPanel>
+
+                                    <TextBlock Text="Select which layers belong to this alert:" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                                    <ListBox ItemsSource="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.AvailableGroupCandidates}"
+                                             Background="Transparent" BorderThickness="0" MaxHeight="150" ScrollViewer.VerticalScrollBarVisibility="Auto" Margin="0,0,0,8">
                                         <ListBox.ItemTemplate>
                                             <DataTemplate DataType="{x:Type vm:SourceSlot}">
                                                 <CheckBox Content="{Binding DisplayName}"

@@ -25,6 +25,18 @@ public sealed record GoLiveStoppedEvent : AppEvent;
 /// anything subscribed here.</summary>
 public sealed record SceneSwitchedEvent(string? FromSceneId, string ToSceneId) : AppEvent;
 
+public sealed record TwitchFollowerEvent(string Username) : AppEvent;
+public sealed record TwitchSubscriberEvent(string Username, string Tier) : AppEvent;
+public sealed record TwitchBitsEvent(string Username, int Amount) : AppEvent;
+public sealed record TwitchRaidEvent(string Username, int ViewerCount) : AppEvent;
+
+public sealed record YouTubeSubscriberEvent(string Username) : AppEvent;
+public sealed record YouTubeMemberEvent(string Username, string Level) : AppEvent;
+public sealed record YouTubeSuperChatEvent(string Username, decimal Amount, string Currency) : AppEvent;
+
+public sealed record GeneralDonationEvent(string Username, decimal Amount, string Currency) : AppEvent;
+
+
 /// <summary>Lightweight in-process pub/sub bus — no external dependency, since every publisher
 /// and subscriber lives in the same WPF process as DI singletons for the app's lifetime. Publish
 /// dispatches synchronously on whatever thread called it; subscribers that need UI-thread

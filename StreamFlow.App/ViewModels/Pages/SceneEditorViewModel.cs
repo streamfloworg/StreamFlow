@@ -96,6 +96,85 @@ public partial class SceneEditorViewModel : ObservableObject
                 if (slot.Content is ChatOverlayContent { ChatMessages.Count: 0 } chat)
                     PopulateChatPlaceholder(slot, chat);
         });
+
+        _eventBus.Subscribe<TwitchFollowerEvent>(e => _ = System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => TriggerAlertsAsync(StreamAlertType.TwitchFollower, $"{e.Username} followed!")));
+        _eventBus.Subscribe<TwitchSubscriberEvent>(e => _ = System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => TriggerAlertsAsync(StreamAlertType.TwitchSubscriber, $"{e.Username} subscribed ({e.Tier})!")));
+        _eventBus.Subscribe<TwitchBitsEvent>(e => _ = System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => TriggerAlertsAsync(StreamAlertType.TwitchBits, $"{e.Username} cheered {e.Amount} bits!")));
+        _eventBus.Subscribe<TwitchRaidEvent>(e => _ = System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => TriggerAlertsAsync(StreamAlertType.TwitchRaid, $"{e.Username} raided with {e.ViewerCount} viewers!")));
+        
+        _eventBus.Subscribe<YouTubeSubscriberEvent>(e => _ = System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => TriggerAlertsAsync(StreamAlertType.YouTubeSubscriber, $"{e.Username} subscribed!")));
+        _eventBus.Subscribe<YouTubeMemberEvent>(e => _ = System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => TriggerAlertsAsync(StreamAlertType.YouTubeMember, $"{e.Username} joined as a Member ({e.Level})!")));
+        _eventBus.Subscribe<YouTubeSuperChatEvent>(e => _ = System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => TriggerAlertsAsync(StreamAlertType.YouTubeSuperChat, $"{e.Username} Super Chatted {e.Amount:C}!")));
+        
+        _eventBus.Subscribe<GeneralDonationEvent>(e => _ = System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => TriggerAlertsAsync(StreamAlertType.GeneralDonation, $"{e.Username} donated {e.Amount:C}!")));
+    }
+
+    private async Task TriggerAlertsAsync(StreamAlertType type, string message)
+    {
+        if (ActiveScene is null) return;
+
+        var alertSlots = ActiveScene.Slots
+            .Where(s => s.Content is AlertOverlayContent alert && alert.AlertType == type)
+            .ToList();
+
+        if (alertSlots.Count == 0) return;
+
+        var tasks = alertSlots.Select(async slot =>
+        {
+            var alert = (AlertOverlayContent)slot.Content!;
+            await alert.TriggerAsync(message, async child =>
+            {
+                await System.Windows.Application.Current.Dispatcher.InvokeAsync(async () =>
+                {
+                    if (child.SourceId is not null)
+                        await RestoreStaticOverlayAsync(child, child.SourceId);
+                });
+            });
+        });
+
+        await Task.WhenAll(tasks);
+    }
+
+    [RelayCommand]
+    private async Task TestAlertWithType(object? parameter)
+    {
+        if (parameter is not SourceSlot slot || slot.Content is not AlertOverlayContent alert) return;
+
+        string testMessage = alert.AlertType switch
+        {
+            StreamAlertType.TwitchFollower => "TwitchFollower followed!",
+            StreamAlertType.TwitchSubscriber => "TwitchSubscriber subscribed (Tier 1)!",
+            StreamAlertType.TwitchBits => "TwitchViewer cheered 500 bits!",
+            StreamAlertType.TwitchRaid => "RaidHost raided with 42 viewers!",
+            StreamAlertType.YouTubeSubscriber => "YouTubeSubscriber subscribed!",
+            StreamAlertType.YouTubeMember => "YouTubeMember joined (Level 2)!",
+            StreamAlertType.YouTubeSuperChat => "YouTubeViewer sent $10.00 Super Chat!",
+            StreamAlertType.GeneralDonation => "GenerousDonor donated $25.00!",
+            _ => "Test Alert Triggered!"
+        };
+
+        await alert.TriggerAsync(testMessage, async child =>
+        {
+            await System.Windows.Application.Current.Dispatcher.InvokeAsync(async () =>
+            {
+                if (child.SourceId is not null)
+                    await RestoreStaticOverlayAsync(child, child.SourceId);
+            });
+        });
+    }
+
+    [RelayCommand]
+    private async Task TestAlertWithTypeAndTrigger(object? parameter)
+    {
+        if (SelectedSlot is not SourceSlot slot || slot.Content is not AlertOverlayContent alert || parameter is not string typeStr) return;
+        if (!Enum.TryParse<StreamAlertType>(typeStr, out var targetType)) return;
+
+        var originalType = alert.AlertType;
+        alert.AlertType = targetType;
+
+        await TestAlertWithTypeCommand.ExecuteAsync(slot);
+
+        alert.AlertType = originalType;
     }
 
     /// <summary>Fills an empty, idle chat overlay with sample messages so its text-style controls
@@ -256,7 +335,7 @@ public partial class SceneEditorViewModel : ObservableObject
     public SourceSlot? PrimarySlot => Slots.FirstOrDefault(s => s.IsPrimary);
 
     public IEnumerable<SourceSlot> AvailableGroupCandidates =>
-        ActiveScene?.Slots.Where(s => s != SelectedSlot && s.OverlayKind != OverlayKind.Group && !s.IsPrimary) ?? [];
+        ActiveScene?.Slots.Where(s => s != SelectedSlot && s.OverlayKind != OverlayKind.Group && s.OverlayKind != OverlayKind.Alert && !s.IsPrimary) ?? [];
 
     [ObservableProperty]
     private SourceSlot? _selectedSlot;
@@ -277,9 +356,10 @@ public partial class SceneEditorViewModel : ObservableObject
             if (ActiveScene is not null)
             {
                 var selectedGroup = newValue?.Content as GroupOverlayContent;
+                var selectedAlert = newValue?.Content as AlertOverlayContent;
                 foreach (var slot in ActiveScene.Slots)
                 {
-                    slot.IsInSelectedGroup = selectedGroup?.Children.Contains(slot) ?? false;
+                    slot.IsInSelectedGroup = (selectedGroup?.Children.Contains(slot) ?? false) || (selectedAlert?.Children.Contains(slot) ?? false);
                 }
             }
         }
@@ -348,6 +428,13 @@ public partial class SceneEditorViewModel : ObservableObject
                 AutoStartOnGoLive = savedSlot.TimerAutoStartOnGoLive,
             },
             OverlayKind.Group => new GroupOverlayContent(),
+            OverlayKind.Alert => new AlertOverlayContent
+            {
+                AlertType = savedSlot.AlertType,
+                DurationSeconds = savedSlot.AlertDurationSeconds,
+                EntranceAnimation = savedSlot.AlertEntranceAnimation,
+                ExitAnimation = savedSlot.AlertExitAnimation,
+            },
             _ => null,
         };
         if (content is IHasTextStyle hasStyle)
@@ -361,7 +448,7 @@ public partial class SceneEditorViewModel : ObservableObject
             OpacityPercent = savedSlot.OpacityPercent,
             RotationDegrees = savedSlot.RotationDegrees,
         };
-        if (slot.IsChatOverlay || slot.IsBlurOverlay || slot.OverlayKind == OverlayKind.Group)
+        if (slot.IsChatOverlay || slot.IsBlurOverlay || slot.OverlayKind == OverlayKind.Group || slot.OverlayKind == OverlayKind.Alert)
         {
             slot.IsAspectLocked = false;
         }
@@ -378,6 +465,7 @@ public partial class SceneEditorViewModel : ObservableObject
                 : slot.IsTimerOverlay ? "Timer Overlay"
                 : slot.IsColorOverlay ? "Color Overlay"
                 : slot.OverlayKind == OverlayKind.Group ? "Overlay Group"
+                : slot.OverlayKind == OverlayKind.Alert ? "Stream Alert"
                 : overlayColor?.ToString(CultureInfo.InvariantCulture) ?? "");
             if (content is ChatOverlayContent chatContentToRestore)
                 PopulateChatPlaceholder(slot, chatContentToRestore);
@@ -391,6 +479,8 @@ public partial class SceneEditorViewModel : ObservableObject
                 slot.DisplayName = savedSlot.DisplayName ?? "Video Overlay";
             else if (slot.OverlayKind == OverlayKind.Group)
                 slot.DisplayName = savedSlot.DisplayName ?? "Overlay Group";
+            else if (slot.OverlayKind == OverlayKind.Alert)
+                slot.DisplayName = savedSlot.DisplayName ?? "Stream Alert";
 
             slot.SourceId = savedSlot.SourceId;
         }
@@ -433,6 +523,22 @@ public partial class SceneEditorViewModel : ObservableObject
                         if (childSlot is not null)
                         {
                             group.Children.Add(childSlot);
+                            childSlot.ParentGroup = slot;
+                        }
+                    }
+                }
+            }
+            else if (slot.Content is AlertOverlayContent alertGroup)
+            {
+                var savedSlot = saved.Slots.FirstOrDefault(s => s.SourceId == slot.SourceId || (s.DisplayName == slot.DisplayName && s.OverlayKind == OverlayKind.Alert));
+                if (savedSlot?.GroupChildIds is not null)
+                {
+                    foreach (var childId in savedSlot.GroupChildIds)
+                    {
+                        var childSlot = slotsList.FirstOrDefault(s => s.SourceId == childId);
+                        if (childSlot is not null)
+                        {
+                            alertGroup.Children.Add(childSlot);
                             childSlot.ParentGroup = slot;
                         }
                     }
@@ -916,6 +1022,22 @@ public partial class SceneEditorViewModel : ObservableObject
         NotifyChanged();
     }
 
+    [RelayCommand]
+    private void AddAlertOverlay()
+    {
+        var sourceId = $"overlay:{Guid.NewGuid():N}";
+        var slot = new SourceSlot(
+            isPrimary: false, x: 25, y: 25, w: 30, h: 20,
+            isOverlay: true, content: new AlertOverlayContent())
+        {
+            SourceId = sourceId,
+            DisplayName = "Stream Alert",
+            IsAspectLocked = false
+        };
+        AttachSlot(slot);
+        NotifyChanged();
+    }
+
     public void GroupSlots(List<SourceSlot> slotsToGroup)
     {
         if (slotsToGroup == null || slotsToGroup.Count <= 1) return;
@@ -1297,6 +1419,21 @@ public partial class SceneEditorViewModel : ObservableObject
                     }
                     NotifyChanged();
                 }
+
+                var alertGroup = SelectedSlot?.Content as AlertOverlayContent;
+                if (alertGroup is not null)
+                {
+                    if (slot.IsInSelectedGroup)
+                    {
+                        if (!alertGroup.Children.Contains(slot))
+                            alertGroup.Children.Add(slot);
+                    }
+                    else
+                    {
+                        alertGroup.Children.Remove(slot);
+                    }
+                    NotifyChanged();
+                }
             }
         }
 
@@ -1401,13 +1538,17 @@ public partial class SceneEditorViewModel : ObservableObject
             or nameof(BlurOverlayContent.BlurRadius)
             or nameof(IChromaKeyable.ChromaKeyEnabled) or nameof(IChromaKeyable.ChromaKeyColor) or nameof(IChromaKeyable.ChromaKeySimilarity)
             or nameof(TimerOverlayContent.TimerMode) or nameof(TimerOverlayContent.TimerDurationSeconds)
-            or nameof(TimerOverlayContent.AutoStartOnGoLive))
+            or nameof(TimerOverlayContent.AutoStartOnGoLive)
+            or nameof(AlertOverlayContent.AlertType) or nameof(AlertOverlayContent.DurationSeconds)
+            or nameof(AlertOverlayContent.EntranceAnimation) or nameof(AlertOverlayContent.ExitAnimation))
         {
             NotifyChanged();
         }
 
         if (e.PropertyName is nameof(BlurOverlayContent.BlurRadius)
-            or nameof(IChromaKeyable.ChromaKeyEnabled) or nameof(IChromaKeyable.ChromaKeyColor) or nameof(IChromaKeyable.ChromaKeySimilarity))
+            or nameof(IChromaKeyable.ChromaKeyEnabled) or nameof(IChromaKeyable.ChromaKeyColor) or nameof(IChromaKeyable.ChromaKeySimilarity)
+            or nameof(AlertOverlayContent.AnimatingOpacity) or nameof(AlertOverlayContent.AnimatingXOffsetPercent)
+            or nameof(AlertOverlayContent.AnimatingYOffsetPercent) or nameof(AlertOverlayContent.AnimatingScalePercent))
         {
             ScheduleLiveConfigPush();
         }
@@ -1725,16 +1866,84 @@ public partial class SceneEditorViewModel : ObservableObject
 
     public StreamSourceDef[] BuildStreamSources() =>
         Slots.Where(s => !string.IsNullOrEmpty(s.SourceId))
-            .Select(s => new StreamSourceDef(
-                s.SourceId!, s.IsPrimary,
-                (float)s.XPercent, (float)s.YPercent, (float)s.WPercent, (float)s.HPercent,
-                (float)s.CornerRadiusPercent,
-                s.Content is BlurOverlayContent blur ? (uint)Math.Max(0, blur.BlurRadius) : 0,
-                s.Content is IChromaKeyable { ChromaKeyEnabled: true } keyable
-                    ? new ChromaKeyDef(keyable.ChromaKeyColor.R, keyable.ChromaKeyColor.G, keyable.ChromaKeyColor.B, (float)(keyable.ChromaKeySimilarity / 100.0))
-                    : null,
-                (float)(s.OpacityPercent / 100.0),
-                (ushort)s.RotationDegrees))
+            .Select(s => {
+                var opacity = s.OpacityPercent / 100.0;
+                var x = s.XPercent;
+                var y = s.YPercent;
+                var w = s.WPercent;
+                var h = s.HPercent;
+
+                var current = s;
+                while (current.ParentGroup is SourceSlot parent)
+                {
+                    if (parent.Content is AlertOverlayContent alert)
+                    {
+                        var isSelected = parent.IsSelected || s.IsSelected;
+                        var alertOpacity = alert.IsAlertActive 
+                            ? alert.AnimatingOpacity 
+                            : (isSelected ? (parent.OpacityPercent / 100.0) : 0.0);
+                        
+                        opacity *= alertOpacity;
+
+                        var scale = alert.IsAlertActive ? (alert.AnimatingScalePercent / 100.0) : 1.0;
+                        var offsetX = alert.IsAlertActive ? alert.AnimatingXOffsetPercent : 0.0;
+                        var offsetY = alert.IsAlertActive ? alert.AnimatingYOffsetPercent : 0.0;
+
+                        var parentCenterX = parent.XPercent + parent.WPercent / 2.0;
+                        var parentCenterY = parent.YPercent + parent.HPercent / 2.0;
+                        var childCenterX = x + w / 2.0;
+                        var childCenterY = y + h / 2.0;
+
+                        var newW = w * scale;
+                        var newH = h * scale;
+                        var newChildCenterX = parentCenterX + offsetX + (childCenterX - parentCenterX) * scale;
+                        var newChildCenterY = parentCenterY + offsetY + (childCenterY - parentCenterY) * scale;
+
+                        x = newChildCenterX - newW / 2.0;
+                        y = newChildCenterY - newH / 2.0;
+                        w = newW;
+                        h = newH;
+                    }
+                    else
+                    {
+                        opacity *= parent.OpacityPercent / 100.0;
+                    }
+                    current = parent;
+                }
+
+                if (s.Content is AlertOverlayContent selfAlert)
+                {
+                    var selfOpacity = selfAlert.IsAlertActive 
+                        ? selfAlert.AnimatingOpacity 
+                        : (s.IsSelected ? (s.OpacityPercent / 100.0) : 0.0);
+                    opacity = selfOpacity;
+
+                    var scale = selfAlert.IsAlertActive ? (selfAlert.AnimatingScalePercent / 100.0) : 1.0;
+                    var offsetX = selfAlert.IsAlertActive ? selfAlert.AnimatingXOffsetPercent : 0.0;
+                    var offsetY = selfAlert.IsAlertActive ? selfAlert.AnimatingYOffsetPercent : 0.0;
+
+                    var centerX = x + w / 2.0;
+                    var centerY = y + h / 2.0;
+
+                    var newW = w * scale;
+                    var newH = h * scale;
+                    x = centerX + offsetX - newW / 2.0;
+                    y = centerY + offsetY - newH / 2.0;
+                    w = newW;
+                    h = newH;
+                }
+
+                return new StreamSourceDef(
+                    s.SourceId!, s.IsPrimary,
+                    (float)x, (float)y, (float)w, (float)h,
+                    (float)s.CornerRadiusPercent,
+                    s.Content is BlurOverlayContent blur ? (uint)Math.Max(0, blur.BlurRadius) : 0,
+                    s.Content is IChromaKeyable { ChromaKeyEnabled: true } keyable
+                        ? new ChromaKeyDef(keyable.ChromaKeyColor.R, keyable.ChromaKeyColor.G, keyable.ChromaKeyColor.B, (float)(keyable.ChromaKeySimilarity / 100.0))
+                        : null,
+                    (float)opacity,
+                    (ushort)s.RotationDegrees);
+            })
             .ToArray();
 
     /// <summary>Builds the Config command to push to the core — always includes the active
@@ -1984,7 +2193,8 @@ public partial class SceneEditorViewModel : ObservableObject
         OverlayKind = s.OverlayKind,
         SourceId = s.SourceId,
         DisplayName = s.DisplayName,
-        GroupChildIds = (s.Content as GroupOverlayContent)?.Children.Select(c => c.SourceId).Where(id => id is not null).ToList()!,
+        GroupChildIds = (s.Content as GroupOverlayContent)?.Children.Select(c => c.SourceId).Where(id => id is not null).ToList()
+            ?? (s.Content as AlertOverlayContent)?.Children.Select(c => c.SourceId).Where(id => id is not null).ToList()!,
         ImagePath = (s.Content as ImageOverlayContent)?.ImagePath,
         OverlayText = (s.Content as TextOverlayContent)?.OverlayText,
         OverlayColorHex = (s.Content as ColorOverlayContent)?.OverlayColor?.ToString(CultureInfo.InvariantCulture),
@@ -2004,6 +2214,10 @@ public partial class SceneEditorViewModel : ObservableObject
         TimerMode = (s.Content as TimerOverlayContent)?.TimerMode ?? TimerMode.CountDown,
         TimerDurationSeconds = (s.Content as TimerOverlayContent)?.TimerDurationSeconds ?? 300,
         TimerAutoStartOnGoLive = (s.Content as TimerOverlayContent)?.AutoStartOnGoLive ?? false,
+        AlertType = (s.Content as AlertOverlayContent)?.AlertType ?? StreamAlertType.TwitchFollower,
+        AlertDurationSeconds = (s.Content as AlertOverlayContent)?.DurationSeconds ?? 5,
+        AlertEntranceAnimation = (s.Content as AlertOverlayContent)?.EntranceAnimation ?? AlertEntranceAnimation.Fade,
+        AlertExitAnimation = (s.Content as AlertOverlayContent)?.ExitAnimation ?? AlertExitAnimation.Fade,
         // Text* fields predate TextStyle and were Text-overlay-only; now sourced from
         // IHasTextStyle.Style so Chat/Timer formatting persists too — see
         // ApplyTextStyleFromSettings for the load-side counterpart.

@@ -19,4 +19,38 @@ public enum OverlayKind
     /// configured duration) — registered once and re-registered every second while running.</summary>
     Timer,
     Group,
+    Alert,
 }
+
+public enum StreamAlertType
+{
+    TwitchFollower,
+    TwitchSubscriber,
+    TwitchBits,
+    TwitchRaid,
+    YouTubeSubscriber,
+    YouTubeMember,
+    YouTubeSuperChat,
+    GeneralDonation,
+}
+
+public enum AlertEntranceAnimation
+{
+    Fade,
+    SlideLeft,
+    SlideRight,
+    SlideUp,
+    SlideDown,
+    Zoom,
+}
+
+public enum AlertExitAnimation
+{
+    Fade,
+    SlideLeft,
+    SlideRight,
+    SlideUp,
+    SlideDown,
+    Zoom,
+}
+

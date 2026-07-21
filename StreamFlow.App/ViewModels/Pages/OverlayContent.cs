@@ -308,3 +308,234 @@ public partial class GroupOverlayContent : ObservableObject, IOverlayContent
 
     public ObservableCollection<SourceSlot> Children { get; } = [];
 }
+
+public partial class AlertOverlayContent : ObservableObject, IOverlayContent
+{
+    public OverlayKind Kind => OverlayKind.Alert;
+
+    public ObservableCollection<SourceSlot> Children { get; } = [];
+
+    [ObservableProperty]
+    private StreamAlertType _alertType = StreamAlertType.TwitchFollower;
+
+    [ObservableProperty]
+    private int _durationSeconds = 5;
+
+    [ObservableProperty]
+    private AlertEntranceAnimation _entranceAnimation = AlertEntranceAnimation.Fade;
+
+    [ObservableProperty]
+    private AlertExitAnimation _exitAnimation = AlertExitAnimation.Fade;
+
+    [ObservableProperty]
+    private double _animatingOpacity = 0.0;
+
+    [ObservableProperty]
+    private double _animatingXOffsetPercent = 0.0;
+
+    [ObservableProperty]
+    private double _animatingYOffsetPercent = 0.0;
+
+    [ObservableProperty]
+    private double _animatingScalePercent = 100.0;
+
+    private bool _isAlertActive;
+    public bool IsAlertActive => _isAlertActive;
+
+    public static Array AllAlertTypes => Enum.GetValues(typeof(StreamAlertType));
+    public static Array AllEntranceAnimations => Enum.GetValues(typeof(AlertEntranceAnimation));
+    public static Array AllExitAnimations => Enum.GetValues(typeof(AlertExitAnimation));
+
+    private readonly object _triggerLock = new();
+
+    public async Task TriggerAsync(string messageText, Func<SourceSlot, Task> onContentUpdate)
+    {
+        lock (_triggerLock)
+        {
+            if (_isAlertActive) return;
+            _isAlertActive = true;
+        }
+
+        try
+        {
+            // Reset state
+            AnimatingOpacity = 0.0;
+            AnimatingXOffsetPercent = 0.0;
+            AnimatingYOffsetPercent = 0.0;
+            AnimatingScalePercent = 100.0;
+
+            // Find all child text overlays and update their text
+            var textOverlays = Children.Where(c => c.Content is TextOverlayContent).ToList();
+            var originalTexts = new Dictionary<SourceSlot, string>();
+            foreach (var to in textOverlays)
+            {
+                var tc = (TextOverlayContent)to.Content!;
+                originalTexts[to] = tc.OverlayText ?? "";
+                tc.OverlayText = messageText;
+                await onContentUpdate(to);
+            }
+
+            // --- Entrance Animation ---
+            int entranceSteps = 20;
+            switch (EntranceAnimation)
+            {
+                case AlertEntranceAnimation.Fade:
+                    for (int i = 1; i <= entranceSteps; i++)
+                    {
+                        AnimatingOpacity = i / (double)entranceSteps;
+                        await Task.Delay(16);
+                    }
+                    break;
+
+                case AlertEntranceAnimation.SlideLeft:
+                    for (int i = 1; i <= entranceSteps; i++)
+                    {
+                        var progress = i / (double)entranceSteps;
+                        var ease = 1.0 - Math.Pow(1.0 - progress, 3);
+                        AnimatingXOffsetPercent = 50 * (1.0 - ease);
+                        AnimatingOpacity = ease;
+                        await Task.Delay(16);
+                    }
+                    break;
+
+                case AlertEntranceAnimation.SlideRight:
+                    for (int i = 1; i <= entranceSteps; i++)
+                    {
+                        var progress = i / (double)entranceSteps;
+                        var ease = 1.0 - Math.Pow(1.0 - progress, 3);
+                        AnimatingXOffsetPercent = -50 * (1.0 - ease);
+                        AnimatingOpacity = ease;
+                        await Task.Delay(16);
+                    }
+                    break;
+
+                case AlertEntranceAnimation.SlideUp:
+                    for (int i = 1; i <= entranceSteps; i++)
+                    {
+                        var progress = i / (double)entranceSteps;
+                        var ease = 1.0 - Math.Pow(1.0 - progress, 3);
+                        AnimatingYOffsetPercent = 50 * (1.0 - ease);
+                        AnimatingOpacity = ease;
+                        await Task.Delay(16);
+                    }
+                    break;
+
+                case AlertEntranceAnimation.SlideDown:
+                    for (int i = 1; i <= entranceSteps; i++)
+                    {
+                        var progress = i / (double)entranceSteps;
+                        var ease = 1.0 - Math.Pow(1.0 - progress, 3);
+                        AnimatingYOffsetPercent = -50 * (1.0 - ease);
+                        AnimatingOpacity = ease;
+                        await Task.Delay(16);
+                    }
+                    break;
+
+                case AlertEntranceAnimation.Zoom:
+                    for (int i = 1; i <= entranceSteps; i++)
+                    {
+                        var progress = i / (double)entranceSteps;
+                        var ease = 1.0 - Math.Pow(1.0 - progress, 3);
+                        AnimatingScalePercent = ease * 100.0;
+                        AnimatingOpacity = ease;
+                        await Task.Delay(16);
+                    }
+                    break;
+            }
+
+            AnimatingOpacity = 1.0;
+            AnimatingXOffsetPercent = 0.0;
+            AnimatingYOffsetPercent = 0.0;
+            AnimatingScalePercent = 100.0;
+
+            // Wait for configured duration
+            await Task.Delay(Math.Max(100, DurationSeconds * 1000));
+
+            // --- Exit Animation ---
+            int exitSteps = 20;
+            switch (ExitAnimation)
+            {
+                case AlertExitAnimation.Fade:
+                    for (int i = exitSteps; i >= 0; i--)
+                    {
+                        AnimatingOpacity = i / (double)exitSteps;
+                        await Task.Delay(16);
+                    }
+                    break;
+
+                case AlertExitAnimation.SlideLeft:
+                    for (int i = 0; i <= exitSteps; i++)
+                    {
+                        var progress = i / (double)exitSteps;
+                        var ease = Math.Pow(progress, 3);
+                        AnimatingXOffsetPercent = -ease * 50;
+                        AnimatingOpacity = 1.0 - ease;
+                        await Task.Delay(16);
+                    }
+                    break;
+
+                case AlertExitAnimation.SlideRight:
+                    for (int i = 0; i <= exitSteps; i++)
+                    {
+                        var progress = i / (double)exitSteps;
+                        var ease = Math.Pow(progress, 3);
+                        AnimatingXOffsetPercent = ease * 50;
+                        AnimatingOpacity = 1.0 - ease;
+                        await Task.Delay(16);
+                    }
+                    break;
+
+                case AlertExitAnimation.SlideUp:
+                    for (int i = 0; i <= exitSteps; i++)
+                    {
+                        var progress = i / (double)exitSteps;
+                        var ease = Math.Pow(progress, 3);
+                        AnimatingYOffsetPercent = -ease * 50;
+                        AnimatingOpacity = 1.0 - ease;
+                        await Task.Delay(16);
+                    }
+                    break;
+
+                case AlertExitAnimation.SlideDown:
+                    for (int i = 0; i <= exitSteps; i++)
+                    {
+                        var progress = i / (double)exitSteps;
+                        var ease = Math.Pow(progress, 3);
+                        AnimatingYOffsetPercent = ease * 50;
+                        AnimatingOpacity = 1.0 - ease;
+                        await Task.Delay(16);
+                    }
+                    break;
+
+                case AlertExitAnimation.Zoom:
+                    for (int i = exitSteps; i >= 0; i--)
+                    {
+                        var progress = i / (double)exitSteps;
+                        var ease = Math.Pow(progress, 3);
+                        AnimatingScalePercent = (1.0 - ease) * 100.0;
+                        AnimatingOpacity = 1.0 - ease;
+                        await Task.Delay(16);
+                    }
+                    break;
+            }
+
+            AnimatingOpacity = 0.0;
+
+            // Restore original texts
+            foreach (var kvp in originalTexts)
+            {
+                var tc = (TextOverlayContent)kvp.Key.Content!;
+                tc.OverlayText = kvp.Value;
+                await onContentUpdate(kvp.Key);
+            }
+        }
+        finally
+        {
+            lock (_triggerLock)
+            {
+                _isAlertActive = false;
+            }
+        }
+    }
+}
+
