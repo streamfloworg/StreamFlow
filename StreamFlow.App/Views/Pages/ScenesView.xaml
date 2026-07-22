@@ -406,7 +406,7 @@
                                     <MenuItem Header="Video Overlay" Command="{Binding ViewModel.SceneEditor.AddVideoOverlayCommand}"/>
                                     <MenuItem Header="Chat Overlay" Command="{Binding ViewModel.SceneEditor.AddChatOverlayCommand}"/>
                                     <MenuItem Header="Timer Overlay" Command="{Binding ViewModel.SceneEditor.AddTimerOverlayCommand}"/>
-                                    <MenuItem Header="Blur Layer" Command="{Binding ViewModel.SceneEditor.AddBlurOverlayCommand}"/>
+                            <MenuItem Header="Blur Layer" Command="{Binding ViewModel.SceneEditor.AddBlurOverlayCommand}"/>
                                     <MenuItem Header="Overlay Group" Command="{Binding ViewModel.SceneEditor.AddGroupOverlayCommand}"/>
                                     <MenuItem Header="Stream Alert" Command="{Binding ViewModel.SceneEditor.AddAlertOverlayCommand}"/>
                                 </ContextMenu>
@@ -415,25 +415,24 @@
                     </Grid>
 
                     <Border Grid.Row="1" CornerRadius="4" BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer2BorderBrush}}" BorderThickness="1" Background="{DynamicResource {x:Static adonisUi:Brushes.Layer2BackgroundBrush}}">
-                        <ListBox ItemsSource="{Binding ViewModel.SceneEditor.Slots}"
-                                 SelectedItem="{Binding ViewModel.SceneEditor.SelectedSlot, Mode=TwoWay}"
-                                 SelectionMode="Extended"
-                                 behaviors:SlotReorderBehavior.OnReordered="{Binding ViewModel.SceneEditor.NotifySlotsReorderedCommand}"
-                                 Background="Transparent" BorderThickness="0">
-                            <ListBox.ContextMenu>
+                        <TreeView ItemsSource="{Binding ViewModel.SceneEditor.Slots}"
+                                  Background="Transparent" BorderThickness="0"
+                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <TreeView.ContextMenu>
                                 <ContextMenu>
                                     <MenuItem Header="New Group" Click="NewGroupFromSelected_Click"/>
                                 </ContextMenu>
-                            </ListBox.ContextMenu>
-                            <ListBox.ItemContainerStyle>
-                                <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
-                                    <Setter Property="AllowDrop" Value="True"/>
-                                    <Setter Property="behaviors:SlotReorderBehavior.IsDropTarget" Value="True"/>
+                            </TreeView.ContextMenu>
+                            <TreeView.ItemContainerStyle>
+                                <Style TargetType="TreeViewItem" BasedOn="{StaticResource {x:Type TreeViewItem}}">
+                                    <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
+                                    <Setter Property="IsExpanded" Value="True"/>
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                                 </Style>
-                            </ListBox.ItemContainerStyle>
-                            <ListBox.ItemTemplate>
-                                <DataTemplate DataType="{x:Type vm:SourceSlot}">
-                                    <Grid Margin="{Binding VisualLeftMargin}">
+                            </TreeView.ItemContainerStyle>
+                            <TreeView.Resources>
+                                <HierarchicalDataTemplate DataType="{x:Type vm:SourceSlot}" ItemsSource="{Binding Children}">
+                                    <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="Auto"/>
@@ -442,7 +441,7 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" Text="⠿" FontFamily="Segoe UI Symbol" FontSize="14"
                                                    Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0"
-                                                   Cursor="SizeAll" behaviors:SlotReorderBehavior.IsGrip="True"/>
+                                                   Cursor="SizeAll"/>
                                         <Path x:Name="TypeIcon" Grid.Column="1" Margin="0,0,8,0" Width="14" Height="14" Stretch="Uniform" VerticalAlignment="Center"/>
                                         <TextBlock Grid.Column="2" Text="{Binding DisplayName}" VerticalAlignment="Center" FontWeight="SemiBold"/>
 
@@ -453,8 +452,8 @@
                                                 CommandParameter="{Binding}"
                                                 x:Name="RowDeleteButton" VerticalAlignment="Center" Visibility="Collapsed"/>
                                     </Grid>
-                                    <DataTemplate.Triggers>
-                                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=IsMouseOver}" Value="True">
+                                    <HierarchicalDataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=TreeViewItem}, Path=IsMouseOver}" Value="True">
                                             <Setter TargetName="RowDeleteButton" Property="Visibility" Value="Visible"/>
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding IsPrimary}" Value="True">
@@ -505,10 +504,10 @@
                                             <Setter TargetName="TypeIcon" Property="Data" Value="{StaticResource BellIconData}"/>
                                             <Setter TargetName="TypeIcon" Property="Fill" Value="#EF4444"/>
                                         </DataTrigger>
-                                    </DataTemplate.Triggers>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
+                                    </HierarchicalDataTemplate.Triggers>
+                                </HierarchicalDataTemplate>
+                            </TreeView.Resources>
+                        </TreeView>
                     </Border>
                 </Grid>
 
@@ -913,7 +912,7 @@
                          plain fill sized/positioned the same way the real preview image would be. -->
                     <Border Background="#22FFFFFF" IsHitTestVisible="False" Width="640" Canvas.Left="0" Canvas.Top="0"
                             Height="{Binding ViewModel.SceneEditor.ActiveScene.CanvasHeight}"/>
-                    <ItemsControl ItemsSource="{Binding ViewModel.SceneEditor.Slots}">
+                    <ItemsControl ItemsSource="{Binding ViewModel.SceneEditor.FlattenedSlots}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <Canvas Width="640" Height="{Binding ViewModel.SceneEditor.ActiveScene.CanvasHeight}"/>

@@ -41,6 +41,7 @@ public sealed class SlotSettings
     public string? TextOutlineColorHex { get; set; }
     public double? TextOutlineThickness { get; set; }
     public List<string>? GroupChildIds { get; set; }
+    public List<SlotSettings>? Children { get; set; }
 
     public StreamAlertType AlertType { get; set; }
     public int AlertDurationSeconds { get; set; } = 5;

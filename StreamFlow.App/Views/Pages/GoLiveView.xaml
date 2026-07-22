@@ -561,31 +561,24 @@
                         </Grid>
 
                         <Border Grid.Row="1" CornerRadius="4" BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer2BorderBrush}}" BorderThickness="1" Background="{DynamicResource {x:Static adonisUi:Brushes.Layer2BackgroundBrush}}">
-                            <ListBox ItemsSource="{Binding ViewModel.SceneEditor.Slots}"
-                                     SelectedItem="{Binding ViewModel.SceneEditor.SelectedSlot, Mode=TwoWay}"
-                                     SelectionMode="Extended"
-                                     behaviors:SlotReorderBehavior.OnReordered="{Binding ViewModel.SceneEditor.NotifySlotsReorderedCommand}"
-                                     Background="Transparent" BorderThickness="0"
-                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                                <ListBox.ContextMenu>
+                            <TreeView ItemsSource="{Binding ViewModel.SceneEditor.Slots}"
+                                      Background="Transparent" BorderThickness="0"
+                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <TreeView.ContextMenu>
                                     <ContextMenu>
                                         <MenuItem Header="New Group" Click="NewGroupFromSelected_Click"/>
                                     </ContextMenu>
-                                </ListBox.ContextMenu>
-                                <ListBox.ItemContainerStyle>
-                                    <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
-                                        <Setter Property="AllowDrop" Value="True"/>
-                                        <Setter Property="behaviors:SlotReorderBehavior.IsDropTarget" Value="True"/>
-                                        <!-- Without this, the item's content (the row Grid below) sizes to fit
-                                             instead of filling the ListBox's width, so the '*' name column has no
-                                             slack to expand into and the delete button ends up hugging the text
-                                             instead of sitting at the row's far right edge. -->
+                                </TreeView.ContextMenu>
+                                <TreeView.ItemContainerStyle>
+                                    <Style TargetType="TreeViewItem" BasedOn="{StaticResource {x:Type TreeViewItem}}">
+                                        <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
+                                        <Setter Property="IsExpanded" Value="True"/>
                                         <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                                     </Style>
-                                </ListBox.ItemContainerStyle>
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate DataType="{x:Type vm:SourceSlot}">
-                                        <Grid Margin="{Binding VisualLeftMargin}">
+                                </TreeView.ItemContainerStyle>
+                                <TreeView.Resources>
+                                    <HierarchicalDataTemplate DataType="{x:Type vm:SourceSlot}" ItemsSource="{Binding Children}">
+                                        <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="Auto"/>
                                                 <ColumnDefinition Width="Auto"/>
@@ -626,12 +619,12 @@
                                                                   Width="12"
                                                                   Height="14"/>
                                                         </Grid>
-                                                     </ControlTemplate>
-                                                 </Button.Template>
+                                                    </ControlTemplate>
+                                                </Button.Template>
                                             </Button>
                                         </Grid>
-                                        <DataTemplate.Triggers>
-                                            <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=IsMouseOver}" Value="True">
+                                        <HierarchicalDataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=TreeViewItem}, Path=IsMouseOver}" Value="True">
                                                 <Setter TargetName="RowDeleteButton" Property="Visibility" Value="Visible"/>
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding IsPrimary}" Value="True">
@@ -682,10 +675,10 @@
                                                 <Setter TargetName="TypeIcon" Property="Data" Value="{StaticResource BellIconData}"/>
                                                 <Setter TargetName="TypeIcon" Property="Fill" Value="#EF4444"/>
                                             </DataTrigger>
-                                        </DataTemplate.Triggers>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
+                                        </HierarchicalDataTemplate.Triggers>
+                                    </HierarchicalDataTemplate>
+                                </TreeView.Resources>
+                            </TreeView>
                         </Border>
                     </Grid>
 
@@ -1306,7 +1299,7 @@
                                Height="{Binding ViewModel.SceneEditor.ActiveScene.CanvasHeight}"
                                RenderOptions.BitmapScalingMode="HighQuality"
                                Visibility="{Binding ViewModel.IsSpoutOutputEnabled, Converter={StaticResource InverseBoolToVisibility}}"/>
-                        <ItemsControl ItemsSource="{Binding ViewModel.SceneEditor.Slots}">
+                        <ItemsControl ItemsSource="{Binding ViewModel.SceneEditor.FlattenedSlots}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
                                     <Canvas Width="640" Height="{Binding ViewModel.SceneEditor.ActiveScene.CanvasHeight}"/>

@@ -42,14 +42,33 @@ public partial class ScenesView
 
     private void NewGroupFromSelected_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is System.Windows.Controls.MenuItem menuItem && menuItem.Parent is System.Windows.Controls.ContextMenu contextMenu && contextMenu.PlacementTarget is System.Windows.Controls.ListBox listBox)
+        if (sender is System.Windows.Controls.MenuItem menuItem && menuItem.Parent is System.Windows.Controls.ContextMenu contextMenu)
         {
-            var selectedSlots = listBox.SelectedItems.Cast<SourceSlot>()
-                .Where(s => s.OverlayKind != OverlayKind.Group && !s.IsPrimary)
-                .ToList();
-            if (selectedSlots.Count > 1)
+            if (contextMenu.PlacementTarget is System.Windows.Controls.TreeView treeView)
             {
-                ViewModel.SceneEditor.GroupSlots(selectedSlots);
+                var selected = ViewModel.SceneEditor.SelectedSlot;
+                if (selected is not null && selected.OverlayKind != OverlayKind.Group && selected.OverlayKind != OverlayKind.Alert && !selected.IsPrimary)
+                {
+                    var others = ViewModel.SceneEditor.FlattenedSlots
+                        .Where(s => s.IsInSelectedGroup && s != selected)
+                        .ToList();
+                    if (others.Count > 0)
+                    {
+                        var list = new List<SourceSlot> { selected };
+                        list.AddRange(others);
+                        ViewModel.SceneEditor.GroupSlots(list);
+                    }
+                }
+            }
+            else if (contextMenu.PlacementTarget is System.Windows.Controls.ListBox listBox)
+            {
+                var selectedSlots = listBox.SelectedItems.Cast<SourceSlot>()
+                    .Where(s => s.OverlayKind != OverlayKind.Group && !s.IsPrimary)
+                    .ToList();
+                if (selectedSlots.Count > 1)
+                {
+                    ViewModel.SceneEditor.GroupSlots(selectedSlots);
+                }
             }
         }
     }

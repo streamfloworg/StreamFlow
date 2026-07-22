@@ -78,6 +78,17 @@ public partial class SourceSlot : ObservableObject
         OnPropertyChanged(nameof(IsStaticOverlay));
         OnPropertyChanged(nameof(HasLiveThumbnail));
         OnPropertyChanged(nameof(SupportsChromaKey));
+        OnPropertyChanged(nameof(Children));
+    }
+
+    public System.Collections.IList? Children
+    {
+        get
+        {
+            if (Content is GroupOverlayContent group) return group.Children;
+            if (Content is AlertOverlayContent alert) return alert.Children;
+            return null;
+        }
     }
 
     [ObservableProperty]

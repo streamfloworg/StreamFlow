@@ -261,6 +261,7 @@ public partial class SceneEditorViewModel : ObservableObject
     private void NotifyChanged()
     {
         HasUnsavedChanges = true;
+        OnPropertyChanged(nameof(FlattenedSlots));
         Changed?.Invoke();
     }
 
@@ -391,6 +392,29 @@ public partial class SceneEditorViewModel : ObservableObject
     public bool IsActiveSceneDefault => ActiveScene is not null && ReferenceEquals(ActiveScene, DefaultScene);
 
     public ObservableCollection<SourceSlot> Slots => ActiveScene?.Slots ?? _emptySlots;
+
+    public IEnumerable<SourceSlot> FlattenedSlots
+    {
+        get
+        {
+            if (ActiveScene is null) return Enumerable.Empty<SourceSlot>();
+            return FlattenSlots(ActiveScene.Slots);
+        }
+    }
+
+    private static IEnumerable<SourceSlot> FlattenSlots(IEnumerable<SourceSlot> slots)
+    {
+        foreach (var slot in slots)
+        {
+            yield return slot;
+            if (slot.Children is not null)
+            {
+                // Must cast Children because of IList interface type
+                foreach (var child in FlattenSlots(slot.Children.Cast<SourceSlot>()))
+                    yield return child;
+            }
+        }
+    }
 
     private static readonly ObservableCollection<SourceSlot> _emptySlots = [];
 
@@ -551,6 +575,24 @@ public partial class SceneEditorViewModel : ObservableObject
             slot.SourceId = savedSlot.SourceId;
         }
 
+        // Recursive children load (hierarchical settings)
+        if (savedSlot.Children is not null)
+        {
+            foreach (var childSaved in savedSlot.Children)
+            {
+                var childSlot = BuildSlotFromSettings(childSaved);
+                childSlot.ParentGroup = slot;
+                if (content is GroupOverlayContent group)
+                {
+                    group.Children.Add(childSlot);
+                }
+                else if (content is AlertOverlayContent alert)
+                {
+                    alert.Children.Add(childSlot);
+                }
+            }
+        }
+
         return slot;
     }
 
@@ -575,7 +617,7 @@ public partial class SceneEditorViewModel : ObservableObject
             slotsList.Add(slot);
         }
 
-        // Resolve group children
+        // Resolve group children (for backward-compatibility with flat layouts)
         foreach (var slot in slotsList)
         {
             if (slot.Content is GroupOverlayContent group)
@@ -588,8 +630,11 @@ public partial class SceneEditorViewModel : ObservableObject
                         var childSlot = slotsList.FirstOrDefault(s => s.SourceId == childId);
                         if (childSlot is not null)
                         {
-                            group.Children.Add(childSlot);
-                            childSlot.ParentGroup = slot;
+                            if (!group.Children.Contains(childSlot))
+                            {
+                                group.Children.Add(childSlot);
+                                childSlot.ParentGroup = slot;
+                            }
                         }
                     }
                 }
@@ -604,8 +649,11 @@ public partial class SceneEditorViewModel : ObservableObject
                         var childSlot = slotsList.FirstOrDefault(s => s.SourceId == childId);
                         if (childSlot is not null)
                         {
-                            alertGroup.Children.Add(childSlot);
-                            childSlot.ParentGroup = slot;
+                            if (!alertGroup.Children.Contains(childSlot))
+                            {
+                                alertGroup.Children.Add(childSlot);
+                                childSlot.ParentGroup = slot;
+                            }
                         }
                     }
                 }
@@ -614,7 +662,10 @@ public partial class SceneEditorViewModel : ObservableObject
 
         foreach (var slot in slotsList)
         {
-            scene.Slots.Add(slot);
+            if (slot.ParentGroup is null)
+            {
+                scene.Slots.Add(slot);
+            }
         }
 
         return scene;
@@ -1131,12 +1182,15 @@ public partial class SceneEditorViewModel : ObservableObject
         {
             if (slot.ParentGroup is not null)
             {
-                var oldGroup = slot.ParentGroup.Content as GroupOverlayContent;
-                oldGroup?.Children.Remove(slot);
+                if (slot.ParentGroup.Content is GroupOverlayContent oldGroup)
+                    oldGroup.Children.Remove(slot);
+                else if (slot.ParentGroup.Content is AlertOverlayContent oldAlert)
+                    oldAlert.Children.Remove(slot);
             }
             newGroupContent.Children.Add(slot);
             slot.ParentGroup = newGroupSlot;
             slot.IsInSelectedGroup = false;
+            Slots.Remove(slot);
         }
 
         var firstIndex = Slots.IndexOf(slotsToGroup[0]);
@@ -1149,15 +1203,6 @@ public partial class SceneEditorViewModel : ObservableObject
             Slots.Add(newGroupSlot);
         }
 
-        int offset = 1;
-        foreach (var slot in slotsToGroup)
-        {
-            Slots.Remove(slot);
-            var groupIndex = Slots.IndexOf(newGroupSlot);
-            Slots.Insert(groupIndex + offset, slot);
-            offset++;
-        }
-
         NotifyChanged();
     }
 
@@ -1168,24 +1213,33 @@ public partial class SceneEditorViewModel : ObservableObject
 
     public void AddSlotToGroup(SourceSlot sourceSlot, SourceSlot targetSlotOrGroup)
     {
-        var groupSlot = targetSlotOrGroup.OverlayKind == OverlayKind.Group ? targetSlotOrGroup : targetSlotOrGroup.ParentGroup;
+        var groupSlot = (targetSlotOrGroup.OverlayKind == OverlayKind.Group || targetSlotOrGroup.OverlayKind == OverlayKind.Alert)
+            ? targetSlotOrGroup
+            : targetSlotOrGroup.ParentGroup;
         if (groupSlot is null) return;
-        
-        var group = groupSlot.Content as GroupOverlayContent;
-        if (group is not null && !group.Children.Contains(sourceSlot))
-        {
-            if (sourceSlot.ParentGroup is not null)
-            {
-                var oldGroup = sourceSlot.ParentGroup.Content as GroupOverlayContent;
-                oldGroup?.Children.Remove(sourceSlot);
-            }
-            group.Children.Add(sourceSlot);
-            sourceSlot.ParentGroup = groupSlot;
 
-            Slots.Remove(sourceSlot);
-            var targetIdx = Slots.IndexOf(targetSlotOrGroup);
-            Slots.Insert(targetIdx + 1, sourceSlot);
-            NotifyChanged();
+        if (groupSlot.Content is GroupOverlayContent group)
+        {
+            if (!group.Children.Contains(sourceSlot))
+            {
+                RemoveSlotFromGroup(sourceSlot);
+                group.Children.Add(sourceSlot);
+                sourceSlot.ParentGroup = groupSlot;
+                Slots.Remove(sourceSlot);
+                NotifyChanged();
+            }
+        }
+        else if (groupSlot.Content is AlertOverlayContent alertGroup)
+        {
+            if (sourceSlot.OverlayKind == OverlayKind.Alert) return;
+            if (!alertGroup.Children.Contains(sourceSlot))
+            {
+                RemoveSlotFromGroup(sourceSlot);
+                alertGroup.Children.Add(sourceSlot);
+                sourceSlot.ParentGroup = groupSlot;
+                Slots.Remove(sourceSlot);
+                NotifyChanged();
+            }
         }
     }
 
@@ -1193,9 +1247,27 @@ public partial class SceneEditorViewModel : ObservableObject
     {
         if (sourceSlot.ParentGroup is not null)
         {
-            var oldGroup = sourceSlot.ParentGroup.Content as GroupOverlayContent;
-            oldGroup?.Children.Remove(sourceSlot);
+            var parentGroup = sourceSlot.ParentGroup;
+            if (sourceSlot.ParentGroup.Content is GroupOverlayContent oldGroup)
+            {
+                oldGroup.Children.Remove(sourceSlot);
+            }
+            else if (sourceSlot.ParentGroup.Content is AlertOverlayContent oldAlert)
+            {
+                oldAlert.Children.Remove(sourceSlot);
+            }
             sourceSlot.ParentGroup = null;
+
+            var parentIndex = Slots.IndexOf(parentGroup);
+            if (parentIndex >= 0)
+            {
+                Slots.Insert(parentIndex + 1, sourceSlot);
+            }
+            else
+            {
+                Slots.Add(sourceSlot);
+            }
+
             NotifyChanged();
         }
     }
@@ -1829,6 +1901,7 @@ public partial class SceneEditorViewModel : ObservableObject
     partial void OnActiveSceneChanged(GoLiveSceneViewModel? oldValue, GoLiveSceneViewModel? newValue)
     {
         OnPropertyChanged(nameof(Slots));
+        OnPropertyChanged(nameof(FlattenedSlots));
         OnPropertyChanged(nameof(PrimarySlot));
         OnPropertyChanged(nameof(IsActiveSceneDefault));
         OnPropertyChanged(nameof(AvailableGroupCandidates));
@@ -2025,18 +2098,32 @@ public partial class SceneEditorViewModel : ObservableObject
     private async Task RemoveSlot(SourceSlot slot)
     {
         slot.PropertyChanged -= OnSlotPropertyChanged;
-        Slots.Remove(slot);
+        if (slot.ParentGroup is not null)
+        {
+            if (slot.ParentGroup.Content is GroupOverlayContent group)
+                group.Children.Remove(slot);
+            else if (slot.ParentGroup.Content is AlertOverlayContent alert)
+                alert.Children.Remove(slot);
+
+            slot.ParentGroup = null;
+        }
+        else
+        {
+            Slots.Remove(slot);
+        }
+
         OnPropertyChanged(nameof(PrimarySlot));
 
         if (ReferenceEquals(SelectedSlot, slot))
             SelectedSlot = null;
 
+        // Clean up from other groups (fallback)
         foreach (var otherSlot in Slots)
         {
             if (otherSlot.Content is GroupOverlayContent group)
-            {
                 group.Children.Remove(slot);
-            }
+            else if (otherSlot.Content is AlertOverlayContent alert)
+                alert.Children.Remove(slot);
         }
 
         if (slot.Content is GroupOverlayContent deletedGroup)
@@ -2044,6 +2131,15 @@ public partial class SceneEditorViewModel : ObservableObject
             foreach (var child in deletedGroup.Children)
             {
                 child.ParentGroup = null;
+                Slots.Add(child);
+            }
+        }
+        else if (slot.Content is AlertOverlayContent deletedAlert)
+        {
+            foreach (var child in deletedAlert.Children)
+            {
+                child.ParentGroup = null;
+                Slots.Add(child);
             }
         }
 
@@ -2261,6 +2357,7 @@ public partial class SceneEditorViewModel : ObservableObject
         DisplayName = s.DisplayName,
         GroupChildIds = (s.Content as GroupOverlayContent)?.Children.Select(c => c.SourceId).Where(id => id is not null).ToList()
             ?? (s.Content as AlertOverlayContent)?.Children.Select(c => c.SourceId).Where(id => id is not null).ToList()!,
+        Children = s.Children?.Cast<SourceSlot>().Select(ToSlotSettings).ToList(),
         ImagePath = (s.Content as ImageOverlayContent)?.ImagePath,
         OverlayText = (s.Content as TextOverlayContent)?.OverlayText,
         OverlayColorHex = (s.Content as ColorOverlayContent)?.OverlayColor?.ToString(CultureInfo.InvariantCulture),
