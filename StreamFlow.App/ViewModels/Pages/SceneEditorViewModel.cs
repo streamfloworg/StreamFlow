@@ -261,7 +261,6 @@ public partial class SceneEditorViewModel : ObservableObject
     private void NotifyChanged()
     {
         HasUnsavedChanges = true;
-        OnPropertyChanged(nameof(FlattenedSlots));
         Changed?.Invoke();
     }
 
@@ -892,6 +891,7 @@ public partial class SceneEditorViewModel : ObservableObject
     {
         ScheduleLiveConfigPush();
         NotifyChanged();
+        OnPropertyChanged(nameof(FlattenedSlots));
     }
 
     [RelayCommand]
@@ -1204,6 +1204,7 @@ public partial class SceneEditorViewModel : ObservableObject
         }
 
         NotifyChanged();
+        OnPropertyChanged(nameof(FlattenedSlots));
     }
 
     public void GroupTwoSlots(SourceSlot sourceSlot, SourceSlot targetSlot)
@@ -1227,6 +1228,7 @@ public partial class SceneEditorViewModel : ObservableObject
                 sourceSlot.ParentGroup = groupSlot;
                 Slots.Remove(sourceSlot);
                 NotifyChanged();
+                OnPropertyChanged(nameof(FlattenedSlots));
             }
         }
         else if (groupSlot.Content is AlertOverlayContent alertGroup)
@@ -1239,6 +1241,7 @@ public partial class SceneEditorViewModel : ObservableObject
                 sourceSlot.ParentGroup = groupSlot;
                 Slots.Remove(sourceSlot);
                 NotifyChanged();
+                OnPropertyChanged(nameof(FlattenedSlots));
             }
         }
     }
@@ -1269,6 +1272,7 @@ public partial class SceneEditorViewModel : ObservableObject
             }
 
             NotifyChanged();
+            OnPropertyChanged(nameof(FlattenedSlots));
         }
     }
 
@@ -1483,6 +1487,7 @@ public partial class SceneEditorViewModel : ObservableObject
         HookContentPropertyChanged(slot);
         Slots.Add(slot);
         OnPropertyChanged(nameof(PrimarySlot));
+        OnPropertyChanged(nameof(FlattenedSlots));
     }
 
     /// <summary>Last source id each slot's capture session was (re)started for — lets
@@ -2153,6 +2158,7 @@ public partial class SceneEditorViewModel : ObservableObject
         await ReleaseCaptureAsync(slot);
 
         NotifyChanged();
+        OnPropertyChanged(nameof(FlattenedSlots));
         NotifyChatOverlayStateChanged();
     }
 

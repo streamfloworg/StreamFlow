@@ -121,4 +121,16 @@ public partial class ScenesView
         if (e.ExtentHeightChange != 0 && sender is System.Windows.Controls.ScrollViewer scrollViewer)
             scrollViewer.ScrollToEnd();
     }
+
+    private void TreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+    {
+        if (e.NewValue is SourceSlot slot)
+        {
+            ViewModel.SceneEditor.SelectedSlot = slot;
+        }
+        else
+        {
+            ViewModel.SceneEditor.SelectedSlot = null;
+        }
+    }
 }

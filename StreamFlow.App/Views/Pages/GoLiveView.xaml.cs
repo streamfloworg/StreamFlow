@@ -403,4 +403,16 @@ public partial class GoLiveView
         bitmap.WritePixels(new Int32Rect(0, 0, frame.Width, frame.Height), frame.BgraPixels, frame.Width * 4, 0);
     }
 
+    private void TreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+    {
+        if (e.NewValue is SourceSlot slot)
+        {
+            ViewModel.SceneEditor.SelectedSlot = slot;
+        }
+        else
+        {
+            ViewModel.SceneEditor.SelectedSlot = null;
+        }
+    }
+
 }

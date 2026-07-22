@@ -562,6 +562,7 @@
 
                         <Border Grid.Row="1" CornerRadius="4" BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer2BorderBrush}}" BorderThickness="1" Background="{DynamicResource {x:Static adonisUi:Brushes.Layer2BackgroundBrush}}">
                             <TreeView ItemsSource="{Binding ViewModel.SceneEditor.Slots}"
+                                      SelectedItemChanged="TreeView_SelectedItemChanged"
                                       Background="Transparent" BorderThickness="0"
                                       ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                                 <TreeView.ContextMenu>
