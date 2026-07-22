@@ -641,9 +641,19 @@ public partial class SceneEditorViewModel : ObservableObject
         };
         scene.PropertyChanged += OnScenePropertyChanged;
 
+        var childIds = new System.Collections.Generic.HashSet<string>();
+        foreach (var savedSlot in saved.Slots)
+        {
+            GatherChildIds(savedSlot, childIds);
+        }
+
         var slotsList = new List<SourceSlot>();
         foreach (var savedSlot in saved.Slots)
         {
+            if (savedSlot.SourceId is not null && childIds.Contains(savedSlot.SourceId))
+            {
+                continue;
+            }
             var slot = BuildSlotFromSettings(savedSlot);
             slotsList.Add(slot);
         }
@@ -700,6 +710,21 @@ public partial class SceneEditorViewModel : ObservableObject
         }
 
         return scene;
+    }
+
+    private static void GatherChildIds(SlotSettings slot, System.Collections.Generic.HashSet<string> childIds)
+    {
+        if (slot.Children is not null)
+        {
+            foreach (var child in slot.Children)
+            {
+                if (child.SourceId is not null)
+                {
+                    childIds.Add(child.SourceId);
+                }
+                GatherChildIds(child, childIds);
+            }
+        }
     }
 
     /// <summary>Subscribes to a freshly-constructed slot's Content so edits to its kind-specific

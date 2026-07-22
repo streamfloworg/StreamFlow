@@ -45,17 +45,17 @@ public static class SlotReorderBehavior
 
     private static void OnIsDropTargetChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        if (d is not ListBoxItem item) return;
+        if (d is not FrameworkElement item) return;
 
         if ((bool)e.NewValue)
         {
-            item.PreviewDragOver += ListBoxItem_PreviewDragOver;
-            item.Drop += ListBoxItem_Drop;
+            item.PreviewDragOver += Item_PreviewDragOver;
+            item.Drop += Item_Drop;
         }
         else
         {
-            item.PreviewDragOver -= ListBoxItem_PreviewDragOver;
-            item.Drop -= ListBoxItem_Drop;
+            item.PreviewDragOver -= Item_PreviewDragOver;
+            item.Drop -= Item_Drop;
         }
     }
 
@@ -63,22 +63,24 @@ public static class SlotReorderBehavior
     {
         if (sender is not FrameworkElement grip || grip.DataContext is not SourceSlot slot) return;
 
-        var item = FindVisualParent<ListBoxItem>(grip);
+        var item = FindVisualParent<TreeViewItem>(grip) as FrameworkElement
+                ?? FindVisualParent<ListBoxItem>(grip);
+
         if (item is not null)
         {
             DragDrop.DoDragDrop(item, slot, DragDropEffects.Move);
         }
     }
 
-    private static void ListBoxItem_PreviewDragOver(object sender, System.Windows.DragEventArgs e)
+    private static void Item_PreviewDragOver(object sender, System.Windows.DragEventArgs e)
     {
         e.Effects = e.Data.GetDataPresent(typeof(SourceSlot)) ? DragDropEffects.Move : DragDropEffects.None;
         e.Handled = true;
     }
 
-    private static SceneEditorViewModel? GetSceneEditor(ListBox listBox)
+    private static SceneEditorViewModel? GetSceneEditor(DependencyObject container)
     {
-        var dataContext = listBox.DataContext;
+        var dataContext = (container as FrameworkElement)?.DataContext;
         if (dataContext is null) return null;
         
         try
@@ -95,55 +97,95 @@ public static class SlotReorderBehavior
         return null;
     }
 
-    private static void ListBoxItem_Drop(object sender, System.Windows.DragEventArgs e)
+    private static void Item_Drop(object sender, System.Windows.DragEventArgs e)
     {
-        if (sender is not ListBoxItem item || item.DataContext is not SourceSlot targetSlot) return;
+        if (sender is not FrameworkElement item || item.DataContext is not SourceSlot targetSlot) return;
 
         var sourceSlot = e.Data.GetData(typeof(SourceSlot)) as SourceSlot;
         if (sourceSlot is null || ReferenceEquals(sourceSlot, targetSlot)) return;
 
-        var listBox = FindVisualParent<ListBox>(item);
-        if (listBox?.ItemsSource is not ObservableCollection<SourceSlot> slots) return;
+        var container = FindVisualParent<System.Windows.Controls.TreeView>(item) as DependencyObject
+                     ?? FindVisualParent<ListBox>(item);
+        if (container is null) return;
 
-        var oldIndex = slots.IndexOf(sourceSlot);
-        var newIndex = slots.IndexOf(targetSlot);
-        if (oldIndex < 0 || newIndex < 0 || oldIndex == newIndex) return;
+        var editor = GetSceneEditor(container);
+        if (editor is null) return;
 
         var position = e.GetPosition(item);
         var height = item.ActualHeight;
 
-        // If dropped in the middle of the item, we perform grouping!
+        // If dropped in the middle of the item, perform grouping!
         bool isMiddle = position.Y > height * 0.25 && position.Y < height * 0.75;
-        if (isMiddle && !sourceSlot.IsPrimary && !targetSlot.IsPrimary && sourceSlot.OverlayKind != OverlayKind.Group)
+        if (isMiddle && !sourceSlot.IsPrimary && !targetSlot.IsPrimary && sourceSlot.OverlayKind != StreamFlow.Core.Data.OverlayKind.Group && sourceSlot.OverlayKind != StreamFlow.Core.Data.OverlayKind.Alert)
         {
-            var editor = GetSceneEditor(listBox);
-            if (editor is not null)
+            if (targetSlot.OverlayKind == StreamFlow.Core.Data.OverlayKind.Group || targetSlot.OverlayKind == StreamFlow.Core.Data.OverlayKind.Alert || targetSlot.ParentGroup is not null)
             {
-                if (targetSlot.OverlayKind == OverlayKind.Group || targetSlot.ParentGroup is not null)
+                editor.AddSlotToGroup(sourceSlot, targetSlot);
+            }
+            else
+            {
+                editor.GroupTwoSlots(sourceSlot, targetSlot);
+            }
+
+            var command = GetOnReordered(container);
+            if (command?.CanExecute(null) == true) command.Execute(null);
+            return;
+        }
+
+        // Near-edge drop: Move sourceSlot before or after targetSlot in the target's collection!
+        editor.RemoveSlotFromGroup(sourceSlot);
+
+        System.Collections.IList targetList;
+        if (targetSlot.ParentGroup is not null)
+        {
+            editor.Slots.Remove(sourceSlot);
+            
+            var targetParentGroup = targetSlot.ParentGroup;
+            if (targetParentGroup.Content is GroupOverlayContent group)
+            {
+                targetList = group.Children;
+            }
+            else if (targetParentGroup.Content is AlertOverlayContent alert)
+            {
+                targetList = alert.Children;
+            }
+            else
+            {
+                return;
+            }
+            sourceSlot.ParentGroup = targetParentGroup;
+        }
+        else
+        {
+            targetList = editor.Slots;
+        }
+
+        var oldIndex = targetList.IndexOf(sourceSlot);
+        var newIndex = targetList.IndexOf(targetSlot);
+
+        if (newIndex >= 0)
+        {
+            if (oldIndex >= 0)
+            {
+                if (targetList is ObservableCollection<SourceSlot> observableList)
                 {
-                    editor.AddSlotToGroup(sourceSlot, targetSlot);
+                    observableList.Move(oldIndex, newIndex);
                 }
                 else
                 {
-                    editor.GroupTwoSlots(sourceSlot, targetSlot);
+                    targetList.RemoveAt(oldIndex);
+                    targetList.Insert(newIndex, sourceSlot);
                 }
-
-                var command = GetOnReordered(listBox);
-                if (command?.CanExecute(null) == true) command.Execute(null);
-                return;
+            }
+            else
+            {
+                targetList.Insert(newIndex, sourceSlot);
             }
         }
 
-        // If it's a regular reorder near the edges, remove from parent group if it was in one
-        if (sourceSlot.ParentGroup is not null)
-        {
-            var editor = GetSceneEditor(listBox);
-            editor?.RemoveSlotFromGroup(sourceSlot);
-        }
+        editor.NotifySlotsReorderedCommand.Execute(null);
 
-        slots.Move(oldIndex, newIndex);
-
-        var onReorderCommand = GetOnReordered(listBox);
+        var onReorderCommand = GetOnReordered(container);
         if (onReorderCommand?.CanExecute(null) == true) onReorderCommand.Execute(null);
     }
 
