@@ -45,9 +45,12 @@ public static class SlotReorderBehavior
 
     private static void OnIsDropTargetChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        if (d is not FrameworkElement item) return;
+        if (d is not UIElement item) return;
 
-        if ((bool)e.NewValue)
+        bool val = (bool)e.NewValue;
+        item.AllowDrop = val;
+
+        if (val)
         {
             item.PreviewDragOver += Item_PreviewDragOver;
             item.Drop += Item_Drop;
