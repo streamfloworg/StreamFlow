@@ -56,6 +56,14 @@ public sealed class StreamDeckServerService : IHostedService
         _eventBus.Subscribe<GoLiveStartedEvent>(_ => BroadcastAsync("streamState", BuildStreamStateOnUiThread()));
         _eventBus.Subscribe<GoLiveStoppedEvent>(_ => BroadcastAsync("streamState", BuildStreamStateOnUiThread()));
         _eventBus.Subscribe<SceneSwitchedEvent>(_ => BroadcastAsync("sceneState", BuildSceneStateOnUiThread()));
+
+        _goLive.PropertyChanged += (sender, e) =>
+        {
+            if (e.PropertyName == nameof(GoLiveViewModel.ViewerCount))
+            {
+                _ = BroadcastAsync("streamState", BuildStreamStateOnUiThread());
+            }
+        };
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)

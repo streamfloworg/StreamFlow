@@ -348,4 +348,34 @@ public sealed class TwitchAuthService
             return null;
         }
     }
+
+    public async Task<int?> TryFetchViewerCountAsync(string token, string userId, CancellationToken ct = default)
+    {
+        try
+        {
+            var url = $"https://api.twitch.tv/helix/streams?user_id={Uri.EscapeDataString(userId)}";
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            req.Headers.Add("Client-Id", _clientId);
+
+            using var resp = await _http.SendAsync(req, ct);
+            if (resp.IsSuccessStatusCode)
+            {
+                using var doc = JsonDocument.Parse(await resp.Content.ReadAsStreamAsync(ct));
+                if (doc.RootElement.TryGetProperty("data", out var data) && data.GetArrayLength() > 0)
+                {
+                    if (data[0].TryGetProperty("viewer_count", out var viewersProp))
+                    {
+                        return viewersProp.GetInt32();
+                    }
+                }
+                return 0; // Stream is offline
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to fetch Twitch viewer count");
+        }
+        return null;
+    }
 }

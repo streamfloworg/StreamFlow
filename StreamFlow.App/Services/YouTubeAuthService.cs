@@ -586,4 +586,42 @@ public sealed class YouTubeAuthService
             return null;
         }
     }
+
+    public async Task<int?> TryFetchViewerCountAsync(string token, CancellationToken ct = default)
+    {
+        try
+        {
+            var url = "https://www.googleapis.com/youtube/v3/liveBroadcasts?part=statistics&mine=true&maxResults=1";
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            using var resp = await _http.SendAsync(req, ct);
+            if (resp.IsSuccessStatusCode)
+            {
+                using var doc = JsonDocument.Parse(await resp.Content.ReadAsStreamAsync(ct));
+                if (doc.RootElement.TryGetProperty("items", out var items) && items.GetArrayLength() > 0)
+                {
+                    var firstItem = items[0];
+                    if (firstItem.TryGetProperty("statistics", out var stats) && stats.TryGetProperty("concurrentViewers", out var viewersProp))
+                    {
+                        if (viewersProp.ValueKind == JsonValueKind.String)
+                        {
+                            if (int.TryParse(viewersProp.GetString(), out var count))
+                                return count;
+                        }
+                        else if (viewersProp.ValueKind == JsonValueKind.Number)
+                        {
+                            return viewersProp.GetInt32();
+                        }
+                    }
+                }
+                return 0; // Offline or no concurrent viewers
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to fetch YouTube viewer count");
+        }
+        return null;
+    }
 }

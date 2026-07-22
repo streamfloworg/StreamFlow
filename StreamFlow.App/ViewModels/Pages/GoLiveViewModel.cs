@@ -260,6 +260,7 @@ public partial class GoLiveViewModel : ViewModel
         UpdateCoreStateText();
 
         InitializeTimerOverlayTicker();
+        InitializeViewerCountTicker();
 
         _ = RestoreSessionAsync();
     }
