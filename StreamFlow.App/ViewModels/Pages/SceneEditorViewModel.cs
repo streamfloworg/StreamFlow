@@ -401,6 +401,37 @@ public partial class SceneEditorViewModel : ObservableObject
         }
     }
 
+    public IEnumerable<SourceSlot> ExistingGroupSlots =>
+        FlattenedSlots.Where(s => s.OverlayKind == OverlayKind.Group || s.OverlayKind == OverlayKind.Alert);
+
+    protected override void OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+        if (e.PropertyName == nameof(FlattenedSlots))
+        {
+            OnPropertyChanged(new System.ComponentModel.PropertyChangedEventArgs(nameof(ExistingGroupSlots)));
+            OnPropertyChanged(new System.ComponentModel.PropertyChangedEventArgs(nameof(AvailableGroupCandidates)));
+        }
+    }
+
+    [RelayCommand]
+    private void AddSelectedSlotToGroup(SourceSlot targetGroup)
+    {
+        if (SelectedSlot is not null)
+        {
+            AddSlotToGroup(SelectedSlot, targetGroup);
+        }
+    }
+
+    [RelayCommand]
+    private void RemoveSelectedSlotFromGroup()
+    {
+        if (SelectedSlot is not null)
+        {
+            RemoveSlotFromGroup(SelectedSlot);
+        }
+    }
+
     private static IEnumerable<SourceSlot> FlattenSlots(IEnumerable<SourceSlot> slots)
     {
         foreach (var slot in slots)
@@ -424,7 +455,7 @@ public partial class SceneEditorViewModel : ObservableObject
     public SourceSlot? PrimarySlot => Slots.FirstOrDefault(s => s.IsPrimary);
 
     public IEnumerable<SourceSlot> AvailableGroupCandidates =>
-        ActiveScene?.Slots.Where(s => s != SelectedSlot && s.OverlayKind != OverlayKind.Group && s.OverlayKind != OverlayKind.Alert && !s.IsPrimary) ?? [];
+        FlattenedSlots.Where(s => s != SelectedSlot && s.OverlayKind != OverlayKind.Group && s.OverlayKind != OverlayKind.Alert && !s.IsPrimary) ?? [];
 
     [ObservableProperty]
     private SourceSlot? _selectedSlot;
@@ -446,7 +477,7 @@ public partial class SceneEditorViewModel : ObservableObject
             {
                 var selectedGroup = newValue?.Content as GroupOverlayContent;
                 var selectedAlert = newValue?.Content as AlertOverlayContent;
-                foreach (var slot in ActiveScene.Slots)
+                foreach (var slot in FlattenedSlots)
                 {
                     slot.IsInSelectedGroup = (selectedGroup?.Children.Contains(slot) ?? false) || (selectedAlert?.Children.Contains(slot) ?? false);
                 }
@@ -1548,34 +1579,61 @@ public partial class SceneEditorViewModel : ObservableObject
         {
             if (!_isUpdatingSelection)
             {
-                var group = SelectedSlot?.Content as GroupOverlayContent;
-                if (group is not null)
+                var groupSlot = SelectedSlot;
+                if (groupSlot is not null)
                 {
-                    if (slot.IsInSelectedGroup)
+                    if (groupSlot.Content is GroupOverlayContent group)
                     {
-                        if (!group.Children.Contains(slot))
-                            group.Children.Add(slot);
-                    }
-                    else
-                    {
-                        group.Children.Remove(slot);
-                    }
-                    NotifyChanged();
-                }
+                        if (slot.IsInSelectedGroup)
+                        {
+                            if (!group.Children.Contains(slot))
+                            {
+                                RemoveSlotFromGroup(slot);
+                                group.Children.Add(slot);
+                                slot.ParentGroup = groupSlot;
+                                Slots.Remove(slot);
+                            }
+                        }
+                        else
+                        {
+                            group.Children.Remove(slot);
+                            slot.ParentGroup = null;
 
-                var alertGroup = SelectedSlot?.Content as AlertOverlayContent;
-                if (alertGroup is not null)
-                {
-                    if (slot.IsInSelectedGroup)
-                    {
-                        if (!alertGroup.Children.Contains(slot))
-                            alertGroup.Children.Add(slot);
+                            var groupIndex = Slots.IndexOf(groupSlot);
+                            if (groupIndex >= 0)
+                                Slots.Insert(groupIndex + 1, slot);
+                            else
+                                Slots.Add(slot);
+                        }
+                        NotifyChanged();
+                        OnPropertyChanged(nameof(FlattenedSlots));
                     }
-                    else
+                    else if (groupSlot.Content is AlertOverlayContent alertGroup)
                     {
-                        alertGroup.Children.Remove(slot);
+                        if (slot.IsInSelectedGroup)
+                        {
+                            if (slot.OverlayKind != OverlayKind.Alert && !alertGroup.Children.Contains(slot))
+                            {
+                                RemoveSlotFromGroup(slot);
+                                alertGroup.Children.Add(slot);
+                                slot.ParentGroup = groupSlot;
+                                Slots.Remove(slot);
+                            }
+                        }
+                        else
+                        {
+                            alertGroup.Children.Remove(slot);
+                            slot.ParentGroup = null;
+
+                            var groupIndex = Slots.IndexOf(groupSlot);
+                            if (groupIndex >= 0)
+                                Slots.Insert(groupIndex + 1, slot);
+                            else
+                                Slots.Add(slot);
+                        }
+                        NotifyChanged();
+                        OnPropertyChanged(nameof(FlattenedSlots));
                     }
-                    NotifyChanged();
                 }
             }
         }

@@ -91,6 +91,8 @@ public partial class SourceSlot : ObservableObject
         }
     }
 
+    public bool CanBeAddedToGroup => !IsPrimary && OverlayKind != StreamFlow.Core.Data.OverlayKind.Group && OverlayKind != StreamFlow.Core.Data.OverlayKind.Alert;
+
     [ObservableProperty]
     private string? _sourceId;
 

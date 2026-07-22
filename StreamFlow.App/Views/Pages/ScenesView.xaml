@@ -433,7 +433,29 @@
                             </TreeView.ItemContainerStyle>
                             <TreeView.Resources>
                                 <HierarchicalDataTemplate DataType="{x:Type vm:SourceSlot}" ItemsSource="{Binding Children}">
-                                    <Grid>
+                                    <Grid Tag="{Binding RelativeSource={RelativeSource AncestorType=TreeView}, Path=DataContext}">
+                                        <Grid.ContextMenu>
+                                            <ContextMenu>
+                                                 <MenuItem Header="Add to Group"
+                                                           ItemsSource="{Binding PlacementTarget.Tag.ViewModel.SceneEditor.ExistingGroupSlots, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                           Visibility="{Binding CanBeAddedToGroup, Converter={StaticResource BoolToVisibility}}">
+                                                     <MenuItem.ItemContainerStyle>
+                                                         <Style TargetType="MenuItem">
+                                                             <Setter Property="Header" Value="{Binding DisplayName}"/>
+                                                             <Setter Property="Command" Value="{Binding PlacementTarget.Tag.ViewModel.SceneEditor.AddSelectedSlotToGroupCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                                             <Setter Property="CommandParameter" Value="{Binding}"/>
+                                                         </Style>
+                                                     </MenuItem.ItemContainerStyle>
+                                                 </MenuItem>
+                                                 <MenuItem Header="Remove from Group"
+                                                           Command="{Binding PlacementTarget.Tag.ViewModel.SceneEditor.RemoveSelectedSlotFromGroupCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                           Visibility="{Binding ParentGroup, Converter={StaticResource NullToVisibility}}"/>
+                                                 <MenuItem Header="New Group" Click="NewGroupFromSelected_Click"/>
+                                                 <MenuItem Header="Delete"
+                                                           Command="{Binding PlacementTarget.Tag.ViewModel.SceneEditor.RemoveSlotCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                           CommandParameter="{Binding}"/>
+                                            </ContextMenu>
+                                        </Grid.ContextMenu>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="Auto"/>
