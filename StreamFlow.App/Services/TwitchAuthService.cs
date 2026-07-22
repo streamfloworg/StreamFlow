@@ -279,6 +279,42 @@ public sealed class TwitchAuthService
         }
     }
 
+    public async Task<List<string>> SearchCategoriesAsync(string token, string query, CancellationToken ct = default)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(query))
+                return [];
+
+            var searchUrl = $"https://api.twitch.tv/helix/search/categories?query={Uri.EscapeDataString(query)}";
+            using var searchReq = new HttpRequestMessage(HttpMethod.Get, searchUrl);
+            searchReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            searchReq.Headers.Add("Client-Id", _clientId);
+
+            using var searchResp = await _http.SendAsync(searchReq, ct);
+            if (searchResp.IsSuccessStatusCode)
+            {
+                using var searchDoc = JsonDocument.Parse(await searchResp.Content.ReadAsStreamAsync(ct));
+                if (searchDoc.RootElement.TryGetProperty("data", out var data))
+                {
+                    var list = new List<string>();
+                    for (int i = 0; i < data.GetArrayLength(); i++)
+                    {
+                        var name = data[i].GetProperty("name").GetString();
+                        if (name is not null)
+                            list.Add(name);
+                    }
+                    return list;
+                }
+            }
+        }
+        catch
+        {
+            // Ignore API failures and return empty list
+        }
+        return [];
+    }
+
     /// <summary>Fetches the active Twitch channel's title and category/game name.</summary>
     public async Task<(string Title, string GameName)?> TryFetchChannelInfoAsync(string token, string userId, CancellationToken ct = default)
     {

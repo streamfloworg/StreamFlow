@@ -116,6 +116,62 @@ public partial class GoLiveViewModel
     [ObservableProperty]
     private string _streamCategory = ""; // In Twitch this is category/game, in YouTube this serves as description
 
+    public System.Collections.ObjectModel.ObservableCollection<string> SuggestedCategories { get; } = [];
+
+    private System.Threading.CancellationTokenSource? _categorySearchCts;
+
+    partial void OnStreamCategoryChanged(string? value)
+    {
+        if (ActiveProfile?.ServiceKind != StreamServiceKind.Twitch)
+        {
+            SuggestedCategories.Clear();
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            SuggestedCategories.Clear();
+            return;
+        }
+
+        if (SuggestedCategories.Contains(value))
+        {
+            return;
+        }
+
+        _categorySearchCts?.Cancel();
+        _categorySearchCts = new System.Threading.CancellationTokenSource();
+        var token = _categorySearchCts.Token;
+
+        Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(300, token);
+                if (token.IsCancellationRequested) return;
+
+                var accessToken = _twitchAuth.GetAccessToken();
+                if (string.IsNullOrEmpty(accessToken)) return;
+
+                var categories = await _twitchAuth.SearchCategoriesAsync(accessToken, value, token);
+
+                App.Current.Dispatcher.Invoke(() =>
+                {
+                    if (token.IsCancellationRequested) return;
+                    SuggestedCategories.Clear();
+                    foreach (var cat in categories)
+                    {
+                        SuggestedCategories.Add(cat);
+                    }
+                });
+            }
+            catch
+            {
+                // Ignore
+            }
+        }, token);
+    }
+
     [ObservableProperty]
     private string _updateInfoStatus = "";
 

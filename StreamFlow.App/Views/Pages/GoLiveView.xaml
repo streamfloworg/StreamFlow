@@ -1947,7 +1947,11 @@
                             <TextBox Text="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.StreamTitle, Mode=TwoWay}" Margin="0,0,0,8"/>
 
                             <TextBlock Text="Game / Category (Twitch) or Description (YouTube)" Style="{StaticResource FieldLabelStyle}"/>
-                            <TextBox Text="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.StreamCategory, Mode=TwoWay}" Margin="0,0,0,12"/>
+                            <ComboBox ItemsSource="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.SuggestedCategories}"
+                                      Text="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.StreamCategory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                      IsEditable="True"
+                                      IsTextSearchEnabled="False"
+                                      Margin="0,0,0,12"/>
 
                             <Button Content="Update Stream Info"
                                     Command="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.UpdateStreamInfoCommand}"
