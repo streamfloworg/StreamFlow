@@ -567,6 +567,7 @@ public partial class SceneEditorViewModel : ObservableObject
             CornerRadiusPercent = savedSlot.CornerRadiusPercent,
             OpacityPercent = savedSlot.OpacityPercent,
             RotationDegrees = savedSlot.RotationDegrees,
+            LockChildren = savedSlot.LockChildren,
         };
         if (slot.IsChatOverlay || slot.IsBlurOverlay || slot.OverlayKind == OverlayKind.Group || slot.OverlayKind == OverlayKind.Alert)
         {
@@ -2422,6 +2423,7 @@ public partial class SceneEditorViewModel : ObservableObject
         GroupChildIds = (s.Content as GroupOverlayContent)?.Children.Select(c => c.SourceId).Where(id => id is not null).ToList()
             ?? (s.Content as AlertOverlayContent)?.Children.Select(c => c.SourceId).Where(id => id is not null).ToList()!,
         Children = s.Children?.Cast<SourceSlot>().Select(ToSlotSettings).ToList(),
+        LockChildren = s.LockChildren,
         ImagePath = (s.Content as ImageOverlayContent)?.ImagePath,
         OverlayText = (s.Content as TextOverlayContent)?.OverlayText,
         OverlayColorHex = (s.Content as ColorOverlayContent)?.OverlayColor?.ToString(CultureInfo.InvariantCulture),

@@ -94,6 +94,9 @@ public partial class SourceSlot : ObservableObject
     public bool CanBeAddedToGroup => !IsPrimary && OverlayKind != StreamFlow.Core.Data.OverlayKind.Group && OverlayKind != StreamFlow.Core.Data.OverlayKind.Alert;
 
     [ObservableProperty]
+    private bool _lockChildren = true;
+
+    [ObservableProperty]
     private string? _sourceId;
 
     [ObservableProperty]
@@ -329,6 +332,14 @@ public partial class SourceSlot : ObservableObject
     [ObservableProperty]
     private bool _isInSelectedGroup;
 
+    private System.Collections.Generic.IEnumerable<SourceSlot>? GetChildrenToUpdate()
+    {
+        if (!LockChildren) return null;
+        if (Content is GroupOverlayContent group) return group.Children;
+        if (Content is AlertOverlayContent alert) return alert.Children;
+        return null;
+    }
+
     private bool _isUpdatingGroupChildren;
 
     partial void OnXPercentChanging(double value)
@@ -338,12 +349,13 @@ public partial class SourceSlot : ObservableObject
         var newX = value;
         var deltaX = newX - oldX;
 
-        if (deltaX != 0 && Content is GroupOverlayContent group)
+        var children = GetChildrenToUpdate();
+        if (deltaX != 0 && children is not null)
         {
             _isUpdatingGroupChildren = true;
             try
             {
-                foreach (var child in group.Children)
+                foreach (var child in children)
                 {
                     child.XPercent += deltaX;
                 }
@@ -362,12 +374,13 @@ public partial class SourceSlot : ObservableObject
         var newY = value;
         var deltaY = newY - oldY;
 
-        if (deltaY != 0 && Content is GroupOverlayContent group)
+        var children = GetChildrenToUpdate();
+        if (deltaY != 0 && children is not null)
         {
             _isUpdatingGroupChildren = true;
             try
             {
-                foreach (var child in group.Children)
+                foreach (var child in children)
                 {
                     child.YPercent += deltaY;
                 }
@@ -384,7 +397,8 @@ public partial class SourceSlot : ObservableObject
         if (_isUpdatingGroupChildren) return;
         var oldW = WPercent;
         var newW = value;
-        if (oldW > 0 && newW > 0 && Content is GroupOverlayContent group)
+        var children = GetChildrenToUpdate();
+        if (oldW > 0 && newW > 0 && children is not null)
         {
             var scaleX = newW / oldW;
             if (scaleX != 1.0)
@@ -393,7 +407,7 @@ public partial class SourceSlot : ObservableObject
                 try
                 {
                     var groupX = XPercent;
-                    foreach (var child in group.Children)
+                    foreach (var child in children)
                     {
                         var relativeX = child.XPercent - groupX;
                         child.WPercent *= scaleX;
@@ -413,7 +427,8 @@ public partial class SourceSlot : ObservableObject
         if (_isUpdatingGroupChildren) return;
         var oldH = HPercent;
         var newH = value;
-        if (oldH > 0 && newH > 0 && Content is GroupOverlayContent group)
+        var children = GetChildrenToUpdate();
+        if (oldH > 0 && newH > 0 && children is not null)
         {
             var scaleY = newH / oldH;
             if (scaleY != 1.0)
@@ -422,7 +437,7 @@ public partial class SourceSlot : ObservableObject
                 try
                 {
                     var groupY = YPercent;
-                    foreach (var child in group.Children)
+                    foreach (var child in children)
                     {
                         var relativeY = child.YPercent - groupY;
                         child.HPercent *= scaleY;

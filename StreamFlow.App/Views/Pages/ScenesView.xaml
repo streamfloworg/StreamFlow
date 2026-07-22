@@ -719,6 +719,9 @@
                                 <!-- Overlay Group -->
                                 <StackPanel Visibility="{Binding IsGroupOverlay, Converter={StaticResource BoolToVisibility}}">
                                     <TextBlock Text="Group Layers" Style="{StaticResource FieldLabelStyle}"/>
+                                    <CheckBox Content="Lock child overlays when moving or scaling"
+                                              IsChecked="{Binding LockChildren, Mode=TwoWay}"
+                                              Margin="0,0,0,8"/>
                                     <TextBlock Text="Select which layers belong to this group:"
                                                Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,6"/>
                                     <ListBox ItemsSource="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.AvailableGroupCandidates}"
@@ -736,7 +739,9 @@
                                 <!-- Stream Alert -->
                                 <StackPanel Visibility="{Binding IsAlertOverlay, Converter={StaticResource BoolToVisibility}}">
                                     <TextBlock Text="Stream Alert Settings" Style="{StaticResource FieldLabelStyle}"/>
-                                    
+                                    <CheckBox Content="Lock child overlays when moving or scaling"
+                                              IsChecked="{Binding LockChildren, Mode=TwoWay}"
+                                              Margin="0,0,0,8"/>
                                     <Grid Margin="0,0,0,8">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="110"/>
