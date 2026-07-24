@@ -223,25 +223,25 @@
                         <ListBoxItem x:Name="GoLiveItem">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <Path Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="14" Height="14" Data="{StaticResource GoLiveIconData}" Margin="0,0,10,0"/>
-                                <TextBlock Text="Go Live" VerticalAlignment="Center" FontSize="13"/>
+                                <TextBlock Text="Go Live" VerticalAlignment="Center" FontSize="15"/>
                             </StackPanel>
                         </ListBoxItem>
                         <ListBoxItem x:Name="AudioItem">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <Path Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="14" Height="14" Data="{StaticResource AudioIconData}" Margin="0,0,10,0"/>
-                                <TextBlock Text="Audio" VerticalAlignment="Center" FontSize="13"/>
+                                <TextBlock Text="Audio" VerticalAlignment="Center" FontSize="15"/>
                             </StackPanel>
                         </ListBoxItem>
                         <ListBoxItem x:Name="ScenesItem">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <Path Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="14" Height="14" Data="{StaticResource ScenesIconData}" Margin="0,0,10,0"/>
-                                <TextBlock Text="Scenes" VerticalAlignment="Center" FontSize="13"/>
+                                <TextBlock Text="Scenes" VerticalAlignment="Center" FontSize="15"/>
                             </StackPanel>
                         </ListBoxItem>
                         <ListBoxItem x:Name="ComposeItem" Visibility="Collapsed">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <Path Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="14" Height="14" Data="{StaticResource ComposeIconData}" Margin="0,0,10,0"/>
-                                <TextBlock Text="Compose" VerticalAlignment="Center" FontSize="13"/>
+                                <TextBlock Text="Compose" VerticalAlignment="Center" FontSize="15"/>
                             </StackPanel>
                         </ListBoxItem>
                     </ListBox>
@@ -263,13 +263,13 @@
                         <ListBoxItem x:Name="DebugWindowItem" Visibility="{Binding ViewModel.IsDebug}">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <Path Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="14" Height="14" Data="{StaticResource DebugIconData}" Margin="0,0,10,0"/>
-                                <TextBlock Text="Debug" VerticalAlignment="Center" FontSize="13"/>
+                                <TextBlock Text="Debug" VerticalAlignment="Center" FontSize="15"/>
                             </StackPanel>
                         </ListBoxItem>
                         <ListBoxItem x:Name="SettingsItem">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <Path Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="14" Height="14" Data="{StaticResource SettingsIconData}" Margin="0,0,10,0"/>
-                                <TextBlock Text="Settings" VerticalAlignment="Center" FontSize="13"/>
+                                <TextBlock Text="Settings" VerticalAlignment="Center" FontSize="15"/>
                             </StackPanel>
                         </ListBoxItem>
                     </ListBox>

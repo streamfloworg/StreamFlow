@@ -13,11 +13,22 @@
         silently resolves to nothing (that key doesn't exist) rather than erroring, which is
         exactly how the black-text bug this file fixes went unnoticed for so long.
     -->
+    <Style TargetType="{x:Type Window}">
+        <Setter Property="FontSize" Value="14"/>
+    </Style>
+    <Style TargetType="{x:Type Page}">
+        <Setter Property="FontSize" Value="14"/>
+    </Style>
+    <Style TargetType="{x:Type UserControl}">
+        <Setter Property="FontSize" Value="14"/>
+    </Style>
     <Style TargetType="{x:Type TextBlock}">
         <Setter Property="Foreground" Value="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"/>
+        <Setter Property="FontSize" Value="14"/>
     </Style>
     <Style TargetType="{x:Type Label}">
         <Setter Property="Foreground" Value="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"/>
+        <Setter Property="FontSize" Value="14"/>
     </Style>
 
     <!--
@@ -33,6 +44,7 @@
         <Setter Property="BorderBrush" Value="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Padding" Value="6,3"/>
+        <Setter Property="FontSize" Value="13"/>
         <Setter Property="HasDropShadow" Value="True"/>
     </Style>
 </ResourceDictionary>

@@ -15,7 +15,9 @@ internal sealed class NullVisibilityConverter : IValueConverter
     {
         if (value == null)
         {
-            return Visibility.Hidden;
+            if (parameter is bool hide && hide)
+                return Visibility.Hidden;
+            return Visibility.Collapsed;
         }
 
         return Visibility.Visible;

@@ -120,7 +120,7 @@ public partial class GoLiveViewModel
 
     private System.Threading.CancellationTokenSource? _categorySearchCts;
 
-    partial void OnStreamCategoryChanged(string? value)
+    partial void OnStreamCategoryChanged(string value)
     {
         if (ActiveProfile?.ServiceKind != StreamServiceKind.Twitch)
         {

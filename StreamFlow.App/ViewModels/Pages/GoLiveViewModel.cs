@@ -645,8 +645,9 @@ public partial class GoLiveViewModel : ViewModel
                     UpdateHistory(status.Fps, status.BitrateKbps);
                     break;
                 case ErrorEvent error:
-                    if (error.Code == "capture_error" && !_hasReceivedFirstSourcesEvent)
+                    if (error.Code == "capture_error")
                     {
+                        _logger.LogWarning("Capture error from core: {Message}", error.Message);
                         break;
                     }
                     StatusLabel = "Error";

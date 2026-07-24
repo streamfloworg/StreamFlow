@@ -38,19 +38,20 @@ public partial class SourceSlot : ObservableObject
     public bool IsBlurOverlay => Content is BlurOverlayContent;
     public bool IsTimerOverlay => Content is TimerOverlayContent;
     public bool IsAlertOverlay => Content is AlertOverlayContent;
-    public bool IsGroupOverlay => Content is GroupOverlayContent || Content is AlertOverlayContent;
+    public bool IsAdvancedOverlay => Content is IAdvancedOverlayContent;
+    public bool IsGroupOverlay => Content is GroupOverlayContent;
 
     /// <summary>True for overlay kinds registered once via AddStaticOverlay (image/text/color)
     /// — no ongoing session, so Start/StopCapture are skipped for these. False for video
     /// overlays, which decode/loop continuously in the core exactly like a live capture.</summary>
-    public bool IsStaticOverlay => IsOverlay && !IsVideoOverlay && !IsGroupOverlay;
+    public bool IsStaticOverlay => IsOverlay && !IsVideoOverlay && !IsGroupOverlay && !IsAdvancedOverlay;
 
     /// <summary>Whether GoLiveView should render a live-updating thumbnail for this slot — every
     /// capture source and video overlay gets its own frames forwarded over the data pipe,
     /// primary included (it's just another positioned layer now, no longer shown via a separate
     /// dedicated preview element); static overlays render directly from their own content
     /// instead.</summary>
-    public bool HasLiveThumbnail => !IsStaticOverlay && !IsGroupOverlay;
+    public bool HasLiveThumbnail => !IsStaticOverlay && !IsGroupOverlay && !IsAdvancedOverlay;
 
     /// <summary>Live video thumbnail for a PiP capture source, updated by GoLiveView as raw
     /// frames arrive over the data pipe tagged with this slot's SourceId. Null until the core
@@ -74,6 +75,7 @@ public partial class SourceSlot : ObservableObject
         OnPropertyChanged(nameof(IsBlurOverlay));
         OnPropertyChanged(nameof(IsTimerOverlay));
         OnPropertyChanged(nameof(IsAlertOverlay));
+        OnPropertyChanged(nameof(IsAdvancedOverlay));
         OnPropertyChanged(nameof(IsGroupOverlay));
         OnPropertyChanged(nameof(IsStaticOverlay));
         OnPropertyChanged(nameof(HasLiveThumbnail));
@@ -86,7 +88,6 @@ public partial class SourceSlot : ObservableObject
         get
         {
             if (Content is GroupOverlayContent group) return group.Children;
-            if (Content is AlertOverlayContent alert) return alert.Children;
             return null;
         }
     }
@@ -293,6 +294,7 @@ public partial class SourceSlot : ObservableObject
 
     partial void OnWPercentChanged(double value)
     {
+        NotifyRenderBoundsChanged();
         if (_isSettingDimensions) return;
         if (IsAspectLocked && AspectRatio is double ar && ar > 0)
         {
@@ -312,6 +314,7 @@ public partial class SourceSlot : ObservableObject
 
     partial void OnHPercentChanged(double value)
     {
+        NotifyRenderBoundsChanged();
         if (_isSettingDimensions) return;
         if (IsAspectLocked && AspectRatio is double ar && ar > 0)
         {
@@ -336,7 +339,6 @@ public partial class SourceSlot : ObservableObject
     {
         if (!LockChildren) return null;
         if (Content is GroupOverlayContent group) return group.Children;
-        if (Content is AlertOverlayContent alert) return alert.Children;
         return null;
     }
 
@@ -458,8 +460,36 @@ public partial class SourceSlot : ObservableObject
     partial void OnParentGroupChanged(SourceSlot? value)
     {
         OnPropertyChanged(nameof(VisualLeftMargin));
+        NotifyRenderBoundsChanged();
     }
 
     public System.Windows.Thickness VisualLeftMargin =>
         ParentGroup is not null ? new System.Windows.Thickness(24, 2, 4, 2) : new System.Windows.Thickness(4, 2, 4, 2);
+
+    public double RenderXPercent => ParentGroup != null ? ParentGroup.RenderXPercent + (XPercent / 100.0) * ParentGroup.RenderWPercent : XPercent;
+    public double RenderYPercent => ParentGroup != null ? ParentGroup.RenderYPercent + (YPercent / 100.0) * ParentGroup.RenderHPercent : YPercent;
+    public double RenderWPercent => ParentGroup != null ? (WPercent / 100.0) * ParentGroup.RenderWPercent : WPercent;
+    public double RenderHPercent => ParentGroup != null ? (HPercent / 100.0) * ParentGroup.RenderHPercent : HPercent;
+
+    public void NotifyRenderBoundsChanged()
+    {
+        OnPropertyChanged(nameof(RenderXPercent));
+        OnPropertyChanged(nameof(RenderYPercent));
+        OnPropertyChanged(nameof(RenderWPercent));
+        OnPropertyChanged(nameof(RenderHPercent));
+
+        if (Content is GroupOverlayContent group)
+        {
+            foreach (var child in group.Children)
+                child.NotifyRenderBoundsChanged();
+        }
+        else if (Content is AlertOverlayContent alert)
+        {
+            foreach (var child in alert.Children)
+                child.NotifyRenderBoundsChanged();
+        }
+    }
+
+    partial void OnXPercentChanged(double value) => NotifyRenderBoundsChanged();
+    partial void OnYPercentChanged(double value) => NotifyRenderBoundsChanged();
 }

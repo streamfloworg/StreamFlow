@@ -34,6 +34,11 @@ public enum SceneTransitionKind { Cut, Fade, SlideLeft, SlideRight, SlideUp, Sli
 /// added/removed or the active scene changed, so the chat connection should be re-evaluated —
 /// kept separate from Changed since that fires on every drag tick and reconnecting chat that
 /// often would cause visible churn).</summary>
+public sealed record CanvasResolutionOption(string DisplayName, uint Width, uint Height, bool IsCustom = false)
+{
+    public override string ToString() => DisplayName;
+}
+
 public partial class SceneEditorViewModel : ObservableObject
 {
     private readonly CoreBridgeService _core;
@@ -160,6 +165,8 @@ public partial class SceneEditorViewModel : ObservableObject
             ctx.AddValue("currency", e.Currency);
             return TriggerAlertsAsync(ctx);
         }));
+
+        AvailableSources.CollectionChanged += (_, _) => RebuildAvailableCanvasResolutions();
     }
 
     private async Task TriggerAlertsAsync(AlertTriggerContext context)
@@ -385,6 +392,11 @@ public partial class SceneEditorViewModel : ObservableObject
     [ObservableProperty]
     private GoLiveSceneViewModel? _activeScene;
 
+    partial void OnActiveSceneChanged(GoLiveSceneViewModel? value)
+    {
+        RebuildAvailableCanvasResolutions();
+    }
+
     [ObservableProperty]
     private GoLiveSceneViewModel? _defaultScene;
 
@@ -443,6 +455,11 @@ public partial class SceneEditorViewModel : ObservableObject
                 foreach (var child in FlattenSlots(slot.Children.Cast<SourceSlot>()))
                     yield return child;
             }
+            else if (slot.Content is IAdvancedOverlayContent advanced)
+            {
+                foreach (var child in FlattenSlots(advanced.SubLayers))
+                    yield return child;
+            }
         }
     }
 
@@ -455,7 +472,116 @@ public partial class SceneEditorViewModel : ObservableObject
     public SourceSlot? PrimarySlot => Slots.FirstOrDefault(s => s.IsPrimary);
 
     public IEnumerable<SourceSlot> AvailableGroupCandidates =>
-        FlattenedSlots.Where(s => s != SelectedSlot && s.OverlayKind != OverlayKind.Group && s.OverlayKind != OverlayKind.Alert && !s.IsPrimary) ?? [];
+        FlattenedSlots.Where(s => s != SelectedSlot && s.OverlayKind != OverlayKind.Group && !s.IsAdvancedOverlay && !s.IsPrimary) ?? [];
+
+    [RelayCommand]
+    private void AddSubLayerToAlert(string layerKind)
+    {
+        if (SelectedSlot?.Content is not AlertOverlayContent alert) return;
+
+        SourceSlot? newSubSlot = null;
+        var sourceId = $"overlay:{Guid.NewGuid():N}";
+
+        switch (layerKind.ToLowerInvariant())
+        {
+            case "text":
+                var textContent = new TextOverlayContent { OverlayText = "New Alert Text" };
+                newSubSlot = new SourceSlot(isPrimary: false, x: 10, y: 35, w: 80, h: 30, isOverlay: true, content: textContent)
+                {
+                    DisplayName = "Alert Text",
+                    SourceId = sourceId,
+                    IsAspectLocked = false
+                };
+                break;
+            case "image":
+                var imageContent = new ImageOverlayContent();
+                newSubSlot = new SourceSlot(isPrimary: false, x: 20, y: 20, w: 60, h: 60, isOverlay: true, content: imageContent)
+                {
+                    DisplayName = "Alert Image",
+                    SourceId = sourceId,
+                    IsAspectLocked = false
+                };
+                break;
+            case "color":
+                var colorContent = new ColorOverlayContent();
+                newSubSlot = new SourceSlot(isPrimary: false, x: 20, y: 20, w: 60, h: 60, isOverlay: true, content: colorContent)
+                {
+                    DisplayName = "Alert Color Box",
+                    SourceId = sourceId,
+                    IsAspectLocked = false
+                };
+                break;
+            case "video":
+                var videoContent = new VideoOverlayContent();
+                newSubSlot = new SourceSlot(isPrimary: false, x: 20, y: 20, w: 60, h: 60, isOverlay: true, content: videoContent)
+                {
+                    DisplayName = "Alert Video",
+                    SourceId = sourceId,
+                    IsAspectLocked = false
+                };
+                break;
+        }
+
+        if (newSubSlot is not null)
+        {
+            // Sync canvas reference so PercentToDynamicPixel converters get the correct height
+            if (ActiveScene is not null)
+            {
+                newSubSlot.CanvasWidth = ActiveScene.CanvasWidth;
+                newSubSlot.CanvasHeight = ActiveScene.CanvasHeight;
+            }
+
+            newSubSlot.ParentGroup = SelectedSlot;
+            newSubSlot.PropertyChanged += OnSlotPropertyChanged;
+            HookContentPropertyChanged(newSubSlot);
+            alert.SubLayers.Add(newSubSlot);
+            alert.SelectedSubLayer = newSubSlot;
+
+            // FlattenedSlots is a computed IEnumerable — must notify explicitly so ItemsControl re-enumerates
+            OnPropertyChanged(nameof(FlattenedSlots));
+
+            if (newSubSlot.IsStaticOverlay && newSubSlot.SourceId is not null)
+            {
+                _ = RestoreStaticOverlayAsync(newSubSlot, newSubSlot.SourceId);
+            }
+
+            ScheduleLiveConfigPush();
+            NotifyChanged();
+        }
+    }
+
+    [RelayCommand]
+    private void RemoveSubLayerFromAlert(SourceSlot subSlot)
+    {
+        if (SelectedSlot?.Content is AlertOverlayContent alert && subSlot is not null)
+        {
+            alert.SubLayers.Remove(subSlot);
+            if (alert.SelectedSubLayer == subSlot)
+                alert.SelectedSubLayer = alert.SubLayers.FirstOrDefault();
+            // FlattenedSlots is a computed IEnumerable — must notify explicitly so ItemsControl re-enumerates
+            OnPropertyChanged(nameof(FlattenedSlots));
+            ScheduleLiveConfigPush();
+            NotifyChanged();
+        }
+    }
+
+    [RelayCommand]
+    private void InsertTextVariable(string variableKey)
+    {
+        if (SelectedSlot is null) return;
+
+        var varTag = $"%{variableKey}%";
+        if (SelectedSlot.Content is TextOverlayContent textContent)
+        {
+            textContent.OverlayText += (string.IsNullOrEmpty(textContent.OverlayText) ? "" : " ") + varTag;
+        }
+        else if (SelectedSlot.Content is AlertOverlayContent alert && alert.SelectedSubLayer?.Content is TextOverlayContent alertText)
+        {
+            alertText.OverlayText += (string.IsNullOrEmpty(alertText.OverlayText) ? "" : " ") + varTag;
+        }
+        ScheduleLiveConfigPush();
+        NotifyChanged();
+    }
 
     [ObservableProperty]
     private SourceSlot? _selectedSlot;
@@ -1437,6 +1563,21 @@ public partial class SceneEditorViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void BrowseOverlayVideo(SourceSlot slot)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Select Overlay Video",
+            Filter = "Video Files|*.mp4;*.mov;*.mkv;*.webm;*.avi;*.m4v|All Files|*.*",
+            CheckFileExists = true,
+        };
+        if (dialog.ShowDialog() != true) return;
+        if (slot.Content is not VideoOverlayContent video) return;
+
+        video.VideoPath = dialog.FileName;
+    }
+
+    [RelayCommand]
     private void ChangeOverlayColor(SourceSlot slot)
     {
         if (slot.Content is not ColorOverlayContent color) return;
@@ -1499,23 +1640,6 @@ public partial class SceneEditorViewModel : ObservableObject
         if (slot.Content is not IChromaKeyable keyable) return;
         if (EyedropperWindow.PickColor() is System.Windows.Media.Color color)
             keyable.ChromaKeyColor = color;
-    }
-
-    [RelayCommand]
-    private void BrowseOverlayVideo(SourceSlot slot)
-    {
-        if (slot.Content is not VideoOverlayContent video) return;
-
-        var dialog = new Microsoft.Win32.OpenFileDialog
-        {
-            Title = "Select Overlay Video",
-            Filter = "Video Files|*.mp4;*.mov;*.mkv;*.webm;*.avi;*.m4v|All Files|*.*",
-            CheckFileExists = true,
-        };
-        if (dialog.ShowDialog() != true) return;
-
-        video.VideoPath = dialog.FileName; // Triggers the SourceId rebuild above.
-        slot.DisplayName = Path.GetFileName(dialog.FileName);
     }
 
     [ObservableProperty]
@@ -1634,32 +1758,7 @@ public partial class SceneEditorViewModel : ObservableObject
                         NotifyChanged();
                         OnPropertyChanged(nameof(FlattenedSlots));
                     }
-                    else if (groupSlot.Content is AlertOverlayContent alertGroup)
-                    {
-                        if (slot.IsInSelectedGroup)
-                        {
-                            if (slot.OverlayKind != OverlayKind.Alert && !alertGroup.Children.Contains(slot))
-                            {
-                                RemoveSlotFromGroup(slot);
-                                alertGroup.Children.Add(slot);
-                                slot.ParentGroup = groupSlot;
-                                Slots.Remove(slot);
-                            }
-                        }
-                        else
-                        {
-                            alertGroup.Children.Remove(slot);
-                            slot.ParentGroup = null;
 
-                            var groupIndex = Slots.IndexOf(groupSlot);
-                            if (groupIndex >= 0)
-                                Slots.Insert(groupIndex + 1, slot);
-                            else
-                                Slots.Add(slot);
-                        }
-                        NotifyChanged();
-                        OnPropertyChanged(nameof(FlattenedSlots));
-                    }
                 }
             }
         }
@@ -2093,7 +2192,7 @@ public partial class SceneEditorViewModel : ObservableObject
     }
 
     public StreamSourceDef[] BuildStreamSources() =>
-        Slots.Where(s => !string.IsNullOrEmpty(s.SourceId))
+        FlattenedSlots.Where(s => !string.IsNullOrEmpty(s.SourceId) && s.Content is not AlertOverlayContent)
             .Select(s => {
                 var opacity = s.OpacityPercent / 100.0;
                 var x = s.XPercent;
@@ -2117,13 +2216,23 @@ public partial class SceneEditorViewModel : ObservableObject
                         var offsetX = alert.IsAlertActive ? alert.AnimatingXOffsetPercent : 0.0;
                         var offsetY = alert.IsAlertActive ? alert.AnimatingYOffsetPercent : 0.0;
 
-                        var parentCenterX = parent.XPercent + parent.WPercent / 2.0;
-                        var parentCenterY = parent.YPercent + parent.HPercent / 2.0;
-                        var childCenterX = x + w / 2.0;
-                        var childCenterY = y + h / 2.0;
+                        var parentX = parent.XPercent;
+                        var parentY = parent.YPercent;
+                        var parentW = parent.WPercent;
+                        var parentH = parent.HPercent;
 
-                        var newW = w * scale;
-                        var newH = h * scale;
+                        var relX = parentX + (x / 100.0) * parentW;
+                        var relY = parentY + (y / 100.0) * parentH;
+                        var relW = (w / 100.0) * parentW;
+                        var relH = (h / 100.0) * parentH;
+
+                        var parentCenterX = parentX + parentW / 2.0;
+                        var parentCenterY = parentY + parentH / 2.0;
+                        var childCenterX = relX + relW / 2.0;
+                        var childCenterY = relY + relH / 2.0;
+
+                        var newW = relW * scale;
+                        var newH = relH * scale;
                         var newChildCenterX = parentCenterX + offsetX + (childCenterX - parentCenterX) * scale;
                         var newChildCenterY = parentCenterY + offsetY + (childCenterY - parentCenterY) * scale;
 
@@ -2134,31 +2243,19 @@ public partial class SceneEditorViewModel : ObservableObject
                     }
                     else
                     {
+                        var parentX = parent.XPercent;
+                        var parentY = parent.YPercent;
+                        var parentW = parent.WPercent;
+                        var parentH = parent.HPercent;
+
+                        x = parentX + (x / 100.0) * parentW;
+                        y = parentY + (y / 100.0) * parentH;
+                        w = (w / 100.0) * parentW;
+                        h = (h / 100.0) * parentH;
+
                         opacity *= parent.OpacityPercent / 100.0;
                     }
                     current = parent;
-                }
-
-                if (s.Content is AlertOverlayContent selfAlert)
-                {
-                    var selfOpacity = selfAlert.IsAlertActive 
-                        ? selfAlert.AnimatingOpacity 
-                        : ((!_isLive && s.IsSelected) ? (s.OpacityPercent / 100.0) : 0.0);
-                    opacity = selfOpacity;
-
-                    var scale = selfAlert.IsAlertActive ? (selfAlert.AnimatingScalePercent / 100.0) : 1.0;
-                    var offsetX = selfAlert.IsAlertActive ? selfAlert.AnimatingXOffsetPercent : 0.0;
-                    var offsetY = selfAlert.IsAlertActive ? selfAlert.AnimatingYOffsetPercent : 0.0;
-
-                    var centerX = x + w / 2.0;
-                    var centerY = y + h / 2.0;
-
-                    var newW = w * scale;
-                    var newH = h * scale;
-                    x = centerX + offsetX - newW / 2.0;
-                    y = centerY + offsetY - newH / 2.0;
-                    w = newW;
-                    h = newH;
                 }
 
                 return new StreamSourceDef(
@@ -2225,11 +2322,13 @@ public partial class SceneEditorViewModel : ObservableObject
         }
         else if (slot.Content is AlertOverlayContent deletedAlert)
         {
-            foreach (var child in deletedAlert.Children)
+            foreach (var child in deletedAlert.Children.ToList())
             {
+                child.PropertyChanged -= OnSlotPropertyChanged;
                 child.ParentGroup = null;
-                Slots.Add(child);
+                _ = ReleaseCaptureAsync(child);
             }
+            deletedAlert.Children.Clear();
         }
 
         // The compositor (and the data pipe's "is this a live PiP thumbnail" check) only ever
@@ -2369,6 +2468,136 @@ public partial class SceneEditorViewModel : ObservableObject
     [ObservableProperty]
     private uint _manualCanvasHeight = 1080;
 
+    [ObservableProperty]
+    private ObservableCollection<CanvasResolutionOption> _availableCanvasResolutions = [];
+
+    [ObservableProperty]
+    private CanvasResolutionOption? _selectedCanvasResolution;
+
+    partial void OnSelectedCanvasResolutionChanged(CanvasResolutionOption? value)
+    {
+        if (value is null || ActiveScene is null) return;
+        if (value.IsCustom) return;
+
+        ManualCanvasWidth = value.Width;
+        ManualCanvasHeight = value.Height;
+        SetCanvasResolution(ActiveScene, value.Width, value.Height);
+    }
+
+    public void RebuildAvailableCanvasResolutions()
+    {
+        var list = new List<CanvasResolutionOption>
+        {
+            new("1080p Full HD (1920×1080) - 16:9", 1920, 1080),
+            new("720p HD (1280×720) - 16:9", 1280, 720),
+            new("1440p QHD (2560×1440) - 16:9", 2560, 1440),
+            new("4K Ultra HD (3840×2160) - 16:9", 3840, 2160),
+            new("1080p Vertical (1080×1920) - 9:16", 1080, 1920),
+            new("720p Vertical (720×1280) - 9:16", 720, 1280)
+        };
+
+        foreach (var source in AvailableSources)
+        {
+            if (source.Width > 0 && source.Height > 0)
+            {
+                if (!list.Any(r => r.Width == source.Width && r.Height == source.Height))
+                {
+                    list.Add(new($"Match {source.Name} ({source.Width}×{source.Height})", source.Width, source.Height));
+                }
+            }
+        }
+
+        list.Add(new("Custom…", 0, 0, IsCustom: true));
+
+        AvailableCanvasResolutions = new ObservableCollection<CanvasResolutionOption>(list);
+        SyncSelectedCanvasResolution();
+    }
+
+    private void SyncSelectedCanvasResolution()
+    {
+        if (ActiveScene is null) return;
+        var currentW = ActiveScene.CanvasResolutionWidth ?? ManualCanvasWidth;
+        var currentH = ActiveScene.CanvasResolutionHeight ?? ManualCanvasHeight;
+
+        var match = AvailableCanvasResolutions.FirstOrDefault(r => !r.IsCustom && r.Width == currentW && r.Height == currentH);
+        _selectedCanvasResolution = match ?? AvailableCanvasResolutions.FirstOrDefault(r => r.IsCustom);
+        OnPropertyChanged(nameof(SelectedCanvasResolution));
+    }
+
+    [RelayCommand]
+    private void ApplyLayoutPreset(string preset)
+    {
+        if (SelectedSlot is null) return;
+        var targetSlot = (SelectedSlot.Content is AlertOverlayContent alert && alert.SelectedSubLayer is not null)
+            ? alert.SelectedSubLayer
+            : SelectedSlot;
+
+        switch (preset.ToLowerInvariant())
+        {
+            case "full":
+                targetSlot.XPercent = 0;
+                targetSlot.YPercent = 0;
+                targetSlot.WPercent = 100;
+                targetSlot.HPercent = 100;
+                break;
+            case "lefthalf":
+                targetSlot.XPercent = 0;
+                targetSlot.YPercent = 0;
+                targetSlot.WPercent = 50;
+                targetSlot.HPercent = 100;
+                break;
+            case "righthalf":
+                targetSlot.XPercent = 50;
+                targetSlot.YPercent = 0;
+                targetSlot.WPercent = 50;
+                targetSlot.HPercent = 100;
+                break;
+            case "topleftpip":
+                targetSlot.XPercent = 2;
+                targetSlot.YPercent = 2;
+                targetSlot.WPercent = 30;
+                targetSlot.HPercent = 30;
+                break;
+            case "toprightpip":
+                targetSlot.XPercent = 68;
+                targetSlot.YPercent = 2;
+                targetSlot.WPercent = 30;
+                targetSlot.HPercent = 30;
+                break;
+            case "bottomleftpip":
+                targetSlot.XPercent = 2;
+                targetSlot.YPercent = 68;
+                targetSlot.WPercent = 30;
+                targetSlot.HPercent = 30;
+                break;
+            case "bottomrightpip":
+                targetSlot.XPercent = 68;
+                targetSlot.YPercent = 68;
+                targetSlot.WPercent = 30;
+                targetSlot.HPercent = 30;
+                break;
+            case "center":
+                targetSlot.XPercent = Math.Max(0, (100.0 - targetSlot.WPercent) / 2.0);
+                targetSlot.YPercent = Math.Max(0, (100.0 - targetSlot.HPercent) / 2.0);
+                break;
+        }
+
+        ScheduleLiveConfigPush();
+        NotifyChanged();
+    }
+
+    [RelayCommand]
+    private void SetTimerDurationMinutes(string minutesStr)
+    {
+        if (SelectedSlot?.Content is TimerOverlayContent timerContent &&
+            double.TryParse(minutesStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double minutes))
+        {
+            timerContent.TimerDurationSeconds = (int)(minutes * 60.0);
+            ScheduleLiveConfigPush();
+            NotifyChanged();
+        }
+    }
+
     /// <summary>Manually sets the active scene's real canvas resolution — for a primary-less
     /// scene, since there's otherwise no way to know what size to render overlays at. A no-op
     /// effect-wise once a primary exists and reports its own resolution, since that's always
@@ -2420,6 +2649,16 @@ public partial class SceneEditorViewModel : ObservableObject
         {
             slot.CanvasWidth = SourceSlot.DefaultCanvasWidth;
             slot.CanvasHeight = canvasHeight;
+
+            // Propagate to any alert sub-layers so their PercentToDynamicPixel conversions use the correct height
+            if (slot.Content is AlertOverlayContent alertContent)
+            {
+                foreach (var subSlot in alertContent.SubLayers)
+                {
+                    subSlot.CanvasWidth = SourceSlot.DefaultCanvasWidth;
+                    subSlot.CanvasHeight = canvasHeight;
+                }
+            }
         }
     }
 

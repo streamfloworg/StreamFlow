@@ -310,11 +310,22 @@ public partial class GroupOverlayContent : ObservableObject, IOverlayContent
     public ObservableCollection<SourceSlot> Children { get; } = [];
 }
 
-public partial class AlertOverlayContent : ObservableObject, IOverlayContent
+public partial class AlertOverlayContent : ObservableObject, IAdvancedOverlayContent
 {
     public OverlayKind Kind => OverlayKind.Alert;
 
     public ObservableCollection<SourceSlot> Children { get; } = [];
+
+    public ObservableCollection<SourceSlot> SubLayers => Children;
+
+    [ObservableProperty]
+    private SourceSlot? _selectedSubLayer;
+
+    partial void OnSelectedSubLayerChanged(SourceSlot? oldValue, SourceSlot? newValue)
+    {
+        if (oldValue is not null) oldValue.IsSelected = false;
+        if (newValue is not null) newValue.IsSelected = true;
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(AvailableVariables))]

@@ -805,7 +805,6 @@
                                         <Button Content="Bits" Margin="0,0,4,4" Padding="8,3" FontSize="10" Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.TestAlertWithTypeAndTriggerCommand}" CommandParameter="TwitchBits"/>
                                         <Button Content="Raid" Margin="0,0,4,4" Padding="8,3" FontSize="10" Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.TestAlertWithTypeAndTriggerCommand}" CommandParameter="TwitchRaid"/>
                                     </WrapPanel>
-
                                     <TextBlock Text="YouTube:" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" FontWeight="Bold" Margin="0,2,0,2"/>
                                     <WrapPanel Margin="0,0,0,6">
                                         <Button Content="Subscriber" Margin="0,0,4,4" Padding="8,3" FontSize="10" Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.TestAlertWithTypeAndTriggerCommand}" CommandParameter="YouTubeSubscriber"/>
@@ -818,17 +817,187 @@
                                         <Button Content="Donation" Margin="0,0,4,4" Padding="8,3" FontSize="10" Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.TestAlertWithTypeAndTriggerCommand}" CommandParameter="GeneralDonation"/>
                                     </WrapPanel>
 
-                                    <TextBlock Text="Select which layers belong to this alert:" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"/>
-                                    <ListBox ItemsSource="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.AvailableGroupCandidates}"
-                                             Background="Transparent" BorderThickness="0" MaxHeight="150" ScrollViewer.VerticalScrollBarVisibility="Auto" Margin="0,0,0,8">
-                                        <ListBox.ItemTemplate>
-                                            <DataTemplate DataType="{x:Type vm:SourceSlot}">
-                                                <CheckBox Content="{Binding DisplayName}"
-                                                          IsChecked="{Binding IsInSelectedGroup, Mode=TwoWay}"
-                                                          Margin="0,2"/>
-                                            </DataTemplate>
-                                        </ListBox.ItemTemplate>
-                                    </ListBox>
+                                     <!-- Alert Sub-Layers List & Quick Inspector -->
+                                     <TextBlock Text="Alert Sub-Layers" Style="{StaticResource FieldLabelStyle}" Margin="0,8,0,4"/>
+                                     <Grid Margin="0,0,0,6">
+                                         <Grid.ColumnDefinitions>
+                                             <ColumnDefinition Width="*"/>
+                                             <ColumnDefinition Width="Auto"/>
+                                         </Grid.ColumnDefinitions>
+                                         <TextBlock Text="Sub-Content Elements" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                         <Button Grid.Column="1" Content="➕ Add Sub-Layer ▾" Padding="6,2" FontSize="10" Click="AddAlertSubLayerMenu_Click">
+                                             <Button.ContextMenu>
+                                                 <ContextMenu>
+                                                     <MenuItem Header="Text Layer" Command="{Binding AddSubLayerToAlertCommand}" CommandParameter="Text"/>
+                                                     <MenuItem Header="Image Layer" Command="{Binding AddSubLayerToAlertCommand}" CommandParameter="Image"/>
+                                                     <MenuItem Header="Video Layer" Command="{Binding AddSubLayerToAlertCommand}" CommandParameter="Video"/>
+                                                     <MenuItem Header="Color Box Layer" Command="{Binding AddSubLayerToAlertCommand}" CommandParameter="Color"/>
+                                                 </ContextMenu>
+                                             </Button.ContextMenu>
+                                         </Button>
+                                     </Grid>
+
+                                     <ListBox ItemsSource="{Binding Content.SubLayers}" SelectedItem="{Binding Content.SelectedSubLayer, Mode=TwoWay}"
+                                              Background="Transparent" BorderThickness="1" BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}"
+                                              MaxHeight="150" ScrollViewer.VerticalScrollBarVisibility="Auto" Margin="0,0,0,8">
+                                         <ListBox.ItemTemplate>
+                                             <DataTemplate DataType="{x:Type vm:SourceSlot}">
+                                                 <Grid Margin="2,2,2,2">
+                                                     <Grid.ColumnDefinitions>
+                                                         <ColumnDefinition Width="*"/>
+                                                         <ColumnDefinition Width="Auto"/>
+                                                     </Grid.ColumnDefinitions>
+                                                     <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                                                     <Button Grid.Column="1" Content="🗑️" Padding="4,1" FontSize="10" Background="Transparent" BorderThickness="0"
+                                                             Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.RemoveSubLayerFromAlertCommand}"
+                                                             CommandParameter="{Binding}" ToolTip="Delete Sub-Layer"/>
+                                                 </Grid>
+                                             </DataTemplate>
+                                         </ListBox.ItemTemplate>
+                                     </ListBox>
+
+                                     <!-- Selected Sub-Layer Quick Inspector -->
+                                     <StackPanel Visibility="{Binding Content.SelectedSubLayer, Converter={StaticResource NullToVisibility}, ConverterParameter=True}" Margin="0,0,0,8">
+                                         <TextBlock Text="{Binding Content.SelectedSubLayer.DisplayName, StringFormat=Selected Element: {0}}" FontWeight="Bold" FontSize="11" Margin="0,4,0,6"/>
+
+                                         <!-- Text Overlay Sub-Layer Properties -->
+                                         <StackPanel Visibility="{Binding Content.SelectedSubLayer.IsTextOverlay, Converter={StaticResource BoolToVisibility}}">
+                                             <Grid Margin="0,0,0,4">
+                                                 <Grid.ColumnDefinitions>
+                                                     <ColumnDefinition Width="*"/>
+                                                     <ColumnDefinition Width="Auto"/>
+                                                 </Grid.ColumnDefinitions>
+                                                 <TextBlock Text="Text Template" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                                 <Button Grid.Column="1" Content="➕ Insert Variable ▾" Padding="6,2" FontSize="10" Click="InsertVariableMenu_Click">
+                                                     <Button.ContextMenu>
+                                                         <ContextMenu x:Name="AlertTextVariableContextMenu">
+                                                             <MenuItem Header="%followerName%" Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.InsertTextVariableCommand}" CommandParameter="followerName"/>
+                                                             <MenuItem Header="%subscriberName%" Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.InsertTextVariableCommand}" CommandParameter="subscriberName"/>
+                                                             <MenuItem Header="%viewerCount%" Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.InsertTextVariableCommand}" CommandParameter="viewerCount"/>
+                                                             <MenuItem Header="%streamTitle%" Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.InsertTextVariableCommand}" CommandParameter="streamTitle"/>
+                                                             <MenuItem Header="%game%" Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.InsertTextVariableCommand}" CommandParameter="game"/>
+                                                         </ContextMenu>
+                                                     </Button.ContextMenu>
+                                                 </Button>
+                                             </Grid>
+                                             <TextBox Text="{Binding Content.SelectedSubLayer.Content.OverlayText, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" AcceptsReturn="True" MinHeight="45" Margin="0,0,0,6"/>
+                                         </StackPanel>
+
+                                         <!-- Image Overlay Sub-Layer Properties -->
+                                         <StackPanel Visibility="{Binding Content.SelectedSubLayer.IsImageOverlay, Converter={StaticResource BoolToVisibility}}">
+                                             <TextBlock Text="Image File" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,2"/>
+                                             <Grid Margin="0,0,0,6">
+                                                 <Grid.ColumnDefinitions>
+                                                     <ColumnDefinition Width="*"/>
+                                                     <ColumnDefinition Width="Auto"/>
+                                                 </Grid.ColumnDefinitions>
+                                                 <TextBox Text="{Binding Content.SelectedSubLayer.Content.ImagePath}" IsReadOnly="True" VerticalAlignment="Center" FontSize="11"/>
+                                                 <Button Grid.Column="1" Content="Browse Image..." Margin="4,0,0,0" Padding="8,3" FontSize="10"
+                                                         Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.BrowseOverlayImageCommand}"
+                                                         CommandParameter="{Binding Content.SelectedSubLayer}"/>
+                                             </Grid>
+                                         </StackPanel>
+
+                                         <!-- Video Overlay Sub-Layer Properties -->
+                                         <StackPanel Visibility="{Binding Content.SelectedSubLayer.IsVideoOverlay, Converter={StaticResource BoolToVisibility}}">
+                                             <TextBlock Text="Video File" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,2"/>
+                                             <Grid Margin="0,0,0,6">
+                                                 <Grid.ColumnDefinitions>
+                                                     <ColumnDefinition Width="*"/>
+                                                     <ColumnDefinition Width="Auto"/>
+                                                 </Grid.ColumnDefinitions>
+                                                 <TextBox Text="{Binding Content.SelectedSubLayer.Content.VideoPath}" IsReadOnly="True" VerticalAlignment="Center" FontSize="11"/>
+                                                 <Button Grid.Column="1" Content="Browse Video..." Margin="4,0,0,0" Padding="8,3" FontSize="10"
+                                                         Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.BrowseOverlayVideoCommand}"
+                                                         CommandParameter="{Binding Content.SelectedSubLayer}"/>
+                                             </Grid>
+                                             <CheckBox Content="Loop video playback" IsChecked="{Binding Content.SelectedSubLayer.Content.LoopVideo, Mode=TwoWay}" Margin="0,0,0,6"/>
+                                         </StackPanel>
+
+                                         <!-- Color Overlay Sub-Layer Properties -->
+                                         <StackPanel Visibility="{Binding Content.SelectedSubLayer.IsColorOverlay, Converter={StaticResource BoolToVisibility}}">
+                                             <TextBlock Text="Fill Color" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,2"/>
+                                             <Grid Margin="0,0,0,6">
+                                                 <Grid.ColumnDefinitions>
+                                                     <ColumnDefinition Width="*"/>
+                                                     <ColumnDefinition Width="Auto"/>
+                                                 </Grid.ColumnDefinitions>
+                                                 <Button Grid.Column="1" Content="Change Color..." Padding="8,3" FontSize="10" VerticalAlignment="Center"
+                                                         Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.ChangeOverlayColorCommand}"
+                                                         CommandParameter="{Binding Content.SelectedSubLayer}"/>
+                                             </Grid>
+                                         </StackPanel>
+
+                                         <!-- Chroma Key Controls (Image & Video Sub-Layers) -->
+                                         <StackPanel Visibility="{Binding Content.SelectedSubLayer.SupportsChromaKey, Converter={StaticResource BoolToVisibility}}" Margin="0,4,0,4">
+                                             <CheckBox Content="Enable Chroma Key" IsChecked="{Binding Content.SelectedSubLayer.Content.ChromaKeyEnabled, Mode=TwoWay}" Margin="0,0,0,4"/>
+                                             <StackPanel Visibility="{Binding Content.SelectedSubLayer.Content.ChromaKeyEnabled, Converter={StaticResource BoolToVisibility}}">
+                                                 <Grid Margin="0,0,0,4">
+                                                     <Grid.ColumnDefinitions>
+                                                         <ColumnDefinition Width="*"/>
+                                                         <ColumnDefinition Width="Auto"/>
+                                                     </Grid.ColumnDefinitions>
+                                                     <TextBlock Text="Key Color" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                                     <Button Grid.Column="1" Content="Select Color..." Padding="8,3" FontSize="10"
+                                                             Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.ChangeChromaKeyColorCommand}"
+                                                             CommandParameter="{Binding Content.SelectedSubLayer}"/>
+                                                 </Grid>
+                                                 <TextBlock Text="Similarity" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                  <Slider Minimum="1" Maximum="100" Value="{Binding Content.SelectedSubLayer.Content.ChromaKeySimilarity, Mode=TwoWay}"/>
+                                              </StackPanel>
+                                          </StackPanel>
+
+                                          <!-- Sub-Layer Position & Alignment Controls -->
+                                          <TextBlock Text="Sub-Layer Position &amp; Size" Style="{StaticResource FieldLabelStyle}" Margin="0,8,0,4"/>
+                                          <Grid Margin="0,0,0,6">
+                                              <Grid.ColumnDefinitions>
+                                                  <ColumnDefinition Width="*"/>
+                                                  <ColumnDefinition Width="6"/>
+                                                  <ColumnDefinition Width="*"/>
+                                              </Grid.ColumnDefinitions>
+                                              <Grid.RowDefinitions>
+                                                  <RowDefinition Height="Auto"/>
+                                                  <RowDefinition Height="4"/>
+                                                  <RowDefinition Height="Auto"/>
+                                              </Grid.RowDefinitions>
+                                              <StackPanel Grid.Row="0" Grid.Column="0">
+                                                  <TextBlock Text="X (%)" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                  <TextBox Text="{Binding Content.SelectedSubLayer.XPercent, StringFormat={}{0:F1}, UpdateSourceTrigger=PropertyChanged}"/>
+                                              </StackPanel>
+                                              <StackPanel Grid.Row="0" Grid.Column="2">
+                                                  <TextBlock Text="Y (%)" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                  <TextBox Text="{Binding Content.SelectedSubLayer.YPercent, StringFormat={}{0:F1}, UpdateSourceTrigger=PropertyChanged}"/>
+                                              </StackPanel>
+                                              <StackPanel Grid.Row="2" Grid.Column="0">
+                                                  <TextBlock Text="Width (%)" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                  <TextBox Text="{Binding Content.SelectedSubLayer.WPercent, StringFormat={}{0:F1}, UpdateSourceTrigger=PropertyChanged}"/>
+                                              </StackPanel>
+                                              <StackPanel Grid.Row="2" Grid.Column="2">
+                                                  <TextBlock Text="Height (%)" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                  <TextBox Text="{Binding Content.SelectedSubLayer.HPercent, StringFormat={}{0:F1}, UpdateSourceTrigger=PropertyChanged}"/>
+                                              </StackPanel>
+                                          </Grid>
+
+                                          <TextBlock Text="Sub-Layer Alignment Presets" Style="{StaticResource FieldLabelStyle}" Margin="0,4,0,4"/>
+                                          <UniformGrid Columns="4" Margin="0,0,0,8">
+                                              <Button Content="🔲 Full" ToolTip="Full Container (100%)" Padding="4,4" FontSize="10" Margin="0,0,2,2"
+                                                      Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.ApplyLayoutPresetCommand}" CommandParameter="full"/>
+                                              <Button Content="◧ Left" ToolTip="Left Half" Padding="4,4" FontSize="10" Margin="2,0,2,2"
+                                                      Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.ApplyLayoutPresetCommand}" CommandParameter="lefthalf"/>
+                                              <Button Content="◨ Right" ToolTip="Right Half" Padding="4,4" FontSize="10" Margin="2,0,2,2"
+                                                      Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.ApplyLayoutPresetCommand}" CommandParameter="righthalf"/>
+                                              <Button Content="🎯 Center" ToolTip="Center Sub-Layer" Padding="4,4" FontSize="10" Margin="2,0,0,2"
+                                                      Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.ApplyLayoutPresetCommand}" CommandParameter="center"/>
+                                              <Button Content="◰ Top-L" ToolTip="Top-Left" Padding="4,4" FontSize="10" Margin="0,2,2,0"
+                                                      Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.ApplyLayoutPresetCommand}" CommandParameter="topleftpip"/>
+                                              <Button Content="◱ Top-R" ToolTip="Top-Right" Padding="4,4" FontSize="10" Margin="2,2,2,0"
+                                                      Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.ApplyLayoutPresetCommand}" CommandParameter="toprightpip"/>
+                                              <Button Content="◲ Btm-L" ToolTip="Bottom-Left" Padding="4,4" FontSize="10" Margin="2,2,2,0"
+                                                      Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.ApplyLayoutPresetCommand}" CommandParameter="bottomleftpip"/>
+                                              <Button Content="◳ Btm-R" ToolTip="Bottom-Right" Padding="4,4" FontSize="10" Margin="2,2,0,0"
+                                                      Command="{Binding RelativeSource={RelativeSource AncestorType=local:ScenesView}, Path=ViewModel.SceneEditor.ApplyLayoutPresetCommand}" CommandParameter="bottomrightpip"/>
+                                          </UniformGrid>
+                                     </StackPanel>
                                 </StackPanel>
 
                                 <!-- Precision Layout — a primary slot gets the same layout
@@ -949,11 +1118,11 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemContainerStyle>
                             <Style TargetType="ContentPresenter">
-                                <Setter Property="Canvas.Left" Value="{Binding XPercent, Converter={StaticResource PercentToPixel}, ConverterParameter=640}"/>
+                                <Setter Property="Canvas.Left" Value="{Binding RenderXPercent, Converter={StaticResource PercentToPixel}, ConverterParameter=640}"/>
                                 <Setter Property="Canvas.Top">
                                     <Setter.Value>
                                         <MultiBinding Converter="{StaticResource PercentToDynamicPixel}">
-                                            <Binding Path="YPercent"/>
+                                            <Binding Path="RenderYPercent"/>
                                             <Binding Path="CanvasHeight"/>
                                         </MultiBinding>
                                     </Setter.Value>
@@ -962,10 +1131,10 @@
                         </ItemsControl.ItemContainerStyle>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="{x:Type vm:SourceSlot}">
-                                <Grid Width="{Binding WPercent, Converter={StaticResource PercentToPixel}, ConverterParameter=640}">
+                                <Grid Width="{Binding RenderWPercent, Converter={StaticResource PercentToPixel}, ConverterParameter=640}">
                                     <Grid.Height>
                                         <MultiBinding Converter="{StaticResource PercentToDynamicPixel}">
-                                            <Binding Path="HPercent"/>
+                                            <Binding Path="RenderHPercent"/>
                                             <Binding Path="CanvasHeight"/>
                                         </MultiBinding>
                                     </Grid.Height>
@@ -979,8 +1148,8 @@
                                         </Grid.RenderTransform>
                                         <Grid.Clip>
                                             <MultiBinding Converter="{StaticResource CornerClip}">
-                                                <Binding Path="WPercent" Converter="{StaticResource PercentToPixel}" ConverterParameter="640"/>
-                                                <Binding Path="HPercent"/>
+                                                <Binding Path="RenderWPercent" Converter="{StaticResource PercentToPixel}" ConverterParameter="640"/>
+                                                <Binding Path="RenderHPercent"/>
                                                 <Binding Path="CanvasHeight"/>
                                                 <Binding Path="CornerRadiusPercent"/>
                                             </MultiBinding>

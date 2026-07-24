@@ -233,6 +233,26 @@ public partial class GoLiveViewModel
         }
         SendDuckingRules();
     }
+    [RelayCommand]
+    private void RemoveAudioDevice(AudioSourceItem? item)
+    {
+        if (item is not null)
+        {
+            item.IsSelected = false;
+        }
+    }
+
+    [RelayCommand]
+    private void AddAudioDevice(AudioSourceItem? item)
+    {
+        if (item is not null)
+        {
+            item.IsSelected = true;
+        }
+    }
+
+    public IEnumerable<AudioSourceItem> UnselectedAudioSources =>
+        AudioSources.Where(a => !a.IsSelected);
 
     /// <summary>Tracks whether the Go Live page is the current navigation target — audio
     /// monitor sessions (live level meters) only run while it's true, so idle capture doesn't
@@ -280,6 +300,42 @@ public partial class GoLiveViewModel
     partial void OnDuckingAttackMsChanged(float value) { SendDuckingRules(); ScheduleSaveSettings(); }
     partial void OnDuckingReleaseMsChanged(float value) { SendDuckingRules(); ScheduleSaveSettings(); }
     partial void OnDuckingHoldMsChanged(float value) { SendDuckingRules(); ScheduleSaveSettings(); }
+
+    [RelayCommand]
+    private void ApplyDuckingPreset(string preset)
+    {
+        switch (preset.ToLowerInvariant())
+        {
+            case "off":
+                IsDuckingEnabled = false;
+                break;
+            case "light":
+                IsDuckingEnabled = true;
+                DuckingThresholdDb = -18.0f;
+                DuckingDepth = 0.5f;
+                DuckingAttackMs = 15.0f;
+                DuckingReleaseMs = 250.0f;
+                DuckingHoldMs = 50.0f;
+                break;
+            case "standard":
+            case "medium":
+                IsDuckingEnabled = true;
+                DuckingThresholdDb = -30.0f;
+                DuckingDepth = 0.8f;
+                DuckingAttackMs = 10.0f;
+                DuckingReleaseMs = 300.0f;
+                DuckingHoldMs = 100.0f;
+                break;
+            case "heavy":
+                IsDuckingEnabled = true;
+                DuckingThresholdDb = -42.0f;
+                DuckingDepth = 0.95f;
+                DuckingAttackMs = 5.0f;
+                DuckingReleaseMs = 500.0f;
+                DuckingHoldMs = 150.0f;
+                break;
+        }
+    }
 
     private void SendDuckingRules()
     {

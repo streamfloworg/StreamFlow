@@ -15,10 +15,12 @@ internal sealed class InvertedNullVisibilityConverter : IValueConverter
     {
         if (value == null)
         {
-            return Visibility.Visible;
+            if (parameter is bool hide && hide)
+                return Visibility.Hidden;
+            return Visibility.Collapsed;
         }
 
-        return Visibility.Collapsed;
+        return Visibility.Visible;
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
