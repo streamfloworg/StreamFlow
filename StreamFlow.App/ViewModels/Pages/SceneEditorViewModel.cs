@@ -46,22 +46,24 @@ public partial class SceneEditorViewModel : ObservableObject
     private readonly SceneSetService _sceneSetService;
     private readonly EventBus _eventBus;
     private readonly ILogger<SceneEditorViewModel> _logger;
+    private readonly StreamFlow.App.Services.Overlays.OverlayTypeRegistry _overlayRegistry;
 
-    /// <summary>Tracked purely for chat-overlay placeholder content (see
-    /// ChatOverlayContent.PlaceholderMessages) — this class otherwise deliberately has no concept
-    /// of "is streaming" (see this class's own top doc comment), but needs to know whether it's
-    /// safe to show fake chat activity without risking a viewer ever seeing it, which the
-    /// GoLiveStartedEvent/GoLiveStoppedEvent subscriptions below exist specifically to answer
-    /// without actually depending on GoLiveViewModel.IsStreaming directly.</summary>
     private bool _isLive;
 
-    public SceneEditorViewModel(CoreBridgeService core, IDialogService dialogs, SceneSetService sceneSetService, EventBus eventBus, ILogger<SceneEditorViewModel> logger)
+    public SceneEditorViewModel(
+        CoreBridgeService core,
+        IDialogService dialogs,
+        SceneSetService sceneSetService,
+        EventBus eventBus,
+        ILogger<SceneEditorViewModel> logger,
+        StreamFlow.App.Services.Overlays.OverlayTypeRegistry overlayRegistry)
     {
         _core = core;
         _dialogs = dialogs;
         _sceneSetService = sceneSetService;
         _eventBus = eventBus;
         _logger = logger;
+        _overlayRegistry = overlayRegistry;
 
         Scenes.CollectionChanged += (_, _) => RemoveActiveSceneCommand.NotifyCanExecuteChanged();
 
@@ -638,53 +640,15 @@ public partial class SceneEditorViewModel : ObservableObject
                 : savedSlot.OverlayColorHex is not null ? OverlayKind.Color
                 : null);
 
+        var descriptor = overlayKind is not null
+            ? _overlayRegistry.GetByKind(overlayKind.Value)
+            : _overlayRegistry.GetByKey(savedSlot.OverlayTypeKey);
+
+        IOverlayContent? content = descriptor?.Deserialize(savedSlot);
+
         var overlayColor = savedSlot.OverlayColorHex is not null
             ? System.Windows.Media.ColorConverter.ConvertFromString(savedSlot.OverlayColorHex) as System.Windows.Media.Color?
             : null;
-        var chromaKeyColor = savedSlot.ChromaKeyColorHex is not null
-            && System.Windows.Media.ColorConverter.ConvertFromString(savedSlot.ChromaKeyColorHex) is System.Windows.Media.Color parsedChromaColor
-            ? parsedChromaColor
-            : (System.Windows.Media.Color?)null;
-
-        IOverlayContent? content = overlayKind switch
-        {
-            OverlayKind.Image => new ImageOverlayContent
-            {
-                ImagePath = savedSlot.ImagePath,
-                ChromaKeyEnabled = savedSlot.ChromaKeyEnabled,
-                ChromaKeySimilarity = savedSlot.ChromaKeySimilarity,
-                ChromaKeyColor = chromaKeyColor ?? System.Windows.Media.Color.FromRgb(0x00, 0xB1, 0x40),
-            },
-            OverlayKind.Text => new TextOverlayContent { OverlayText = savedSlot.OverlayText },
-            OverlayKind.Color => new ColorOverlayContent { OverlayColor = overlayColor },
-            OverlayKind.Video => new VideoOverlayContent
-            {
-                VideoPath = savedSlot.VideoPath,
-                LoopVideo = savedSlot.LoopVideo,
-                ChromaKeyEnabled = savedSlot.ChromaKeyEnabled,
-                ChromaKeySimilarity = savedSlot.ChromaKeySimilarity,
-                ChromaKeyColor = chromaKeyColor ?? System.Windows.Media.Color.FromRgb(0x00, 0xB1, 0x40),
-            },
-            OverlayKind.Chat => new ChatOverlayContent(),
-            OverlayKind.Blur => new BlurOverlayContent { BlurRadius = savedSlot.BlurRadius },
-            OverlayKind.Timer => new TimerOverlayContent
-            {
-                TimerMode = savedSlot.TimerMode,
-                TimerDurationSeconds = savedSlot.TimerDurationSeconds,
-                AutoStartOnGoLive = savedSlot.TimerAutoStartOnGoLive,
-            },
-            OverlayKind.Group => new GroupOverlayContent(),
-            OverlayKind.Alert => new AlertOverlayContent
-            {
-                AlertType = savedSlot.AlertType,
-                DurationSeconds = savedSlot.AlertDurationSeconds,
-                EntranceAnimation = savedSlot.AlertEntranceAnimation,
-                ExitAnimation = savedSlot.AlertExitAnimation,
-            },
-            _ => null,
-        };
-        if (content is IHasTextStyle hasStyle)
-            ApplyTextStyleFromSettings(hasStyle.Style, savedSlot);
 
         var slot = new SourceSlot(
             savedSlot.IsPrimary, savedSlot.XPercent, savedSlot.YPercent, savedSlot.WPercent, savedSlot.HPercent,
@@ -863,15 +827,9 @@ public partial class SceneEditorViewModel : ObservableObject
     /// machinery is needed the way OnContentChanged would otherwise require.</summary>
     private void HookContentPropertyChanged(SourceSlot slot)
     {
-        if (slot.Content is System.ComponentModel.INotifyPropertyChanged notifying)
-            notifying.PropertyChanged += (_, e) => OnSlotContentPropertyChanged(slot, e);
-
-        // TextStyle is a separate nested ObservableObject (see IHasTextStyle), so edits to it
-        // (FontSize, FontColor, etc.) raise PropertyChanged on Style itself, not on Content —
-        // without this second subscription they'd never reach OnSlotContentPropertyChanged at
-        // all, silently breaking re-render/re-save for every text-formatting edit.
-        if (slot.Content is IHasTextStyle hasStyle)
-            hasStyle.Style.PropertyChanged += (_, e) => OnSlotContentPropertyChanged(slot, e);
+        if (slot.Content is null) return;
+        var descriptor = _overlayRegistry.GetForContent(slot.Content);
+        descriptor?.HookPropertyChanges(slot.Content, propName => OnSlotContentPropertyChanged(slot, new System.ComponentModel.PropertyChangedEventArgs(propName)));
     }
 
     /// <summary>Applies the persisted shared text-formatting fields (see SlotSettings' Text*
@@ -898,78 +856,20 @@ public partial class SceneEditorViewModel : ObservableObject
         style.OutlineThickness = s.TextOutlineThickness ?? 2;
     }
 
-    /// <summary>Deep-copies a slot's Content for DuplicateActiveScene — sharing the same
-    /// instance between the original and duplicate slots would mean editing one's ImagePath (or
-    /// any other content property) silently mutates the other's too.</summary>
-    private static IOverlayContent? CloneContent(IOverlayContent? content)
+    private IOverlayContent? CloneContent(IOverlayContent? content)
     {
-        IOverlayContent? cloned = content switch
-        {
-            ImageOverlayContent img => new ImageOverlayContent
-            {
-                ImagePath = img.ImagePath,
-                ChromaKeyEnabled = img.ChromaKeyEnabled,
-                ChromaKeyColor = img.ChromaKeyColor,
-                ChromaKeySimilarity = img.ChromaKeySimilarity,
-            },
-            TextOverlayContent text => new TextOverlayContent { OverlayText = text.OverlayText },
-            ColorOverlayContent color => new ColorOverlayContent { OverlayColor = color.OverlayColor },
-            VideoOverlayContent video => new VideoOverlayContent
-            {
-                VideoPath = video.VideoPath,
-                LoopVideo = video.LoopVideo,
-                ChromaKeyEnabled = video.ChromaKeyEnabled,
-                ChromaKeyColor = video.ChromaKeyColor,
-                ChromaKeySimilarity = video.ChromaKeySimilarity,
-            },
-            ChatOverlayContent => new ChatOverlayContent(),
-            BlurOverlayContent blur => new BlurOverlayContent { BlurRadius = blur.BlurRadius },
-            TimerOverlayContent timer => new TimerOverlayContent
-            {
-                TimerMode = timer.TimerMode,
-                TimerDurationSeconds = timer.TimerDurationSeconds,
-                AutoStartOnGoLive = timer.AutoStartOnGoLive,
-            },
-            _ => null,
-        };
-
-        // Style lives on a separate nested object now (see IHasTextStyle) — object-initializer
-        // syntax above can't reach it (Style has no setter, only a getter), so copy its fields
-        // across explicitly instead, same as every other content property above.
-        if (content is IHasTextStyle sourceStyle && cloned is IHasTextStyle clonedStyle)
-        {
-            clonedStyle.Style.FontFamily = sourceStyle.Style.FontFamily;
-            clonedStyle.Style.FontSize = sourceStyle.Style.FontSize;
-            clonedStyle.Style.FontColor = sourceStyle.Style.FontColor;
-            clonedStyle.Style.IsBold = sourceStyle.Style.IsBold;
-            clonedStyle.Style.IsItalic = sourceStyle.Style.IsItalic;
-            clonedStyle.Style.Alignment = sourceStyle.Style.Alignment;
-            clonedStyle.Style.OutlineEnabled = sourceStyle.Style.OutlineEnabled;
-            clonedStyle.Style.OutlineColor = sourceStyle.Style.OutlineColor;
-            clonedStyle.Style.OutlineThickness = sourceStyle.Style.OutlineThickness;
-        }
-
-        return cloned;
+        if (content is null) return null;
+        var descriptor = _overlayRegistry.GetForContent(content);
+        return descriptor?.Clone(content);
     }
 
     private async Task RestoreStaticOverlayAsync(SourceSlot slot, string sourceId)
     {
-        var rendered = slot.Content is ImageOverlayContent { ImagePath: not null } image ? OverlayContentRenderer.DecodeImageToBgra(image.ImagePath, GetImageOverlayCapSize(slot))
-            : slot.Content is TextOverlayContent { OverlayText: not null } text ? OverlayContentRenderer.RenderTextToBgra(text.OverlayText, text.Style)
-            : slot.Content is ColorOverlayContent { OverlayColor: System.Windows.Media.Color color } ? OverlayContentRenderer.RenderColorToBgra(color)
-            : slot.IsChatOverlay ? OverlayContentRenderer.RenderChatToBgra(slot)
-            : slot.Content is TimerOverlayContent timerStyle && slot.IsTimerOverlay ? OverlayContentRenderer.RenderTextToBgra(FormatTimerDisplay(slot), timerStyle.Style)
-            : ((int Width, int Height, byte[] Pixels)?)null;
+        if (slot.Content is null) return;
+        var descriptor = _overlayRegistry.GetForContent(slot.Content);
+        var rendered = descriptor?.RenderStaticBgra(slot.Content, slot);
         if (rendered is not var (width, height, pixels)) return;
 
-        // Timer included now, same as Text — its rendered digits get the same aspect-ratio
-        // tracking (see the AddTimerOverlayAsync/BuildSceneFromSettings comments on
-        // IsAspectLocked). This does mean a digit-count change (9:59→10:00, 59:59→1:00:00) can
-        // trigger a small resize on that tick, same mechanism Text already has for any content
-        // edit — accepted as consistent with "match Text's behavior" rather than special-cased
-        // to only run once at creation. trackNaturalSize=true specifically for IHasTextStyle
-        // content (Text/Timer) — see ApplyRenderedAspectRatio's own doc comment for why Image
-        // deliberately doesn't get the same treatment.
         if (!slot.IsColorOverlay && !slot.IsChatOverlay)
             OverlayContentRenderer.ApplyRenderedAspectRatio(slot, width, height, trackNaturalSize: slot.Content is IHasTextStyle);
         await RegisterStaticOverlayAsync(sourceId, width, height, pixels);
@@ -2677,53 +2577,38 @@ public partial class SceneEditorViewModel : ObservableObject
     /// <summary>Flattens a SourceSlot's Content back into the persisted SlotSettings shape —
     /// SlotSettings itself stays a flat, all-nullable DTO for full backward compatibility with
     /// existing settings files, even though the runtime SourceSlot no longer is.</summary>
-    private static SlotSettings ToSlotSettings(SourceSlot s) => new()
+    private SlotSettings ToSlotSettings(SourceSlot s)
     {
-        IsPrimary = s.IsPrimary,
-        IsOverlay = s.IsOverlay,
-        OverlayKind = s.OverlayKind,
-        SourceId = s.SourceId,
-        DisplayName = s.DisplayName,
-        GroupChildIds = (s.Content as GroupOverlayContent)?.Children.Select(c => c.SourceId).Where(id => id is not null).ToList()
-            ?? (s.Content as AlertOverlayContent)?.Children.Select(c => c.SourceId).Where(id => id is not null).ToList()!,
-        Children = s.Children?.Cast<SourceSlot>().Select(ToSlotSettings).ToList(),
-        LockChildren = s.LockChildren,
-        ImagePath = (s.Content as ImageOverlayContent)?.ImagePath,
-        OverlayText = (s.Content as TextOverlayContent)?.OverlayText,
-        OverlayColorHex = (s.Content as ColorOverlayContent)?.OverlayColor?.ToString(CultureInfo.InvariantCulture),
-        VideoPath = (s.Content as VideoOverlayContent)?.VideoPath,
-        LoopVideo = (s.Content as VideoOverlayContent)?.LoopVideo ?? true,
-        XPercent = s.XPercent,
-        YPercent = s.YPercent,
-        WPercent = s.WPercent,
-        HPercent = s.HPercent,
-        CornerRadiusPercent = s.CornerRadiusPercent,
-        BlurRadius = (s.Content as BlurOverlayContent)?.BlurRadius ?? 0,
-        ChromaKeyEnabled = (s.Content as IChromaKeyable)?.ChromaKeyEnabled ?? false,
-        ChromaKeyColorHex = (s.Content as IChromaKeyable)?.ChromaKeyColor.ToString(CultureInfo.InvariantCulture),
-        ChromaKeySimilarity = (s.Content as IChromaKeyable)?.ChromaKeySimilarity ?? 40,
-        OpacityPercent = s.OpacityPercent,
-        RotationDegrees = s.RotationDegrees,
-        TimerMode = (s.Content as TimerOverlayContent)?.TimerMode ?? TimerMode.CountDown,
-        TimerDurationSeconds = (s.Content as TimerOverlayContent)?.TimerDurationSeconds ?? 300,
-        TimerAutoStartOnGoLive = (s.Content as TimerOverlayContent)?.AutoStartOnGoLive ?? false,
-        AlertType = (s.Content as AlertOverlayContent)?.AlertType ?? StreamAlertType.TwitchFollower,
-        AlertDurationSeconds = (s.Content as AlertOverlayContent)?.DurationSeconds ?? 5,
-        AlertEntranceAnimation = (s.Content as AlertOverlayContent)?.EntranceAnimation ?? AlertEntranceAnimation.Fade,
-        AlertExitAnimation = (s.Content as AlertOverlayContent)?.ExitAnimation ?? AlertExitAnimation.Fade,
-        // Text* fields predate TextStyle and were Text-overlay-only; now sourced from
-        // IHasTextStyle.Style so Chat/Timer formatting persists too — see
-        // ApplyTextStyleFromSettings for the load-side counterpart.
-        TextFontFamily = (s.Content as IHasTextStyle)?.Style.FontFamily,
-        TextFontSize = (s.Content as IHasTextStyle)?.Style.FontSize,
-        TextFontColorHex = (s.Content as IHasTextStyle)?.Style.FontColor.ToString(CultureInfo.InvariantCulture),
-        TextIsBold = (s.Content as IHasTextStyle)?.Style.IsBold,
-        TextIsItalic = (s.Content as IHasTextStyle)?.Style.IsItalic,
-        TextAlignment = (s.Content as IHasTextStyle)?.Style.Alignment.ToString(),
-        TextOutlineEnabled = (s.Content as IHasTextStyle)?.Style.OutlineEnabled,
-        TextOutlineColorHex = (s.Content as IHasTextStyle)?.Style.OutlineColor.ToString(CultureInfo.InvariantCulture),
-        TextOutlineThickness = (s.Content as IHasTextStyle)?.Style.OutlineThickness,
-    };
+        var settings = new SlotSettings
+        {
+            IsPrimary = s.IsPrimary,
+            IsOverlay = s.IsOverlay,
+            OverlayKind = s.OverlayKind,
+            SourceId = s.SourceId,
+            DisplayName = s.DisplayName,
+            Children = s.Children?.Cast<SourceSlot>().Select(ToSlotSettings).ToList(),
+            LockChildren = s.LockChildren,
+            XPercent = s.XPercent,
+            YPercent = s.YPercent,
+            WPercent = s.WPercent,
+            HPercent = s.HPercent,
+            CornerRadiusPercent = s.CornerRadiusPercent,
+            OpacityPercent = s.OpacityPercent,
+            RotationDegrees = s.RotationDegrees,
+        };
+
+        if (s.Content is not null)
+        {
+            var descriptor = _overlayRegistry.GetForContent(s.Content);
+            descriptor?.Serialize(s.Content, settings);
+            if (descriptor is not null)
+            {
+                settings.OverlayTypeKey = descriptor.TypeKey;
+            }
+        }
+
+        return settings;
+    }
 
     /// <summary>Imports a .sfset file from disk (registering it, same as Go Live's own "Import
     /// Set" button) without loading it — callers combine this with

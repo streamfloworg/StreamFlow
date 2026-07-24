@@ -67,6 +67,27 @@ public partial class App : IDisposable
             services.AddSingleton<GpuEncoderDetectionService>();
             services.AddSingleton<UpdateService>();
 
+            services.AddSingleton<StreamFlow.App.Services.Overlays.Plugins.IPluginLoader, StreamFlow.App.Services.Overlays.Plugins.DirectoryPluginLoader>();
+
+            services.AddSingleton<StreamFlow.App.Services.Overlays.OverlayTypeRegistry>(sp =>
+            {
+                var registry = new StreamFlow.App.Services.Overlays.OverlayTypeRegistry();
+                registry.Register(new StreamFlow.App.Services.Overlays.Descriptors.ImageOverlayTypeDescriptor());
+                registry.Register(new StreamFlow.App.Services.Overlays.Descriptors.TextOverlayTypeDescriptor());
+                registry.Register(new StreamFlow.App.Services.Overlays.Descriptors.ColorOverlayTypeDescriptor());
+                registry.Register(new StreamFlow.App.Services.Overlays.Descriptors.VideoOverlayTypeDescriptor());
+                registry.Register(new StreamFlow.App.Services.Overlays.Descriptors.ChatOverlayTypeDescriptor());
+                registry.Register(new StreamFlow.App.Services.Overlays.Descriptors.BlurOverlayTypeDescriptor());
+                registry.Register(new StreamFlow.App.Services.Overlays.Descriptors.TimerOverlayTypeDescriptor());
+                registry.Register(new StreamFlow.App.Services.Overlays.Descriptors.GroupOverlayTypeDescriptor());
+                registry.Register(new StreamFlow.App.Services.Overlays.Descriptors.AlertOverlayTypeDescriptor());
+
+                var pluginLoader = sp.GetRequiredService<StreamFlow.App.Services.Overlays.Plugins.IPluginLoader>();
+                pluginLoader.LoadPlugins(registry);
+
+                return registry;
+            });
+
 
             services.AddSingleton<SettingsViewModel>();
 #if DEBUG

@@ -8,6 +8,7 @@ public sealed class SlotSettings
     public bool IsPrimary { get; set; }
     public bool IsOverlay { get; set; }
     public OverlayKind? OverlayKind { get; set; }
+    public string? OverlayTypeKey { get; set; }
     public string? SourceId { get; set; }
     public string? DisplayName { get; set; }
     public string? ImagePath { get; set; }
