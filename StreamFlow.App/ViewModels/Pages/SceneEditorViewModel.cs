@@ -105,6 +105,11 @@ public partial class SceneEditorViewModel : ObservableObject
                     chat.IsShowingPlaceholder = false;
                     if (slot.SourceId is not null) ScheduleOverlayContentUpdate(slot);
                 }
+
+            // Hide advanced overlays' (Alert) idle content immediately rather than leaving it
+            // visible until some unrelated edit happens to trigger the next Config push — see
+            // BuildStreamSources' alertOpacity for why _isLive gates this at all.
+            ScheduleLiveConfigPush();
         });
 
         _eventBus.Subscribe<GoLiveStoppedEvent>(_ =>
@@ -114,6 +119,10 @@ public partial class SceneEditorViewModel : ObservableObject
             foreach (var slot in scene.Slots)
                 if (slot.Content is ChatOverlayContent { ChatMessages.Count: 0 } chat)
                     PopulateChatPlaceholder(slot, chat);
+
+            // Re-show advanced overlays' (Alert) idle content immediately — same reasoning as
+            // the GoLiveStartedEvent handler above, just the opposite direction.
+            ScheduleLiveConfigPush();
         });
 
         _eventBus.Subscribe<TwitchFollowerEvent>(e => _ = System.Windows.Application.Current?.Dispatcher.InvokeAsync(() => {
@@ -2403,10 +2412,15 @@ public partial class SceneEditorViewModel : ObservableObject
                 {
                     if (parent.Content is AlertOverlayContent alert)
                     {
-                        var isSelected = !_isLive && (parent.IsSelected || s.IsSelected);
-                        var alertOpacity = alert.IsAlertActive 
-                            ? alert.AnimatingOpacity 
-                            : (isSelected ? (parent.OpacityPercent / 100.0) : 0.0);
+                        // Advanced overlays' (Alert) idle/rest content is visible whenever not
+                        // streaming/recording, and hidden unconditionally while live — no
+                        // exception for selection or the live-edit lock: only its editing chrome
+                        // (see GoLiveView.xaml's MoveThumb/resize-handle visibility triggers) is
+                        // allowed to show while live, not the content itself. An alert already
+                        // mid-animation stays driven by AnimatingOpacity regardless.
+                        var alertOpacity = alert.IsAlertActive
+                            ? alert.AnimatingOpacity
+                            : (!_isLive ? (parent.OpacityPercent / 100.0) : 0.0);
                         
                         opacity *= alertOpacity;
 

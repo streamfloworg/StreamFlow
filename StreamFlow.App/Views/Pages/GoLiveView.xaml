@@ -39,6 +39,8 @@
         <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
         <conv:BooleanInvertConverter x:Key="BooleanInvertConverter"/>
         <conv:CornerClipConverter x:Key="CornerClip"/>
+        <conv:AdvancedOverlayContentVisibilityConverter x:Key="AdvancedOverlayContentVisibility"/>
+        <conv:AdvancedOverlayHandleVisibilityConverter x:Key="AdvancedOverlayHandleVisibility"/>
         <conv:ColorToBrushConverter x:Key="ColorToBrush"/>
         <conv:PercentToFractionConverter x:Key="PercentToFraction"/>
         <conv:RotationDegreesToIndexConverter x:Key="RotationDegreesToIndex"/>
@@ -938,6 +940,17 @@
                                         </Grid.Height>
                                         <Grid Opacity="{Binding OpacityPercent, Converter={StaticResource PercentToFraction}}"
                                               RenderTransformOrigin="0.5,0.5">
+                                            <Grid.Visibility>
+                                                <!-- Advanced overlays' (Alert) rendered content stays hidden while
+                                                     streaming/recording regardless of the live-edit lock — only its
+                                                     position (outline/handles/header, gated separately below) should
+                                                     be visible for repositioning, not a static preview of content
+                                                     that only actually appears during a real triggered animation. -->
+                                                <MultiBinding Converter="{StaticResource AdvancedOverlayContentVisibility}">
+                                                    <Binding Path="IsPartOfAdvancedOverlay"/>
+                                                    <Binding RelativeSource="{RelativeSource AncestorType=local:GoLiveView}" Path="ViewModel.IsStreaming"/>
+                                                </MultiBinding>
+                                            </Grid.Visibility>
                                             <Grid.RenderTransform>
                                                 <RotateTransform Angle="{Binding RotationDegrees}"/>
                                             </Grid.RenderTransform>
@@ -1140,6 +1153,20 @@
                                                             <Setter TargetName="MoveThumbBorder" Property="Visibility" Value="Visible"/>
                                                             <Setter TargetName="MoveThumbHeader" Property="Visibility" Value="Visible"/>
                                                         </DataTrigger>
+                                                        <!-- Last, so it wins over the hover/selected triggers above: an advanced
+                                                             overlay's (Alert) editing chrome only shows on hover while streaming/
+                                                             recording if editing has been explicitly unlocked — otherwise even
+                                                             hovering/selecting it while live+locked reveals nothing, matching
+                                                             CanEditSlots already disabling the drag itself in that state. -->
+                                                        <MultiDataTrigger>
+                                                            <MultiDataTrigger.Conditions>
+                                                                <Condition Binding="{Binding IsPartOfAdvancedOverlay}" Value="True"/>
+                                                                <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsStreaming}" Value="True"/>
+                                                                <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsLiveEditUnlocked}" Value="False"/>
+                                                            </MultiDataTrigger.Conditions>
+                                                            <Setter TargetName="MoveThumbBorder" Property="Visibility" Value="Collapsed"/>
+                                                            <Setter TargetName="MoveThumbHeader" Property="Visibility" Value="Collapsed"/>
+                                                        </MultiDataTrigger>
                                                     </ControlTemplate.Triggers>
                                                 </ControlTemplate>
                                             </Thumb.Template>
@@ -1148,8 +1175,15 @@
                                          <!-- Top-Left Corner -->
                                          <Thumb behaviors:SlotPlacementBehavior.Mode="Resize" behaviors:SlotPlacementBehavior.ResizeDirection="TopLeft"
                                                 Width="12" Height="12" Cursor="SizeNWSE" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-6,-6,0,0"
-                                                Visibility="{Binding IsSelected, Converter={StaticResource BooleanToVisibilityConverter}}"
                                                 IsEnabled="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.CanEditSlots}">
+                                             <Thumb.Visibility>
+                                                 <MultiBinding Converter="{StaticResource AdvancedOverlayHandleVisibility}">
+                                                     <Binding Path="IsSelected"/>
+                                                     <Binding Path="IsPartOfAdvancedOverlay"/>
+                                                     <Binding RelativeSource="{RelativeSource AncestorType=local:GoLiveView}" Path="ViewModel.IsStreaming"/>
+                                                     <Binding RelativeSource="{RelativeSource AncestorType=local:GoLiveView}" Path="ViewModel.IsLiveEditUnlocked"/>
+                                                 </MultiBinding>
+                                             </Thumb.Visibility>
                                              <Thumb.Template>
                                                  <ControlTemplate TargetType="Thumb">
                                                      <Rectangle Fill="{DynamicResource {x:Static adonisUi:Brushes.Layer1BackgroundBrush}}" Stroke="{Binding IsPrimary, Converter={StaticResource SlotRoleBrush}}" StrokeThickness="1"/>
@@ -1160,8 +1194,15 @@
                                          <!-- Top Side -->
                                          <Thumb behaviors:SlotPlacementBehavior.Mode="Resize" behaviors:SlotPlacementBehavior.ResizeDirection="Top"
                                                 Height="8" Cursor="SizeNS" HorizontalAlignment="Stretch" VerticalAlignment="Top" Margin="6,-4,6,0"
-                                                Visibility="{Binding IsSelected, Converter={StaticResource BooleanToVisibilityConverter}}"
                                                 IsEnabled="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.CanEditSlots}">
+                                             <Thumb.Visibility>
+                                                 <MultiBinding Converter="{StaticResource AdvancedOverlayHandleVisibility}">
+                                                     <Binding Path="IsSelected"/>
+                                                     <Binding Path="IsPartOfAdvancedOverlay"/>
+                                                     <Binding RelativeSource="{RelativeSource AncestorType=local:GoLiveView}" Path="ViewModel.IsStreaming"/>
+                                                     <Binding RelativeSource="{RelativeSource AncestorType=local:GoLiveView}" Path="ViewModel.IsLiveEditUnlocked"/>
+                                                 </MultiBinding>
+                                             </Thumb.Visibility>
                                              <Thumb.Template>
                                                  <ControlTemplate TargetType="Thumb">
                                                      <Rectangle Fill="Transparent"/>
@@ -1172,8 +1213,15 @@
                                          <!-- Top-Right Corner -->
                                          <Thumb behaviors:SlotPlacementBehavior.Mode="Resize" behaviors:SlotPlacementBehavior.ResizeDirection="TopRight"
                                                 Width="12" Height="12" Cursor="SizeNESW" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-6,-6,0"
-                                                Visibility="{Binding IsSelected, Converter={StaticResource BooleanToVisibilityConverter}}"
                                                 IsEnabled="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.CanEditSlots}">
+                                             <Thumb.Visibility>
+                                                 <MultiBinding Converter="{StaticResource AdvancedOverlayHandleVisibility}">
+                                                     <Binding Path="IsSelected"/>
+                                                     <Binding Path="IsPartOfAdvancedOverlay"/>
+                                                     <Binding RelativeSource="{RelativeSource AncestorType=local:GoLiveView}" Path="ViewModel.IsStreaming"/>
+                                                     <Binding RelativeSource="{RelativeSource AncestorType=local:GoLiveView}" Path="ViewModel.IsLiveEditUnlocked"/>
+                                                 </MultiBinding>
+                                             </Thumb.Visibility>
                                              <Thumb.Template>
                                                  <ControlTemplate TargetType="Thumb">
                                                      <Rectangle Fill="{DynamicResource {x:Static adonisUi:Brushes.Layer1BackgroundBrush}}" Stroke="{Binding IsPrimary, Converter={StaticResource SlotRoleBrush}}" StrokeThickness="1"/>
@@ -1184,8 +1232,15 @@
                                          <!-- Right Side -->
                                          <Thumb behaviors:SlotPlacementBehavior.Mode="Resize" behaviors:SlotPlacementBehavior.ResizeDirection="Right"
                                                 Width="8" Cursor="SizeWE" HorizontalAlignment="Right" VerticalAlignment="Stretch" Margin="0,6,-4,6"
-                                                Visibility="{Binding IsSelected, Converter={StaticResource BooleanToVisibilityConverter}}"
                                                 IsEnabled="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.CanEditSlots}">
+                                             <Thumb.Visibility>
+                                                 <MultiBinding Converter="{StaticResource AdvancedOverlayHandleVisibility}">
+                                                     <Binding Path="IsSelected"/>
+                                                     <Binding Path="IsPartOfAdvancedOverlay"/>
+                                                     <Binding RelativeSource="{RelativeSource AncestorType=local:GoLiveView}" Path="ViewModel.IsStreaming"/>
+                                                     <Binding RelativeSource="{RelativeSource AncestorType=local:GoLiveView}" Path="ViewModel.IsLiveEditUnlocked"/>
+                                                 </MultiBinding>
+                                             </Thumb.Visibility>
                                              <Thumb.Template>
                                                  <ControlTemplate TargetType="Thumb">
                                                      <Rectangle Fill="Transparent"/>
@@ -1196,8 +1251,15 @@
                                          <!-- Bottom-Right Corner -->
                                          <Thumb behaviors:SlotPlacementBehavior.Mode="Resize" behaviors:SlotPlacementBehavior.ResizeDirection="BottomRight"
                                                 Width="12" Height="12" Cursor="SizeNWSE" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-6,-6"
-                                                Visibility="{Binding IsSelected, Converter={StaticResource BooleanToVisibilityConverter}}"
                                                 IsEnabled="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.CanEditSlots}">
+                                             <Thumb.Visibility>
+                                                 <MultiBinding Converter="{StaticResource AdvancedOverlayHandleVisibility}">
+                                                     <Binding Path="IsSelected"/>
+                                                     <Binding Path="IsPartOfAdvancedOverlay"/>
+                                                     <Binding RelativeSource="{RelativeSource AncestorType=local:GoLiveView}" Path="ViewModel.IsStreaming"/>
+                                                     <Binding RelativeSource="{RelativeSource AncestorType=local:GoLiveView}" Path="ViewModel.IsLiveEditUnlocked"/>
+                                                 </MultiBinding>
+                                             </Thumb.Visibility>
                                              <Thumb.Template>
                                                  <ControlTemplate TargetType="Thumb">
                                                      <Rectangle Fill="{DynamicResource {x:Static adonisUi:Brushes.Layer1BackgroundBrush}}" Stroke="{Binding IsPrimary, Converter={StaticResource SlotRoleBrush}}" StrokeThickness="1"/>
@@ -1208,8 +1270,15 @@
                                          <!-- Bottom Side -->
                                          <Thumb behaviors:SlotPlacementBehavior.Mode="Resize" behaviors:SlotPlacementBehavior.ResizeDirection="Bottom"
                                                 Height="8" Cursor="SizeNS" HorizontalAlignment="Stretch" VerticalAlignment="Bottom" Margin="6,0,6,-4"
-                                                Visibility="{Binding IsSelected, Converter={StaticResource BooleanToVisibilityConverter}}"
                                                 IsEnabled="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.CanEditSlots}">
+                                             <Thumb.Visibility>
+                                                 <MultiBinding Converter="{StaticResource AdvancedOverlayHandleVisibility}">
+                                                     <Binding Path="IsSelected"/>
+                                                     <Binding Path="IsPartOfAdvancedOverlay"/>
+                                                     <Binding RelativeSource="{RelativeSource AncestorType=local:GoLiveView}" Path="ViewModel.IsStreaming"/>
+                                                     <Binding RelativeSource="{RelativeSource AncestorType=local:GoLiveView}" Path="ViewModel.IsLiveEditUnlocked"/>
+                                                 </MultiBinding>
+                                             </Thumb.Visibility>
                                              <Thumb.Template>
                                                  <ControlTemplate TargetType="Thumb">
                                                      <Rectangle Fill="Transparent"/>
@@ -1220,8 +1289,15 @@
                                          <!-- Bottom-Left Corner -->
                                          <Thumb behaviors:SlotPlacementBehavior.Mode="Resize" behaviors:SlotPlacementBehavior.ResizeDirection="BottomLeft"
                                                 Width="12" Height="12" Cursor="SizeNESW" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="-6,0,0,-6"
-                                                Visibility="{Binding IsSelected, Converter={StaticResource BooleanToVisibilityConverter}}"
                                                 IsEnabled="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.CanEditSlots}">
+                                             <Thumb.Visibility>
+                                                 <MultiBinding Converter="{StaticResource AdvancedOverlayHandleVisibility}">
+                                                     <Binding Path="IsSelected"/>
+                                                     <Binding Path="IsPartOfAdvancedOverlay"/>
+                                                     <Binding RelativeSource="{RelativeSource AncestorType=local:GoLiveView}" Path="ViewModel.IsStreaming"/>
+                                                     <Binding RelativeSource="{RelativeSource AncestorType=local:GoLiveView}" Path="ViewModel.IsLiveEditUnlocked"/>
+                                                 </MultiBinding>
+                                             </Thumb.Visibility>
                                              <Thumb.Template>
                                                  <ControlTemplate TargetType="Thumb">
                                                      <Rectangle Fill="{DynamicResource {x:Static adonisUi:Brushes.Layer1BackgroundBrush}}" Stroke="{Binding IsPrimary, Converter={StaticResource SlotRoleBrush}}" StrokeThickness="1"/>
@@ -1232,8 +1308,15 @@
                                          <!-- Left Side -->
                                          <Thumb behaviors:SlotPlacementBehavior.Mode="Resize" behaviors:SlotPlacementBehavior.ResizeDirection="Left"
                                                 Width="8" Cursor="SizeWE" HorizontalAlignment="Left" VerticalAlignment="Stretch" Margin="-4,6,0,6"
-                                                Visibility="{Binding IsSelected, Converter={StaticResource BooleanToVisibilityConverter}}"
                                                 IsEnabled="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.CanEditSlots}">
+                                             <Thumb.Visibility>
+                                                 <MultiBinding Converter="{StaticResource AdvancedOverlayHandleVisibility}">
+                                                     <Binding Path="IsSelected"/>
+                                                     <Binding Path="IsPartOfAdvancedOverlay"/>
+                                                     <Binding RelativeSource="{RelativeSource AncestorType=local:GoLiveView}" Path="ViewModel.IsStreaming"/>
+                                                     <Binding RelativeSource="{RelativeSource AncestorType=local:GoLiveView}" Path="ViewModel.IsLiveEditUnlocked"/>
+                                                 </MultiBinding>
+                                             </Thumb.Visibility>
                                              <Thumb.Template>
                                                  <ControlTemplate TargetType="Thumb">
                                                      <Rectangle Fill="Transparent"/>

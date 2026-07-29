@@ -40,6 +40,14 @@ public partial class SourceSlot : ObservableObject
     public bool IsTimerOverlay => Content is TimerOverlayContent;
     public bool IsAlertOverlay => Content is AlertOverlayContent;
     public bool IsAdvancedOverlay => Content is IAdvancedOverlayContent;
+
+    /// <summary>True for an advanced overlay (Alert) container itself, or any of its direct
+    /// children — used by GoLiveView.xaml to gate the extra streaming/recording visibility rules
+    /// those get in the editor canvas: unlike a plain Group, an advanced overlay's idle content
+    /// shouldn't be visible on air, and its editing chrome (outline/handles/header) should only
+    /// appear on hover while editing is explicitly unlocked. See CanEditSlots/IsLiveEditUnlocked
+    /// on GoLiveViewModel for the matching lock concept this builds on.</summary>
+    public bool IsPartOfAdvancedOverlay => IsAdvancedOverlay || (ParentGroup?.IsAdvancedOverlay ?? false);
     public bool IsGroupOverlay => Content is GroupOverlayContent;
 
     public bool IsTextBasedOverlay => Content is IHasTextStyle && Content is not ChatOverlayContent;
@@ -92,6 +100,7 @@ public partial class SourceSlot : ObservableObject
         OnPropertyChanged(nameof(IsTimerOverlay));
         OnPropertyChanged(nameof(IsAlertOverlay));
         OnPropertyChanged(nameof(IsAdvancedOverlay));
+        OnPropertyChanged(nameof(IsPartOfAdvancedOverlay));
         OnPropertyChanged(nameof(IsGroupOverlay));
         OnPropertyChanged(nameof(IsTextBasedOverlay));
         OnPropertyChanged(nameof(TextOverlayStyle));
@@ -632,6 +641,7 @@ public partial class SourceSlot : ObservableObject
     partial void OnParentGroupChanged(SourceSlot? value)
     {
         OnPropertyChanged(nameof(VisualLeftMargin));
+        OnPropertyChanged(nameof(IsPartOfAdvancedOverlay));
         NotifyRenderBoundsChanged();
     }
 
