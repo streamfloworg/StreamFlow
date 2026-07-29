@@ -812,10 +812,38 @@ impl StreamSession {
         }
     }
 
+    /// Signals the encoder thread to stop and blocks until it has actually exited — for a
+    /// caller about to immediately reuse the resources it was holding (e.g. `Command::StartStream`
+    /// implicitly stopping a previous session before starting a new one), so there's no window
+    /// where both could contend for the same output file/device/encoder session. Anywhere that
+    /// isn't true, use `stop_without_blocking` instead — see its own doc comment for why blocking
+    /// here is normally the wrong default.
     pub fn stop(&mut self) {
         let _ = self.stop_tx.try_send(());
         if let Some(t) = self.thread.take() {
             let _ = t.join();
+        }
+        // Signal mixer thread to exit (drops the sender, disconnecting the channel).
+        let _ = self._mixer_stop_tx.take();
+    }
+
+    /// Same stop signal as `stop()`, but joins the encoder thread on a background OS thread
+    /// instead of blocking the caller. Used by `Command::StopStream` specifically: that caller is
+    /// the core's single async command-processing loop, and — unlike `StartStream`'s implicit
+    /// stop-previous-session case — nothing is about to immediately reuse this session's
+    /// resources, so there's nothing to race. `stop()`'s synchronous join used to run directly in
+    /// that loop, blocking every other command (Config, EnablePreview, GetSources, a fresh
+    /// StartStream) — and by extension the local preview, which depends on this same loop
+    /// processing EnablePreview/Config promptly — for however long the encoder thread took to
+    /// actually exit (finalizing a recording's muxer can take a noticeable moment).
+    /// `JoinHandle<()>` is `Send` even though `StreamSession` itself isn't (it owns non-`Send`
+    /// `cpal::Stream` audio handles), so only the handle needs to cross threads here.
+    pub fn stop_without_blocking(&mut self) {
+        let _ = self.stop_tx.try_send(());
+        if let Some(t) = self.thread.take() {
+            std::thread::spawn(move || {
+                let _ = t.join();
+            });
         }
         // Signal mixer thread to exit (drops the sender, disconnecting the channel).
         let _ = self._mixer_stop_tx.take();

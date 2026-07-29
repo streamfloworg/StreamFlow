@@ -698,7 +698,18 @@ async fn run_stdin_commands(
                     }
                     Ok(Command::StopStream) => {
                         if let Some(mut s) = active_stream.take() {
-                            s.stop();
+                            // warn! (not info!), matching Command::Config above — visible in the
+                            // Core Diagnostics panel by default, so a future repro of "something
+                            // looks wrong right after stopping" has a timestamped anchor to
+                            // compare against whatever Config/EnablePreview activity follows.
+                            warn!("[diag] StopStream received");
+                            // stop_without_blocking, not stop() — this is the core's single async
+                            // command-processing loop; blocking it on the encoder thread's join
+                            // (which can take a noticeable moment while a recording's muxer
+                            // finalizes) previously stalled every other command, including the
+                            // Config/EnablePreview traffic the local preview depends on. See
+                            // StreamSession::stop_without_blocking's own doc comment.
+                            s.stop_without_blocking();
                             // StreamStopped event is emitted by the encoder thread.
                         }
                     }
