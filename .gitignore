@@ -424,3 +424,10 @@ graphify-out/
 AGENTS.MD
 CLAUDE.MD
 URI_*.MD
+
+# Nimbalyst local tool config/plans — per-machine, not project data.
+nimbalyst-local/
+
+# Dev-run console capture redirects
+app_stdout.txt
+app_stderr.txt
