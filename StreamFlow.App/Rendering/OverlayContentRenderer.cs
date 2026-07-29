@@ -172,8 +172,17 @@ public static class OverlayContentRenderer
 
         if (slot is not null && slot.CanvasWidth > 0 && slot.CanvasHeight > 0)
         {
-            var targetPxW = (int)Math.Ceiling(slot.WPercent / 100.0 * slot.CanvasWidth * TextSupersampleFactor);
-            var targetPxH = (int)Math.Ceiling(slot.HPercent / 100.0 * slot.CanvasHeight * TextSupersampleFactor);
+            // RenderWPercent/RenderHPercent, not WPercent/HPercent directly — for a slot nested
+            // inside a Group/Alert, WPercent is a percentage of the *parent's* box, not the full
+            // canvas (see SourceSlot.RenderWPercent's doc comment). Multiplying that local percent
+            // against the full CanvasWidth inflates the render target far past the slot's true
+            // absolute on-screen size, so the compositor's later downscale to the slot's actual
+            // (small) box shrinks the glyphs along with it — text streamed noticeably smaller than
+            // the WPF editor's own native TextBlock preview shows for exactly this case (a Stream
+            // Alert's text sub-layer being the common one, since alert containers are usually much
+            // smaller than the full canvas).
+            var targetPxW = (int)Math.Ceiling(slot.RenderWPercent / 100.0 * slot.CanvasWidth * TextSupersampleFactor);
+            var targetPxH = (int)Math.Ceiling(slot.RenderHPercent / 100.0 * slot.CanvasHeight * TextSupersampleFactor);
             if (targetPxW > 0 && targetPxH > 0)
             {
                 width = Math.Max(naturalW, targetPxW);
@@ -245,8 +254,10 @@ public static class OverlayContentRenderer
         // didn't match the box it gets stretched into on any non-16:9 scene, distorting the
         // composited text size relative to the local WPF preview (which already uses these real
         // per-slot values everywhere else).
-        var targetWidth = (int)Math.Ceiling((slot.WPercent / 100.0 * slot.CanvasWidth) * TextSupersampleFactor);
-        var targetHeight = (int)Math.Ceiling((slot.HPercent / 100.0 * slot.CanvasHeight) * TextSupersampleFactor);
+        // RenderWPercent/RenderHPercent — see RenderTextToBgra's identical fix for why WPercent/
+        // HPercent directly would be wrong for a slot nested inside a Group/Alert.
+        var targetWidth = (int)Math.Ceiling((slot.RenderWPercent / 100.0 * slot.CanvasWidth) * TextSupersampleFactor);
+        var targetHeight = (int)Math.Ceiling((slot.RenderHPercent / 100.0 * slot.CanvasHeight) * TextSupersampleFactor);
 
         if (targetWidth <= 0 || targetHeight <= 0)
             return RenderEmptyChatToBgra();

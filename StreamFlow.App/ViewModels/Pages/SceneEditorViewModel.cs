@@ -1083,8 +1083,12 @@ public partial class SceneEditorViewModel : ObservableObject
     {
         if (GetPrimaryResolution() is not var (primaryW, primaryH)) return null;
 
-        var maxW = (int)(slot.WPercent / 100.0 * primaryW * OverlayContentRenderer.ImageOverlayCapHeadroom);
-        var maxH = (int)(slot.HPercent / 100.0 * primaryH * OverlayContentRenderer.ImageOverlayCapHeadroom);
+        // RenderWPercent/RenderHPercent, not WPercent/HPercent — for a slot nested inside a
+        // Group/Alert, WPercent is local to the parent's box, not the full frame (see
+        // SourceSlot.RenderWPercent's doc comment); this is what actually "matches the math
+        // the core uses for the destination rect" per this method's own doc comment above.
+        var maxW = (int)(slot.RenderWPercent / 100.0 * primaryW * OverlayContentRenderer.ImageOverlayCapHeadroom);
+        var maxH = (int)(slot.RenderHPercent / 100.0 * primaryH * OverlayContentRenderer.ImageOverlayCapHeadroom);
         return maxW > 0 && maxH > 0 ? (maxW, maxH) : null;
     }
 
@@ -1945,9 +1949,7 @@ public partial class SceneEditorViewModel : ObservableObject
             NotifySlotAvailabilityChanged();
         }
 
-        if (e.PropertyName is nameof(SourceSlot.XPercent) or nameof(SourceSlot.YPercent)
-            or nameof(SourceSlot.WPercent) or nameof(SourceSlot.HPercent) or nameof(SourceSlot.CornerRadiusPercent)
-            or nameof(SourceSlot.OpacityPercent) or nameof(SourceSlot.RotationDegrees))
+        if (e.PropertyName is not null && GeometryPushTriggerSlotProperties.Contains(e.PropertyName))
         {
             ScheduleLiveConfigPush();
         }
@@ -2033,10 +2035,7 @@ public partial class SceneEditorViewModel : ObservableObject
             NotifyChanged();
         }
 
-        if (propName is nameof(BlurOverlayContent.BlurRadius)
-            or nameof(IChromaKeyable.ChromaKeyEnabled) or nameof(IChromaKeyable.ChromaKeyColor) or nameof(IChromaKeyable.ChromaKeySimilarity)
-            or nameof(AlertOverlayContent.AnimatingOpacity) or nameof(AlertOverlayContent.AnimatingXOffsetPercent)
-            or nameof(AlertOverlayContent.AnimatingYOffsetPercent) or nameof(AlertOverlayContent.AnimatingScalePercent))
+        if (propName is not null && GeometryPushTriggerContentProperties.Contains(propName))
         {
             ScheduleLiveConfigPush();
         }
@@ -2359,6 +2358,36 @@ public partial class SceneEditorViewModel : ObservableObject
         DefaultScene = ActiveScene;
         NotifyChanged();
     }
+
+    /// <summary>Every <see cref="SourceSlot"/> property that feeds a <see cref="StreamSourceDef"/>
+    /// field in <see cref="BuildStreamSources"/> (position/size/rotation/opacity/corner-radius).
+    /// Read by <see cref="OnSlotPropertyChanged"/> to decide whether an edit needs a live Config
+    /// push. A wire field with no entry here means editing it only updates the local editor
+    /// canvas (which binds straight to the slot) while the composited preview/stream — a
+    /// separate render the core only refreshes on the next Config push — silently keeps showing
+    /// the old value until something unrelated happens to trigger one. Add a field to
+    /// <see cref="StreamSourceDef"/>? Add its source property here too, in the same PR —
+    /// StreamFlow.Tests.LiveConfigPushParityTests fails the build until you do.</summary>
+    public static readonly System.Collections.Generic.HashSet<string> GeometryPushTriggerSlotProperties =
+    [
+        nameof(SourceSlot.XPercent), nameof(SourceSlot.YPercent),
+        nameof(SourceSlot.WPercent), nameof(SourceSlot.HPercent),
+        nameof(SourceSlot.CornerRadiusPercent), nameof(SourceSlot.OpacityPercent),
+        nameof(SourceSlot.RotationDegrees),
+    ];
+
+    /// <summary>Content-level (kind-specific) counterpart of <see cref="GeometryPushTriggerSlotProperties"/>
+    /// — covers <see cref="StreamSourceDef"/> fields sourced from a slot's <see cref="SourceSlot.Content"/>
+    /// rather than the slot itself (blur strength, chroma key, alert entrance/exit animation).
+    /// Read by <see cref="OnSlotContentPropertyChanged"/>; same guarantee and same enforcing test
+    /// as the slot-level set.</summary>
+    public static readonly System.Collections.Generic.HashSet<string> GeometryPushTriggerContentProperties =
+    [
+        nameof(BlurOverlayContent.BlurRadius),
+        nameof(IChromaKeyable.ChromaKeyEnabled), nameof(IChromaKeyable.ChromaKeyColor), nameof(IChromaKeyable.ChromaKeySimilarity),
+        nameof(AlertOverlayContent.AnimatingOpacity), nameof(AlertOverlayContent.AnimatingXOffsetPercent),
+        nameof(AlertOverlayContent.AnimatingYOffsetPercent), nameof(AlertOverlayContent.AnimatingScalePercent),
+    ];
 
     public StreamSourceDef[] BuildStreamSources() =>
         FlattenedSlots.Where(s => !string.IsNullOrEmpty(s.SourceId) && s.Content is not AlertOverlayContent)

@@ -1,0 +1,13 @@
+.agents/
+.claude/
+.github/
+.vs/
+.remember/
+.vscode/
+atldotnet/
+libxmpBindings/
+nimbalyst-local/
+publish/
+releases/
+SoundFlow/
+scripts/
