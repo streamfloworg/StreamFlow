@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Globalization;
 
 using StreamFlow.App.Services;
 using StreamFlow.App.Services.Core;
@@ -299,50 +298,7 @@ public partial class GoLiveViewModel
     {
         var sceneSetId = SceneEditor.ActiveSceneSet?.Id ?? "default";
 
-        var scenesSnapshot = SceneEditor.Scenes.Select(scene => new SceneSettings
-        {
-            Id = scene.Id,
-            Name = scene.Name,
-            CanvasResolutionWidth = scene.CanvasResolutionWidth,
-            CanvasResolutionHeight = scene.CanvasResolutionHeight,
-            SwitchHotkeyKey = scene.SwitchHotkey?.Key.ToString(),
-            SwitchHotkeyModifiers = scene.SwitchHotkey?.Modifiers.ToString(),
-            Slots = scene.Slots.Select(s => new SlotSettings
-            {
-                IsPrimary = s.IsPrimary,
-                IsOverlay = s.IsOverlay,
-                OverlayKind = s.OverlayKind,
-                SourceId = s.SourceId,
-                DisplayName = s.DisplayName,
-                ImagePath = (s.Content as ImageOverlayContent)?.ImagePath,
-                OverlayText = (s.Content as TextOverlayContent)?.OverlayText,
-                OverlayColorHex = (s.Content as ColorOverlayContent)?.OverlayColor?.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                VideoPath = (s.Content as VideoOverlayContent)?.VideoPath,
-                XPercent = s.XPercent,
-                YPercent = s.YPercent,
-                WPercent = s.WPercent,
-                HPercent = s.HPercent,
-                CornerRadiusPercent = s.CornerRadiusPercent,
-                BlurRadius = (s.Content as BlurOverlayContent)?.BlurRadius ?? 0,
-                ChromaKeyEnabled = (s.Content as IChromaKeyable)?.ChromaKeyEnabled ?? false,
-                ChromaKeyColorHex = (s.Content as IChromaKeyable)?.ChromaKeyColor.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                ChromaKeySimilarity = (s.Content as IChromaKeyable)?.ChromaKeySimilarity ?? 40,
-                OpacityPercent = s.OpacityPercent,
-                RotationDegrees = s.RotationDegrees,
-                TimerMode = (s.Content as TimerOverlayContent)?.TimerMode ?? TimerMode.CountDown,
-                TimerDurationSeconds = (s.Content as TimerOverlayContent)?.TimerDurationSeconds ?? 300,
-                TimerAutoStartOnGoLive = (s.Content as TimerOverlayContent)?.AutoStartOnGoLive ?? false,
-                TextFontFamily = (s.Content as IHasTextStyle)?.Style.FontFamily,
-                TextFontSize = (s.Content as IHasTextStyle)?.Style.FontSize,
-                TextFontColorHex = (s.Content as IHasTextStyle)?.Style.FontColor.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                TextIsBold = (s.Content as IHasTextStyle)?.Style.IsBold,
-                TextIsItalic = (s.Content as IHasTextStyle)?.Style.IsItalic,
-                TextAlignment = (s.Content as IHasTextStyle)?.Style.Alignment.ToString(),
-                TextOutlineEnabled = (s.Content as IHasTextStyle)?.Style.OutlineEnabled,
-                TextOutlineColorHex = (s.Content as IHasTextStyle)?.Style.OutlineColor.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                TextOutlineThickness = (s.Content as IHasTextStyle)?.Style.OutlineThickness
-            }).ToList()
-        }).ToList();
+        var scenesSnapshot = SceneEditor.BuildScenesSnapshot();
 
         if (ActiveProfile is not null && ActiveProfile.Id != "none")
         {
@@ -388,50 +344,7 @@ public partial class GoLiveViewModel
 
         if (!confirm) return;
 
-        var scenesSnapshot = SceneEditor.Scenes.Select(scene => new SceneSettings
-        {
-            Id = scene.Id,
-            Name = scene.Name,
-            CanvasResolutionWidth = scene.CanvasResolutionWidth,
-            CanvasResolutionHeight = scene.CanvasResolutionHeight,
-            SwitchHotkeyKey = scene.SwitchHotkey?.Key.ToString(),
-            SwitchHotkeyModifiers = scene.SwitchHotkey?.Modifiers.ToString(),
-            Slots = scene.Slots.Select(s => new SlotSettings
-            {
-                IsPrimary = s.IsPrimary,
-                IsOverlay = s.IsOverlay,
-                OverlayKind = s.OverlayKind,
-                SourceId = s.SourceId,
-                DisplayName = s.DisplayName,
-                ImagePath = (s.Content as ImageOverlayContent)?.ImagePath,
-                OverlayText = (s.Content as TextOverlayContent)?.OverlayText,
-                OverlayColorHex = (s.Content as ColorOverlayContent)?.OverlayColor?.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                VideoPath = (s.Content as VideoOverlayContent)?.VideoPath,
-                XPercent = s.XPercent,
-                YPercent = s.YPercent,
-                WPercent = s.WPercent,
-                HPercent = s.HPercent,
-                CornerRadiusPercent = s.CornerRadiusPercent,
-                BlurRadius = (s.Content as BlurOverlayContent)?.BlurRadius ?? 0,
-                ChromaKeyEnabled = (s.Content as IChromaKeyable)?.ChromaKeyEnabled ?? false,
-                ChromaKeyColorHex = (s.Content as IChromaKeyable)?.ChromaKeyColor.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                ChromaKeySimilarity = (s.Content as IChromaKeyable)?.ChromaKeySimilarity ?? 40,
-                OpacityPercent = s.OpacityPercent,
-                RotationDegrees = s.RotationDegrees,
-                TimerMode = (s.Content as TimerOverlayContent)?.TimerMode ?? TimerMode.CountDown,
-                TimerDurationSeconds = (s.Content as TimerOverlayContent)?.TimerDurationSeconds ?? 300,
-                TimerAutoStartOnGoLive = (s.Content as TimerOverlayContent)?.AutoStartOnGoLive ?? false,
-                TextFontFamily = (s.Content as IHasTextStyle)?.Style.FontFamily,
-                TextFontSize = (s.Content as IHasTextStyle)?.Style.FontSize,
-                TextFontColorHex = (s.Content as IHasTextStyle)?.Style.FontColor.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                TextIsBold = (s.Content as IHasTextStyle)?.Style.IsBold,
-                TextIsItalic = (s.Content as IHasTextStyle)?.Style.IsItalic,
-                TextAlignment = (s.Content as IHasTextStyle)?.Style.Alignment.ToString(),
-                TextOutlineEnabled = (s.Content as IHasTextStyle)?.Style.OutlineEnabled,
-                TextOutlineColorHex = (s.Content as IHasTextStyle)?.Style.OutlineColor.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                TextOutlineThickness = (s.Content as IHasTextStyle)?.Style.OutlineThickness
-            }).ToList()
-        }).ToList();
+        var scenesSnapshot = SceneEditor.BuildScenesSnapshot();
 
         // Write directly to the Scene Set defaults
         _sceneSetService.SaveSceneSetLayout(SceneEditor.ActiveSceneSet, scenesSnapshot);
@@ -812,48 +725,7 @@ public partial class GoLiveViewModel
 
         try
         {
-            var scenesSnapshot = SceneEditor.Scenes.Select(sc => new SceneSettings
-            {
-                Id = sc.Id,
-                Name = sc.Name,
-                CanvasResolutionWidth = sc.CanvasResolutionWidth,
-                CanvasResolutionHeight = sc.CanvasResolutionHeight,
-                Slots = sc.Slots.Select(s => new SlotSettings
-                {
-                    IsPrimary = s.IsPrimary,
-                    IsOverlay = s.IsOverlay,
-                    OverlayKind = s.OverlayKind,
-                    SourceId = s.SourceId,
-                    DisplayName = s.DisplayName,
-                    ImagePath = (s.Content as ImageOverlayContent)?.ImagePath,
-                    OverlayText = (s.Content as TextOverlayContent)?.OverlayText,
-                    OverlayColorHex = (s.Content as ColorOverlayContent)?.OverlayColor?.ToString(CultureInfo.InvariantCulture),
-                    VideoPath = (s.Content as VideoOverlayContent)?.VideoPath,
-                    XPercent = s.XPercent,
-                    YPercent = s.YPercent,
-                    WPercent = s.WPercent,
-                    HPercent = s.HPercent,
-                    CornerRadiusPercent = s.CornerRadiusPercent,
-                    BlurRadius = (s.Content as BlurOverlayContent)?.BlurRadius ?? 0,
-                    ChromaKeyEnabled = (s.Content as IChromaKeyable)?.ChromaKeyEnabled ?? false,
-                    ChromaKeyColorHex = (s.Content as IChromaKeyable)?.ChromaKeyColor.ToString(CultureInfo.InvariantCulture),
-                    ChromaKeySimilarity = (s.Content as IChromaKeyable)?.ChromaKeySimilarity ?? 40,
-                    OpacityPercent = s.OpacityPercent,
-                    RotationDegrees = s.RotationDegrees,
-                    TimerMode = (s.Content as TimerOverlayContent)?.TimerMode ?? TimerMode.CountDown,
-                    TimerDurationSeconds = (s.Content as TimerOverlayContent)?.TimerDurationSeconds ?? 300,
-                    TimerAutoStartOnGoLive = (s.Content as TimerOverlayContent)?.AutoStartOnGoLive ?? false,
-                    TextFontFamily = (s.Content as IHasTextStyle)?.Style.FontFamily,
-                    TextFontSize = (s.Content as IHasTextStyle)?.Style.FontSize,
-                    TextFontColorHex = (s.Content as IHasTextStyle)?.Style.FontColor.ToString(CultureInfo.InvariantCulture),
-                    TextIsBold = (s.Content as IHasTextStyle)?.Style.IsBold,
-                    TextIsItalic = (s.Content as IHasTextStyle)?.Style.IsItalic,
-                    TextAlignment = (s.Content as IHasTextStyle)?.Style.Alignment.ToString(),
-                    TextOutlineEnabled = (s.Content as IHasTextStyle)?.Style.OutlineEnabled,
-                    TextOutlineColorHex = (s.Content as IHasTextStyle)?.Style.OutlineColor.ToString(CultureInfo.InvariantCulture),
-                    TextOutlineThickness = (s.Content as IHasTextStyle)?.Style.OutlineThickness
-                }).ToList()
-            }).ToList();
+            var scenesSnapshot = SceneEditor.BuildScenesSnapshot();
 
             _sceneSetService.ExportSceneSet(dialog.FileName, SceneEditor.ActiveSceneSet.Name, SceneEditor.ActiveSceneSet.Author, scenesSnapshot);
             await _dialogs.WarningAsync("Export Scene Set", "Successfully exported Scene Set!");

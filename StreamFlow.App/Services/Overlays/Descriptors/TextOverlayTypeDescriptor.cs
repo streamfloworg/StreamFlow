@@ -43,11 +43,11 @@ public sealed class TextOverlayTypeDescriptor : IOverlayTypeDescriptor
         return CreateDefault();
     }
 
-    public (int Width, int Height, byte[] Pixels)? RenderStaticBgra(IOverlayContent content, SourceSlot slot)
+    public (int Width, int Height, byte[] Pixels)? RenderStaticBgra(IOverlayContent content, object? slotContext)
     {
         if (content is TextOverlayContent { OverlayText: not null } text)
         {
-            return OverlayContentRenderer.RenderTextToBgra(text.OverlayText, text.Style);
+            return OverlayContentRenderer.RenderTextToBgra(text.OverlayText, text.Style, slotContext as SourceSlot);
         }
         return null;
     }
@@ -70,6 +70,15 @@ public sealed class TextOverlayTypeDescriptor : IOverlayTypeDescriptor
                     onPropertyChanged($"Style.{e.PropertyName}");
             };
         }
+    }
+
+    public IReadOnlyList<StreamFlow.Plugin.SDK.Overlays.Sections.IOverlayPropertySection> GetInspectorSections(IOverlayContent content)
+    {
+        if (content is not TextOverlayContent text) return [];
+        return [
+            new StreamFlow.Plugin.SDK.Overlays.Sections.TextBoxSection("Text Content", () => text.OverlayText, v => text.OverlayText = v ?? "", isMultiLine: true, source: text, propName: nameof(text.OverlayText)),
+            new StreamFlow.App.Services.Overlays.Sections.TextStyleSection(text.Style)
+        ];
     }
 
     private static void ApplyTextStyleFromSettings(TextStyle style, SlotSettings s)

@@ -24,6 +24,7 @@
                 <!-- Merged last so it overrides whatever, if anything, AdonisUI's own theme
                      provides for these implicit styles — see the file for why this exists. -->
                 <ResourceDictionary Source="Resources/Theme/DefaultTextStyles.xaml" />
+                <ResourceDictionary Source="Resources/OverlayInspectorSectionTemplates.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <converters:BooleanToResourceConverter x:Key="BooleanToResourceConverter" />
         </ResourceDictionary>

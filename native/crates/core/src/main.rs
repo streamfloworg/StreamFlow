@@ -254,6 +254,8 @@ async fn run_stdin_commands(
     let mut lines = BufReader::new(tokio::io::stdin()).lines();
     let mut stdout = tokio::io::stdout();
     let mut active_sessions: std::collections::HashMap<String, Box<dyn CaptureSessionTrait>> = std::collections::HashMap::new();
+    let mut window_targets: std::collections::HashMap<String, (sources::WindowIdentity, windows::Win32::Foundation::HWND)> = std::collections::HashMap::new();
+    let mut auto_rebind_interval = tokio::time::interval(std::time::Duration::from_millis(1000));
     let mut active_stream: Option<StreamSession> = None;
     // Standalone per-device level monitors (Command::StartAudioMonitor), independent of
     // streaming — dropping the ActiveStream here stops that device's capture and, via peak_tx
@@ -367,6 +369,41 @@ async fn run_stdin_commands(
                 let frame = encode_event(&Event::SpoutTextureReady { share_handle, width, height, adapter_luid })?;
                 stdout.write_all(&frame).await?;
                 stdout.flush().await?;
+                continue;
+            }
+            _ = auto_rebind_interval.tick() => {
+                if !window_targets.is_empty() {
+                    for (source_id, (identity, current_hwnd)) in window_targets.iter_mut() {
+                        use windows::Win32::UI::WindowsAndMessaging::{IsWindow, IsWindowVisible};
+                        let is_valid = unsafe { IsWindow(Some(*current_hwnd)).as_bool() && IsWindowVisible(*current_hwnd).as_bool() };
+                        let is_stale = active_sessions.get(source_id).map(|s| s.is_stale()).unwrap_or(true);
+
+                        if !is_valid || is_stale {
+                            if let Some(new_hwnd) = sources::find_matching_window_hwnd(identity) {
+                                info!("[auto-rebind] Re-binding window capture for {source_id}: {:?} -> {:?}", *current_hwnd, new_hwnd);
+                                *current_hwnd = new_hwnd;
+                                if let Ok(item) = sources::capture_item_for_hwnd(new_hwnd) {
+                                    let (w, h) = item
+                                        .Size()
+                                        .map(|s| (Some(s.Width as u32), Some(s.Height as u32)))
+                                        .unwrap_or((None, None));
+                                    if let Ok(session) = capture::CaptureSession::new(source_id.clone(), item, frame_tx.clone()) {
+                                        active_sessions.insert(source_id.clone(), Box::new(session));
+                                        info!("[auto-rebind] Successfully re-established WGC session for {source_id}");
+                                        if let Ok(evt) = encode_event(&Event::CaptureStarted {
+                                            source_id: source_id.clone(),
+                                            width: w,
+                                            height: h,
+                                        }) {
+                                            let _ = stdout.write_all(&evt).await;
+                                            let _ = stdout.flush().await;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 continue;
             }
             // ── Commands from Electron on stdin ───────────────────────────────
@@ -517,6 +554,15 @@ async fn run_stdin_commands(
                         match session_result {
                             Ok(session) => {
                                 active_sessions.insert(source_id.clone(), session);
+                                if source_id.starts_with("window:") {
+                                    if let Some(rest) = source_id.strip_prefix("window:") {
+                                        if let Ok(hwnd_val) = usize::from_str_radix(rest.trim_start_matches("0x"), 16) {
+                                            let hwnd = windows::Win32::Foundation::HWND(hwnd_val as *mut core::ffi::c_void);
+                                            let identity = sources::get_window_identity(hwnd);
+                                            window_targets.insert(source_id.clone(), (identity, hwnd));
+                                        }
+                                    }
+                                }
                                 let frame = encode_event(&Event::CaptureStarted {
                                     source_id: source_id.clone(),
                                     width: video_resolution.map(|(w, _)| w),
@@ -572,6 +618,7 @@ async fn run_stdin_commands(
                         }
                     }
                     Ok(Command::StopCapture { source_id }) => {
+                        window_targets.remove(&source_id);
                         if let Some(mut session) = active_sessions.remove(&source_id) {
                             if let Err(e) = session.stop() {
                                 warn!("Failed to stop capture {source_id}: {e}");
@@ -1168,11 +1215,15 @@ mod tests {
 
 pub trait CaptureSessionTrait: Send + Sync {
     fn stop(&mut self) -> anyhow::Result<()>;
+    fn is_stale(&self) -> bool { false }
 }
 
 impl CaptureSessionTrait for capture::CaptureSession {
     fn stop(&mut self) -> anyhow::Result<()> {
         capture::CaptureSession::stop(self)
+    }
+    fn is_stale(&self) -> bool {
+        capture::CaptureSession::is_stale(self, 1500)
     }
 }
 

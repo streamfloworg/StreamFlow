@@ -1,0 +1,339 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:adonisUi="clr-namespace:AdonisUI;assembly=AdonisUI"
+                    xmlns:sdkSections="clr-namespace:StreamFlow.Plugin.SDK.Overlays.Sections;assembly=StreamFlow.Plugin.SDK"
+                    xmlns:appSections="clr-namespace:StreamFlow.App.Services.Overlays.Sections"
+                    xmlns:controls="clr-namespace:StreamFlow.App.Controls"
+                    xmlns:vm="clr-namespace:StreamFlow.App.ViewModels.Pages">
+
+    <!-- Reusable TextStyle Editor Template -->
+    <DataTemplate x:Key="TextStyleEditorTemplate">
+        <StackPanel>
+            <TextBlock Text="Font" Style="{StaticResource FieldLabelStyle}"/>
+            <ComboBox IsEditable="True" Text="{Binding FontColor, Mode=OneWay, Converter={StaticResource NullToVisibility}, ConverterParameter=FontFamilyDummy, FallbackValue=''}" Margin="0,0,0,6">
+                <!-- Fallback / Simple Font Box -->
+            </ComboBox>
+        </StackPanel>
+    </DataTemplate>
+
+    <!-- Implicit DataTemplates for Property Sections -->
+
+    <!-- SliderSection -->
+    <DataTemplate DataType="{x:Type sdkSections:SliderSection}">
+        <Grid Margin="0,4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="40"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="{Binding Label}" VerticalAlignment="Center"
+                       Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="0,0,8,0"/>
+            <Slider Grid.Column="1" Minimum="{Binding Min}" Maximum="{Binding Max}"
+                    Value="{Binding Value, Mode=TwoWay}" VerticalAlignment="Center"/>
+            <TextBlock Grid.Column="2" Text="{Binding Value, StringFormat={}{0:F0}}" TextAlignment="Right"
+                       VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+        </Grid>
+    </DataTemplate>
+
+    <!-- TextBoxSection -->
+    <DataTemplate DataType="{x:Type sdkSections:TextBoxSection}">
+        <StackPanel Margin="0,4">
+            <TextBlock Text="{Binding Label}" Style="{StaticResource FieldLabelStyle}"/>
+            <TextBox Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     AcceptsReturn="{Binding IsMultiLine}" TextWrapping="Wrap"/>
+        </StackPanel>
+    </DataTemplate>
+
+    <!-- ToggleSection -->
+    <DataTemplate DataType="{x:Type sdkSections:ToggleSection}">
+        <CheckBox Content="{Binding Label}" IsChecked="{Binding Value, Mode=TwoWay}" Margin="0,4"/>
+    </DataTemplate>
+
+    <!-- ColorSection -->
+    <DataTemplate DataType="{x:Type sdkSections:ColorSection}">
+        <StackPanel Margin="0,4">
+            <TextBlock Text="{Binding Label}" Style="{StaticResource FieldLabelStyle}"/>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="28"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Width="24" Height="24" CornerRadius="4" Margin="0,0,8,0"
+                        BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="1"
+                        Background="{Binding Value, Converter={StaticResource ColorToBrush}}"/>
+                <Button Grid.Column="1" Content="Pick Color…" Command="{Binding PickColorCommand}"/>
+            </Grid>
+        </StackPanel>
+    </DataTemplate>
+
+    <!-- FilePickerSection -->
+    <DataTemplate DataType="{x:Type sdkSections:FilePickerSection}">
+        <StackPanel Margin="0,4">
+            <TextBlock Text="{Binding Label}" Style="{StaticResource FieldLabelStyle}"/>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBox Grid.Column="0" Text="{Binding Value}" IsReadOnly="True" VerticalAlignment="Center" FontSize="11" Margin="0,0,6,0"/>
+                <Button Grid.Column="1" Content="Browse…" Command="{Binding BrowseCommand}" Padding="8,3"/>
+            </Grid>
+        </StackPanel>
+    </DataTemplate>
+
+    <!-- ComboSection -->
+    <DataTemplate DataType="{x:Type sdkSections:ComboSection}">
+        <StackPanel Margin="0,4">
+            <TextBlock Text="{Binding Label}" Style="{StaticResource FieldLabelStyle}"/>
+            <ComboBox ItemsSource="{Binding Options}" SelectedItem="{Binding Value, Mode=TwoWay}"/>
+        </StackPanel>
+    </DataTemplate>
+
+    <!-- InfoSection -->
+    <DataTemplate DataType="{x:Type sdkSections:InfoSection}">
+        <TextBlock Text="{Binding Text}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12"
+                   TextWrapping="Wrap" Margin="0,4,0,8"/>
+    </DataTemplate>
+
+    <!-- SeparatorSection -->
+    <DataTemplate DataType="{x:Type sdkSections:SeparatorSection}">
+        <Separator Margin="0,8"/>
+    </DataTemplate>
+
+    <!-- TextStyleSection -->
+    <DataTemplate DataType="{x:Type appSections:TextStyleSection}">
+        <StackPanel DataContext="{Binding Style}" Margin="0,4">
+            <TextBlock Text="Font" Style="{StaticResource FieldLabelStyle}"/>
+            <ComboBox IsEditable="True" Text="{Binding FontFamily, Mode=TwoWay}" Margin="0,0,0,6">
+                <ComboBoxItem Content="Segoe UI"/>
+                <ComboBoxItem Content="Arial"/>
+                <ComboBoxItem Content="Impact"/>
+                <ComboBoxItem Content="Consolas"/>
+                <ComboBoxItem Content="Georgia"/>
+                <ComboBoxItem Content="Verdana"/>
+            </ComboBox>
+            <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="Font Size" VerticalAlignment="Center"
+                           Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="0,0,8,0"/>
+                <Slider Grid.Column="1" Minimum="8" Maximum="200" VerticalAlignment="Center"
+                        Value="{Binding FontSize, Mode=TwoWay}"/>
+                <TextBlock Grid.Column="2" Width="28" VerticalAlignment="Center" TextAlignment="Right"
+                           Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"
+                           Text="{Binding FontSize, StringFormat={}{0:F0}}"/>
+            </Grid>
+            <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Width="24" Height="24" CornerRadius="4" Margin="0,0,8,0"
+                        BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="1"
+                        Background="{Binding FontColor, Converter={StaticResource ColorToBrush}}"/>
+                <Button Grid.Column="1" Content="Text color…" HorizontalAlignment="Stretch"
+                        Command="{Binding RelativeSource={RelativeSource AncestorType=UserControl}, Path=DataContext.ViewModel.SceneEditor.ChangeTextColorCommand}"
+                        CommandParameter="{Binding}"/>
+            </Grid>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                <CheckBox Content="Bold" IsChecked="{Binding IsBold, Mode=TwoWay}" Margin="0,0,16,0"/>
+                <CheckBox Content="Italic" IsChecked="{Binding IsItalic, Mode=TwoWay}"/>
+            </StackPanel>
+            <TextBlock Text="Alignment" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"/>
+            <ComboBox Margin="0,0,0,6" SelectedIndex="{Binding Alignment, Converter={StaticResource TextAlignmentToIndex}}">
+                <ComboBoxItem Content="Left"/>
+                <ComboBoxItem Content="Center"/>
+                <ComboBoxItem Content="Right"/>
+                <ComboBoxItem Content="Justify"/>
+            </ComboBox>
+            <CheckBox Content="Outline" IsChecked="{Binding OutlineEnabled, Mode=TwoWay}" Margin="0,0,0,6"/>
+            <StackPanel Visibility="{Binding OutlineEnabled, Converter={StaticResource BoolToVisibility}}">
+                <Grid Margin="0,0,0,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Width="24" Height="24" CornerRadius="4" Margin="0,0,8,0"
+                            BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="1"
+                            Background="{Binding OutlineColor, Converter={StaticResource ColorToBrush}}"/>
+                    <Button Grid.Column="1" Content="Outline color…" HorizontalAlignment="Stretch"
+                            Command="{Binding RelativeSource={RelativeSource AncestorType=UserControl}, Path=DataContext.ViewModel.SceneEditor.ChangeTextOutlineColorCommand}"
+                            CommandParameter="{Binding}"/>
+                </Grid>
+                <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Thickness" VerticalAlignment="Center"
+                               Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="0,0,8,0"/>
+                    <Slider Grid.Column="1" Minimum="1" Maximum="20" VerticalAlignment="Center"
+                            Value="{Binding OutlineThickness, Mode=TwoWay}"/>
+                    <TextBlock Grid.Column="2" Width="24" VerticalAlignment="Center" TextAlignment="Right"
+                               Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"
+                               Text="{Binding OutlineThickness, StringFormat={}{0:F0}}"/>
+                </Grid>
+            </StackPanel>
+        </StackPanel>
+    </DataTemplate>
+
+    <!-- ChromaKeySection -->
+    <DataTemplate DataType="{x:Type appSections:ChromaKeySection}">
+        <StackPanel DataContext="{Binding Target}" Margin="0,4">
+            <CheckBox Content="Enable Chroma Key" IsChecked="{Binding ChromaKeyEnabled, Mode=TwoWay}" Margin="0,0,0,4"/>
+            <StackPanel Visibility="{Binding ChromaKeyEnabled, Converter={StaticResource BoolToVisibility}}">
+                <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Width="24" Height="24" CornerRadius="4" Margin="0,0,8,0"
+                            BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="1"
+                            Background="{Binding ChromaKeyColor, Converter={StaticResource ColorToBrush}}"/>
+                    <Button Grid.Column="1" Content="Key color…" HorizontalAlignment="Stretch"
+                            Command="{Binding RelativeSource={RelativeSource AncestorType=UserControl}, Path=DataContext.ViewModel.SceneEditor.ChangeChromaKeyColorCommand}"
+                            CommandParameter="{Binding}"/>
+                </Grid>
+                <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Similarity" VerticalAlignment="Center"
+                               Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="0,0,8,0"/>
+                    <Slider Grid.Column="1" Minimum="1" Maximum="100" Value="{Binding ChromaKeySimilarity, Mode=TwoWay}" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="2" Width="28" VerticalAlignment="Center" TextAlignment="Right"
+                               Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"
+                               Text="{Binding ChromaKeySimilarity, StringFormat={}{0:F0}}"/>
+                </Grid>
+            </StackPanel>
+        </StackPanel>
+    </DataTemplate>
+
+    <!-- CommandGroupSection -->
+    <DataTemplate DataType="{x:Type appSections:CommandGroupSection}">
+        <StackPanel Margin="0,6">
+            <TextBlock Text="{Binding Header}" Style="{StaticResource FieldLabelStyle}"
+                       Visibility="{Binding Header, Converter={StaticResource NullToVisibility}}"/>
+            <ItemsControl ItemsSource="{Binding Commands}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel Orientation="Horizontal"
+                                   MaxWidth="{Binding RelativeSource={RelativeSource AncestorType=controls:SectionPanel}, Path=ActualWidth}"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type appSections:CommandEntry}">
+                        <Button Content="{Binding Label}" Command="{Binding Command}" CommandParameter="{Binding Parameter}"
+                                Padding="8,4" Margin="0,0,6,6"/>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </DataTemplate>
+
+    <!-- AlertSubLayerManagerSection -->
+    <DataTemplate DataType="{x:Type appSections:AlertSubLayerManagerSection}">
+        <StackPanel Margin="0,6">
+            <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="Alert Sub-Layers" Style="{StaticResource FieldLabelStyle}" VerticalAlignment="Center"/>
+                <Menu Grid.Column="1" Background="Transparent" VerticalAlignment="Center">
+                    <MenuItem Header="➕ Add Sub-Layer ▾" Padding="6,2" FontSize="10">
+                        <MenuItem Header="Text Layer" Command="{Binding AddSubLayerCommand}" CommandParameter="Text"/>
+                        <MenuItem Header="Image Layer" Command="{Binding AddSubLayerCommand}" CommandParameter="Image"/>
+                        <MenuItem Header="Video Layer" Command="{Binding AddSubLayerCommand}" CommandParameter="Video"/>
+                        <MenuItem Header="Color Box Layer" Command="{Binding AddSubLayerCommand}" CommandParameter="Color"/>
+                    </MenuItem>
+                </Menu>
+            </Grid>
+            <ListBox ItemsSource="{Binding AlertContent.SubLayers}" SelectedItem="{Binding AlertContent.SelectedSubLayer, Mode=TwoWay}"
+                     MaxHeight="120" Margin="0,0,0,8">
+                <ListBox.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:SourceSlot}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{Binding DisplayName}" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                            <Button Grid.Column="1" Content="❌" Padding="4,1" FontSize="10"
+                                    Command="{Binding DataContext.RemoveSubLayerCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                    CommandParameter="{Binding}"/>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </StackPanel>
+    </DataTemplate>
+
+    <!-- GroupMembershipSection -->
+    <DataTemplate DataType="{x:Type appSections:GroupMembershipSection}">
+        <StackPanel Margin="0,6">
+            <TextBlock Text="Candidate Layers" Style="{StaticResource FieldLabelStyle}"/>
+            <ListBox ItemsSource="{Binding Candidates}" MaxHeight="140">
+                <ListBox.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:SourceSlot}">
+                        <CheckBox Content="{Binding DisplayName}"/>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </StackPanel>
+    </DataTemplate>
+
+    <!-- GroupedSection (SDK & App) -->
+    <DataTemplate DataType="{x:Type sdkSections:GroupedSection}">
+        <controls:SectionPanel HeaderText="{Binding Header}" Margin="0,0,0,10" HorizontalContentAlignment="Stretch">
+            <ItemsControl ItemsSource="{Binding Sections}" HorizontalContentAlignment="Stretch"/>
+        </controls:SectionPanel>
+    </DataTemplate>
+    <DataTemplate DataType="{x:Type appSections:GroupedSection}">
+        <controls:SectionPanel HeaderText="{Binding Header}" Margin="0,0,0,10" HorizontalContentAlignment="Stretch">
+            <ItemsControl ItemsSource="{Binding Sections}" HorizontalContentAlignment="Stretch"/>
+        </controls:SectionPanel>
+    </DataTemplate>
+
+    <!-- SubLayerLayoutSection -->
+    <DataTemplate DataType="{x:Type appSections:SubLayerLayoutSection}">
+        <StackPanel Margin="0,4,0,0">
+            <CheckBox Content="Lock Aspect Ratio" IsChecked="{Binding SubSlot.IsAspectLocked, Mode=TwoWay}" Margin="0,2,0,6"/>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="6"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="4"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <StackPanel Grid.Row="0" Grid.Column="0">
+                    <TextBlock Text="X (%)" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"/>
+                    <TextBox Text="{Binding SubSlot.XPercent, StringFormat={}{0:F1}}"/>
+                </StackPanel>
+                <StackPanel Grid.Row="0" Grid.Column="2">
+                    <TextBlock Text="Y (%)" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"/>
+                    <TextBox Text="{Binding SubSlot.YPercent, StringFormat={}{0:F1}}"/>
+                </StackPanel>
+                <StackPanel Grid.Row="2" Grid.Column="0">
+                    <TextBlock Text="Width (%)" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"/>
+                    <TextBox Text="{Binding SubSlot.WPercent, StringFormat={}{0:F1}}"/>
+                </StackPanel>
+                <StackPanel Grid.Row="2" Grid.Column="2">
+                    <TextBlock Text="Height (%)" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"/>
+                    <TextBox Text="{Binding SubSlot.HPercent, StringFormat={}{0:F1}}"/>
+                </StackPanel>
+            </Grid>
+        </StackPanel>
+    </DataTemplate>
+
+</ResourceDictionary>

@@ -33,7 +33,7 @@ public sealed class GroupOverlayTypeDescriptor : IOverlayTypeDescriptor
         return CreateDefault();
     }
 
-    public (int Width, int Height, byte[] Pixels)? RenderStaticBgra(IOverlayContent content, SourceSlot slot) => null;
+    public (int Width, int Height, byte[] Pixels)? RenderStaticBgra(IOverlayContent content, object? slotContext) => null;
 
     public void HookPropertyChanges(IOverlayContent content, Action<string> onPropertyChanged)
     {
@@ -45,5 +45,13 @@ public sealed class GroupOverlayTypeDescriptor : IOverlayTypeDescriptor
                     onPropertyChanged(e.PropertyName);
             };
         }
+    }
+
+    public IReadOnlyList<StreamFlow.Plugin.SDK.Overlays.Sections.IOverlayPropertySection> GetInspectorSections(IOverlayContent content)
+    {
+        if (content is not GroupOverlayContent group) return [];
+        return [
+            new StreamFlow.Plugin.SDK.Overlays.Sections.ToggleSection("Lock Child Positions", () => group.LockChildren, v => group.LockChildren = v, group, nameof(group.LockChildren))
+        ];
     }
 }

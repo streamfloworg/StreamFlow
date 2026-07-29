@@ -1,4 +1,4 @@
-<adonisControls:AdonisWindow
+﻿<adonisControls:AdonisWindow
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:adonisUi="clr-namespace:AdonisUI;assembly=AdonisUI"
@@ -15,14 +15,14 @@
     xmlns:commands="clr-namespace:StreamFlow.App.Commands"
     xmlns:controls="clr-namespace:StreamFlow.App.Controls"
     Title="{Binding ViewModel.ApplicationTitle, Mode=OneWay}"
-    Width="1460"
+    Width="1440"
     Height="820"
-    MinWidth="1400"
+    MinWidth="1440"
     MinHeight="650"
     d:DataContext="{d:DesignInstance local:MainWindow, IsDesignTimeCreatable=True}"
     DataContext="{Binding Current, RelativeSource={RelativeSource Self}}"
     d:DesignHeight="820"
-    d:DesignWidth="1460"
+    d:DesignWidth="1440"
     WindowStartupLocation="CenterScreen"
     Activated="Window_Activated"
     HorizontalContentAlignment="Stretch"

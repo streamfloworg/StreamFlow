@@ -20,6 +20,7 @@ public enum OverlayKind
     Timer,
     Group,
     Alert,
+    Custom,
 }
 
 public enum StreamAlertType

@@ -190,6 +190,89 @@ unsafe extern "system" fn window_enum_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
     BOOL(1) // continue
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct WindowIdentity {
+    pub process_name: String,
+    pub title: String,
+}
+
+pub fn get_window_identity(hwnd: HWND) -> WindowIdentity {
+    let mut title = String::new();
+    let title_len = unsafe { GetWindowTextLengthW(hwnd) };
+    if title_len > 0 {
+        let mut buf = vec![0u16; title_len as usize + 1];
+        unsafe { GetWindowTextW(hwnd, &mut buf); }
+        title = String::from_utf16_lossy(&buf[..buf.iter().position(|&c| c == 0).unwrap_or(0)]);
+    }
+
+    let mut pid = 0;
+    let mut process_name = String::new();
+    use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+    use windows::Win32::System::ProcessStatus::GetModuleBaseNameW;
+    use windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
+    use windows::Win32::Foundation::CloseHandle;
+
+    unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)); }
+    if pid != 0 {
+        if let Ok(process) = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) } {
+            let mut name_buf = [0u16; 256];
+            let len = unsafe { GetModuleBaseNameW(process, None, &mut name_buf) };
+            if len > 0 {
+                process_name = String::from_utf16_lossy(&name_buf[..len as usize]);
+            }
+            let _ = unsafe { CloseHandle(process) };
+        }
+    }
+
+    WindowIdentity { process_name, title }
+}
+
+pub fn find_matching_window_hwnd(target: &WindowIdentity) -> Option<HWND> {
+    if target.process_name.is_empty() && target.title.is_empty() {
+        return None;
+    }
+
+    struct MatchState<'a> {
+        target: &'a WindowIdentity,
+        result: Option<HWND>,
+    }
+
+    unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
+        let state = &mut *(lparam.0 as *mut MatchState);
+
+        if !IsWindowVisible(hwnd).as_bool() {
+            return BOOL(1);
+        }
+
+        let identity = get_window_identity(hwnd);
+
+        let proc_match = !state.target.process_name.is_empty()
+            && identity.process_name.eq_ignore_ascii_case(&state.target.process_name);
+        let title_match = !state.target.title.is_empty()
+            && identity.title.contains(&state.target.title);
+
+        if proc_match || title_match {
+            if capture_item_for_hwnd(hwnd).is_ok() {
+                state.result = Some(hwnd);
+                return BOOL(0); // stop enumeration
+            }
+        }
+
+        BOOL(1)
+    }
+
+    let mut state = MatchState {
+        target,
+        result: None,
+    };
+
+    unsafe {
+        let _ = EnumWindows(Some(enum_proc), LPARAM(&raw mut state as isize));
+    }
+
+    state.result
+}
+
 // ── Webcams (Media Foundation) ────────────────────────────────────────────────
 
 fn enumerate_webcams() -> Vec<CaptureSource> {
@@ -313,7 +396,7 @@ fn capture_item_for_monitor(hmonitor: HMONITOR) -> windows::core::Result<Graphic
     unsafe { interop.CreateForMonitor(hmonitor) }
 }
 
-fn capture_item_for_hwnd(hwnd: HWND) -> windows::core::Result<GraphicsCaptureItem> {
+pub fn capture_item_for_hwnd(hwnd: HWND) -> windows::core::Result<GraphicsCaptureItem> {
     let interop: IGraphicsCaptureItemInterop =
         windows::core::factory::<GraphicsCaptureItem, IGraphicsCaptureItemInterop>()?;
     unsafe { interop.CreateForWindow(hwnd) }

@@ -126,7 +126,8 @@ public partial class GoLiveViewModel
                 var item = new AudioSourceItem(device, isSelected, displayName)
                 {
                     IsDuckingTrigger = (device.Id == DuckingTriggerDeviceId),
-                    IsDuckingTarget = _persistedDuckingTargetDeviceIds.Contains(device.Id)
+                    IsDuckingTarget = _persistedDuckingTargetDeviceIds.Contains(device.Id),
+                    OpenDuckingConfigAction = OpenDuckingConfig
                 };
                 item.PropertyChanged += (_, e) =>
                 {
@@ -251,6 +252,16 @@ public partial class GoLiveViewModel
         }
     }
 
+    [RelayCommand]
+    public void OpenDuckingConfig()
+    {
+        var window = new Views.Windows.DuckingConfigWindow(this)
+        {
+            Owner = System.Windows.Application.Current?.MainWindow
+        };
+        window.ShowDialog();
+    }
+
     public IEnumerable<AudioSourceItem> UnselectedAudioSources =>
         AudioSources.Where(a => !a.IsSelected);
 
@@ -283,6 +294,7 @@ public partial class GoLiveViewModel
     [ObservableProperty] private float _duckingAttackMs = 10.0f;
     [ObservableProperty] private float _duckingReleaseMs = 300.0f;
     [ObservableProperty] private float _duckingHoldMs = 100.0f;
+    [ObservableProperty] private string _duckingPreset = "medium";
 
     partial void OnDuckingTriggerDeviceIdChanged(string? value)
     {
@@ -300,6 +312,7 @@ public partial class GoLiveViewModel
     partial void OnDuckingAttackMsChanged(float value) { SendDuckingRules(); ScheduleSaveSettings(); }
     partial void OnDuckingReleaseMsChanged(float value) { SendDuckingRules(); ScheduleSaveSettings(); }
     partial void OnDuckingHoldMsChanged(float value) { SendDuckingRules(); ScheduleSaveSettings(); }
+    partial void OnDuckingPresetChanged(string value) { ScheduleSaveSettings(); }
 
     [RelayCommand]
     private void ApplyDuckingPreset(string preset)

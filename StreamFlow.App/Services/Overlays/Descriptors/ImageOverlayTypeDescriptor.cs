@@ -58,7 +58,7 @@ public sealed class ImageOverlayTypeDescriptor : IOverlayTypeDescriptor
         return CreateDefault();
     }
 
-    public (int Width, int Height, byte[] Pixels)? RenderStaticBgra(IOverlayContent content, SourceSlot slot)
+    public (int Width, int Height, byte[] Pixels)? RenderStaticBgra(IOverlayContent content, object? slotContext)
     {
         if (content is ImageOverlayContent { ImagePath: not null } image)
         {
@@ -78,5 +78,14 @@ public sealed class ImageOverlayTypeDescriptor : IOverlayTypeDescriptor
                     onPropertyChanged(e.PropertyName);
             };
         }
+    }
+
+    public IReadOnlyList<StreamFlow.Plugin.SDK.Overlays.Sections.IOverlayPropertySection> GetInspectorSections(IOverlayContent content)
+    {
+        if (content is not ImageOverlayContent img) return [];
+        return [
+            new StreamFlow.Plugin.SDK.Overlays.Sections.FilePickerSection("Image File", () => img.ImagePath, v => img.ImagePath = v, "Images|*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp", img, nameof(img.ImagePath)),
+            new StreamFlow.App.Services.Overlays.Sections.ChromaKeySection(img)
+        ];
     }
 }

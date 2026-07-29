@@ -15,6 +15,7 @@ public sealed class TextHorizontalAlignmentToTextAlignmentConverter : IValueConv
     {
         TextHorizontalAlignment.Center => TextAlignment.Center,
         TextHorizontalAlignment.Right => TextAlignment.Right,
+        TextHorizontalAlignment.Justify => TextAlignment.Justify,
         _ => TextAlignment.Left,
     };
 
@@ -22,6 +23,7 @@ public sealed class TextHorizontalAlignmentToTextAlignmentConverter : IValueConv
     {
         TextAlignment.Center => TextHorizontalAlignment.Center,
         TextAlignment.Right => TextHorizontalAlignment.Right,
+        TextAlignment.Justify => TextHorizontalAlignment.Justify,
         _ => TextHorizontalAlignment.Left,
     };
 }

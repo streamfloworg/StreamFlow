@@ -30,6 +30,11 @@ public partial class AudioSourceItem : ObservableObject
     [RelayCommand]
     private void Remove() => IsSelected = false;
 
+    public Action? OpenDuckingConfigAction { get; set; }
+
+    [RelayCommand]
+    private void OpenDuckingConfig() => OpenDuckingConfigAction?.Invoke();
+
     /// <summary>0-100, linear amplitude (not a dB-scaled fader position) — Gain below derives
     /// straight from this as a fraction, and DisplayDb derives the dB text from that same gain.
     /// Kept simple deliberately: a proper dB-scaled fader (e.g. -60..+12 with 0dB near the top)

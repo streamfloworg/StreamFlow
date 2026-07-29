@@ -60,7 +60,7 @@ public sealed class VideoOverlayTypeDescriptor : IOverlayTypeDescriptor
         return CreateDefault();
     }
 
-    public (int Width, int Height, byte[] Pixels)? RenderStaticBgra(IOverlayContent content, SourceSlot slot) => null;
+    public (int Width, int Height, byte[] Pixels)? RenderStaticBgra(IOverlayContent content, object? slotContext) => null;
 
     public void HookPropertyChanges(IOverlayContent content, Action<string> onPropertyChanged)
     {
@@ -72,5 +72,15 @@ public sealed class VideoOverlayTypeDescriptor : IOverlayTypeDescriptor
                     onPropertyChanged(e.PropertyName);
             };
         }
+    }
+
+    public IReadOnlyList<StreamFlow.Plugin.SDK.Overlays.Sections.IOverlayPropertySection> GetInspectorSections(IOverlayContent content)
+    {
+        if (content is not VideoOverlayContent vid) return [];
+        return [
+            new StreamFlow.Plugin.SDK.Overlays.Sections.FilePickerSection("Video File", () => vid.VideoPath, v => vid.VideoPath = v, "Videos|*.mp4;*.mov;*.mkv;*.webm;*.avi", vid, nameof(vid.VideoPath)),
+            new StreamFlow.Plugin.SDK.Overlays.Sections.ToggleSection("Loop", () => vid.LoopVideo, v => vid.LoopVideo = v, vid, nameof(vid.LoopVideo)),
+            new StreamFlow.App.Services.Overlays.Sections.ChromaKeySection(vid)
+        ];
     }
 }

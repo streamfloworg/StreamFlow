@@ -42,9 +42,9 @@ public sealed class ChatOverlayTypeDescriptor : IOverlayTypeDescriptor
         return CreateDefault();
     }
 
-    public (int Width, int Height, byte[] Pixels)? RenderStaticBgra(IOverlayContent content, SourceSlot slot)
+    public (int Width, int Height, byte[] Pixels)? RenderStaticBgra(IOverlayContent content, object? slotContext)
     {
-        if (slot.IsChatOverlay)
+        if (slotContext is SourceSlot slot && slot.IsChatOverlay)
         {
             return OverlayContentRenderer.RenderChatToBgra(slot);
         }
@@ -69,6 +69,15 @@ public sealed class ChatOverlayTypeDescriptor : IOverlayTypeDescriptor
                     onPropertyChanged($"Style.{e.PropertyName}");
             };
         }
+    }
+
+    public IReadOnlyList<StreamFlow.Plugin.SDK.Overlays.Sections.IOverlayPropertySection> GetInspectorSections(IOverlayContent content)
+    {
+        if (content is not ChatOverlayContent chat) return [];
+        return [
+            new StreamFlow.Plugin.SDK.Overlays.Sections.InfoSection("Displays live chat messages from active chat connection."),
+            new StreamFlow.App.Services.Overlays.Sections.TextStyleSection(chat.Style)
+        ];
     }
 
     private static void ApplyTextStyleFromSettings(TextStyle style, SlotSettings s)

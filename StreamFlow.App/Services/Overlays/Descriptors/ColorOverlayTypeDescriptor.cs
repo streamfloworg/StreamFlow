@@ -42,7 +42,7 @@ public sealed class ColorOverlayTypeDescriptor : IOverlayTypeDescriptor
         return CreateDefault();
     }
 
-    public (int Width, int Height, byte[] Pixels)? RenderStaticBgra(IOverlayContent content, SourceSlot slot)
+    public (int Width, int Height, byte[] Pixels)? RenderStaticBgra(IOverlayContent content, object? slotContext)
     {
         if (content is ColorOverlayContent { OverlayColor: System.Windows.Media.Color color })
         {
@@ -61,5 +61,13 @@ public sealed class ColorOverlayTypeDescriptor : IOverlayTypeDescriptor
                     onPropertyChanged(e.PropertyName);
             };
         }
+    }
+
+    public IReadOnlyList<StreamFlow.Plugin.SDK.Overlays.Sections.IOverlayPropertySection> GetInspectorSections(IOverlayContent content)
+    {
+        if (content is not ColorOverlayContent color) return [];
+        return [
+            new StreamFlow.Plugin.SDK.Overlays.Sections.ColorSection("Fill Color", () => color.OverlayColor ?? System.Windows.Media.Colors.White, v => color.OverlayColor = v, color, nameof(color.OverlayColor))
+        ];
     }
 }

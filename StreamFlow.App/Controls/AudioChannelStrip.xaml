@@ -771,8 +771,26 @@
                  Right-click to reset back to the default rather than a dedicated button, which
                  wouldn't fit this control's 108px width alongside the fader/meter below. -->
             <Grid Grid.Row="0" Margin="0,0,0,2">
-                <TextBox Text="{Binding DisplayName, UpdateSourceTrigger=LostFocus}"
-                         TextAlignment="Center" FontSize="11" Padding="16,0,16,0"
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="1,0,0,0">
+                    <ToggleButton Content="T" Width="18" Height="18" FontSize="9" Padding="0"
+                                  Style="{StaticResource DuckingTriggerToggleStyle}"
+                                  ToolTip="Set as side-chain ducking trigger" IsChecked="{Binding IsDuckingTrigger, Mode=TwoWay}"/>
+                    <Button Width="16" Height="16" Margin="2,0,0,0" Padding="0"
+                            Command="{Binding OpenDuckingConfigCommand}"
+                            ToolTip="Configure Ducking Settings"
+                            Visibility="{Binding IsDuckingTrigger, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <TextBlock Text="⚙" FontSize="10" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                    </Button>
+                </StackPanel>
+
+                <TextBox Grid.Column="1" Text="{Binding DisplayName, UpdateSourceTrigger=LostFocus}"
+                         TextAlignment="Center" FontSize="11" Padding="2,0,2,0"
                          Background="Transparent" BorderThickness="0"
                          ToolTip="{Binding Device.Name, StringFormat=Device: {0}}">
                     <TextBox.ContextMenu>
@@ -782,12 +800,12 @@
                         </ContextMenu>
                     </TextBox.ContextMenu>
                 </TextBox>
-                <Button HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,2,0" Width="16" Height="16"
+                <Button Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,2,0" Width="16" Height="16"
                         x:Name="RemoveDeviceHoverButton" Cursor="Hand"
                         Command="{Binding RemoveCommand}" ToolTip="Remove Audio Device">
                     <Button.Style>
                         <Style TargetType="Button">
-                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Setter Property="Visibility" Value="Hidden"/>
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=UserControl}, Path=IsMouseOver}" Value="True">
                                     <Setter Property="Visibility" Value="Visible"/>
@@ -915,9 +933,6 @@
                 <ToggleButton Content="M" Width="22" Height="22" Margin="0,0,4,0"
                                Style="{StaticResource MuteToggleStyle}"
                                ToolTip="Mute (stream mix only)" IsChecked="{Binding IsMuted, Mode=TwoWay}"/>
-                <ToggleButton Content="T" Width="22" Height="22" Margin="0,0,4,0"
-                               Style="{StaticResource DuckingTriggerToggleStyle}"
-                               ToolTip="Set as side-chain ducking trigger" IsChecked="{Binding IsDuckingTrigger, Mode=TwoWay}"/>
                 <ToggleButton Content="D" Width="22" Height="22"
                                Style="{StaticResource DuckingTargetToggleStyle}"
                                ToolTip="Duck this channel when trigger is active" IsChecked="{Binding IsDuckingTarget, Mode=TwoWay}"/>

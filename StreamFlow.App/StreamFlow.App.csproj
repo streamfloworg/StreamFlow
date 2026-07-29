@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net9.0-windows10.0.17763.0</TargetFramework>
@@ -257,5 +257,9 @@
     </ItemGroup>
     <Copy SourceFiles="@(FFmpegDllPublish)" DestinationFolder="$(PublishDir)runtimes\" SkipUnchangedFiles="true" />
   </Target>
+
+  <ItemGroup>
+    <ProjectReference Include="..\StreamFlow.Plugin.SDK\StreamFlow.Plugin.SDK.csproj" />
+  </ItemGroup>
 
 </Project>

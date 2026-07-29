@@ -1,24 +1,20 @@
-﻿using Microsoft.Extensions.DependencyInjection;
-using StreamFlow.App.ViewModels.Pages;
+using Microsoft.Extensions.DependencyInjection;
+using StreamFlow.App.Services;
 
 namespace StreamFlow.App.Tests;
 
 public class DiSmokeTests
 {
     [Fact]
-    public void ServiceProvider_Resolves_AudioViewModel()
+    public void ServiceProvider_Resolves_UpdateService()
     {
         var services = new ServiceCollection();
-        services.AddSingleton<AudioViewModel>();
+        services.AddLogging();
+        services.AddSingleton<UpdateService>();
 
         var provider = services.BuildServiceProvider();
 
-        var vm = provider.GetRequiredService<AudioViewModel>();
-        Assert.NotNull(vm);
-
-        // Execute the generated command via reflection
-        var cmd = vm.GetType().GetProperty("IncrementCounterCommand")!.GetValue(vm)!;
-        cmd.GetType().GetMethod("Execute")!.Invoke(cmd, new object?[] { null });
-        Assert.Equal(1, vm.Count);
+        var service = provider.GetRequiredService<UpdateService>();
+        Assert.NotNull(service);
     }
 }

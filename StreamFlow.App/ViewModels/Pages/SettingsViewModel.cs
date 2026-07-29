@@ -8,6 +8,7 @@ using System.Windows.Data;
 using Microsoft.Extensions.DependencyInjection;
 
 using StreamFlow.App.Services;
+using StreamFlow.App.Services.Overlays.Plugins;
 using StreamFlow.Core.AudioHandling;
 using StreamFlow.Core.Cache;
 using StreamFlow.Core.Data;
@@ -45,6 +46,44 @@ public partial class SettingsViewModel : ViewModel
     public static ICollectionView? AudioOutputs { get; set; }
 
     public static ObservableCollection<AudioDevice> Inputs { get; set; } = [];
+
+    public PluginManagerService PluginManager { get; } = App.Services.GetRequiredService<PluginManagerService>();
+
+    [RelayCommand]
+    private void InstallPlugin()
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Filter = "StreamFlow Plugin (*.dll;*.sfplugin)|*.dll;*.sfplugin|All Files (*.*)|*.*",
+            Title = "Select Plugin Assembly"
+        };
+        if (dialog.ShowDialog() == true)
+        {
+            PluginManager.InstallPlugin(dialog.FileName);
+        }
+    }
+
+    [RelayCommand]
+    private void UninstallPlugin(StreamFlow.App.Services.Overlays.Plugins.PluginInfo? plugin)
+    {
+        if (plugin is not null)
+        {
+            PluginManager.UninstallPlugin(plugin);
+        }
+    }
+
+    [RelayCommand]
+    private void ConfigurePlugin(StreamFlow.App.Services.Overlays.Plugins.PluginInfo? plugin)
+    {
+        if (plugin is not null)
+        {
+            var window = new Views.Windows.PluginConfigWindow(plugin)
+            {
+                Owner = System.Windows.Application.Current?.MainWindow
+            };
+            window.ShowDialog();
+        }
+    }
 
     public SettingsViewModel()
     {

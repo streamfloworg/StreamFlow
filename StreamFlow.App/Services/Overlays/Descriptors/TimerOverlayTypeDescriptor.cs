@@ -21,6 +21,7 @@ public sealed class TimerOverlayTypeDescriptor : IOverlayTypeDescriptor
         {
             TimerMode = s.TimerMode,
             TimerDurationSeconds = s.TimerDurationSeconds,
+            RawDurationText = s.TimerDurationSeconds.ToString(),
             AutoStartOnGoLive = s.TimerAutoStartOnGoLive,
         };
         ApplyTextStyleFromSettings(timerContent.Style, s);
@@ -47,6 +48,7 @@ public sealed class TimerOverlayTypeDescriptor : IOverlayTypeDescriptor
             {
                 TimerMode = timer.TimerMode,
                 TimerDurationSeconds = timer.TimerDurationSeconds,
+                RawDurationText = timer.RawDurationText,
                 AutoStartOnGoLive = timer.AutoStartOnGoLive,
             };
             CopyTextStyle(timer.Style, cloned.Style);
@@ -55,12 +57,12 @@ public sealed class TimerOverlayTypeDescriptor : IOverlayTypeDescriptor
         return CreateDefault();
     }
 
-    public (int Width, int Height, byte[] Pixels)? RenderStaticBgra(IOverlayContent content, SourceSlot slot)
+    public (int Width, int Height, byte[] Pixels)? RenderStaticBgra(IOverlayContent content, object? slotContext)
     {
-        if (content is TimerOverlayContent timer && slot.IsTimerOverlay)
+        if (content is TimerOverlayContent timer)
         {
             var display = FormatTimerDisplay(timer);
-            return OverlayContentRenderer.RenderTextToBgra(display, timer.Style);
+            return OverlayContentRenderer.RenderTextToBgra(display, timer.Style, slotContext as SourceSlot);
         }
         return null;
     }
@@ -83,6 +85,50 @@ public sealed class TimerOverlayTypeDescriptor : IOverlayTypeDescriptor
                     onPropertyChanged($"Style.{e.PropertyName}");
             };
         }
+    }
+
+    public IReadOnlyList<StreamFlow.Plugin.SDK.Overlays.Sections.IOverlayPropertySection> GetInspectorSections(IOverlayContent content)
+    {
+        if (content is not TimerOverlayContent timer) return [];
+        return [
+            new StreamFlow.Plugin.SDK.Overlays.Sections.ComboSection("Timer Mode", System.Enum.GetValues<TimerMode>(), () => timer.TimerMode, v => {
+                timer.TimerMode = (TimerMode)v!;
+                FormatTimerDisplay(timer);
+            }, timer, nameof(timer.TimerMode)),
+            new StreamFlow.Plugin.SDK.Overlays.Sections.TextBoxSection("Duration (seconds)", () => timer.RawDurationText, v => {
+                timer.RawDurationText = v ?? "";
+                FormatTimerDisplay(timer);
+            }, isMultiLine: false, source: timer, propName: nameof(timer.RawDurationText)),
+            new StreamFlow.Plugin.SDK.Overlays.Sections.ToggleSection("Auto-start on Go Live", () => timer.AutoStartOnGoLive, v => timer.AutoStartOnGoLive = v, timer, nameof(timer.AutoStartOnGoLive)),
+            new StreamFlow.App.Services.Overlays.Sections.TextStyleSection(timer.Style)
+        ];
+    }
+
+    private static bool TryParseTimeSpanSeconds(string? input, out int seconds)
+    {
+        seconds = 0;
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            // Allow clearing the textbox — empty string represents 0 seconds
+            return true;
+        }
+        input = input.Trim();
+
+        // 1. Formatted time string check (e.g. "4:00", "04:00", "1:30:00")
+        if (input.Contains(':') && TimeSpan.TryParse(input, out var ts))
+        {
+            seconds = (int)ts.TotalSeconds;
+            return true;
+        }
+
+        // 2. Plain integer seconds (e.g. "240", "300", "5")
+        if (int.TryParse(input, out var secs) && secs >= 0)
+        {
+            seconds = secs;
+            return true;
+        }
+
+        return false;
     }
 
     private static string FormatTimerDisplay(TimerOverlayContent timer)

@@ -36,6 +36,18 @@ public sealed record YouTubeSuperChatEvent(string Username, decimal Amount, stri
 
 public sealed record GeneralDonationEvent(string Username, decimal Amount, string Currency) : AppEvent;
 
+public sealed record PlayAudioEvent(
+    string AudioPath,
+    bool IsLooping = false,
+    double VolumePercent = 100,
+    string? TargetChannelId = null,
+    bool EnableAudioDucking = false,
+    double DuckingAmountPercent = 50
+) : AppEvent;
+
+public sealed record StopAudioEvent(string AudioPath) : AppEvent;
+
+
 
 /// <summary>Lightweight in-process pub/sub bus — no external dependency, since every publisher
 /// and subscriber lives in the same WPF process as DI singletons for the app's lifetime. Publish

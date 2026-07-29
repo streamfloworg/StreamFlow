@@ -3,20 +3,11 @@ using System.Windows.Media;
 
 using StreamFlow.App.Services;
 using StreamFlow.Core.Data;
+using StreamFlow.Plugin.SDK;
 
 namespace StreamFlow.App.ViewModels.Pages;
 
-/// <summary>Kind-specific payload for an overlay <see cref="SourceSlot"/> — everything that
-/// differs between the seven overlay kinds lives in one of these instead of as loose nullable
-/// properties directly on SourceSlot (which otherwise has to be a single flat bag of fields for
-/// every kind at once). SourceSlot keeps only what every kind shares (position/size/rotation/
-/// opacity/etc.) plus this one Content property; <see cref="SourceSlot.OverlayKind"/> is derived
-/// from which concrete type Content actually is, rather than a separately-tracked field that
-/// could drift out of sync with it.</summary>
-public interface IOverlayContent
-{
-    OverlayKind Kind { get; }
-}
+using IOverlayContent = StreamFlow.Plugin.SDK.IOverlayContent;
 
 /// <summary>Shared by the two overlay kinds that support color-key transparency. The compositor
 /// itself doesn't care what kind of layer it's keying — this is purely a UI-exposure grouping
@@ -28,7 +19,7 @@ public interface IChromaKeyable : IOverlayContent
     double ChromaKeySimilarity { get; set; }
 }
 
-public enum TextHorizontalAlignment { Left, Center, Right }
+public enum TextHorizontalAlignment { Left, Center, Right, Justify }
 
 /// <summary>Shared text formatting for every overlay kind that renders text — Text, Chat, and
 /// Timer. A composed object (each content class exposes its own <c>Style</c> property) rather
@@ -278,6 +269,21 @@ public partial class TimerOverlayContent : ObservableObject, IHasTextStyle
     [ObservableProperty]
     private int _timerDurationSeconds = 300;
 
+    [ObservableProperty]
+    private string _rawDurationText = "300";
+
+    partial void OnRawDurationTextChanged(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            TimerDurationSeconds = 0;
+        }
+        else if (int.TryParse(value.Trim(), out var secs) && secs >= 0)
+        {
+            TimerDurationSeconds = secs;
+        }
+    }
+
     /// <summary>Whether this timer is actively ticking — advanced once a second by
     /// GoLiveViewModel's own tick driver (see GoLiveViewModel.Timer.cs), toggled by the
     /// Start/Pause/Reset commands in SceneEditorViewModel. Deliberately not persisted: a loaded
@@ -307,12 +313,18 @@ public partial class GroupOverlayContent : ObservableObject, IOverlayContent
 {
     public OverlayKind Kind => OverlayKind.Group;
 
+    [ObservableProperty]
+    private bool _lockChildren = true;
+
     public ObservableCollection<SourceSlot> Children { get; } = [];
 }
 
 public partial class AlertOverlayContent : ObservableObject, IAdvancedOverlayContent
 {
     public OverlayKind Kind => OverlayKind.Alert;
+
+    [ObservableProperty]
+    private bool _lockChildren = true;
 
     public ObservableCollection<SourceSlot> Children { get; } = [];
 
@@ -354,6 +366,27 @@ public partial class AlertOverlayContent : ObservableObject, IAdvancedOverlayCon
     [ObservableProperty]
     private double _animatingScalePercent = 100.0;
 
+    [ObservableProperty]
+    private string? _audioPath;
+
+    [ObservableProperty]
+    private bool _isAudioEnabled = true;
+
+    [ObservableProperty]
+    private bool _isAudioLooping;
+
+    [ObservableProperty]
+    private double _audioVolumePercent = 100.0;
+
+    [ObservableProperty]
+    private string? _targetAudioChannelId;
+
+    [ObservableProperty]
+    private bool _enableAudioDucking;
+
+    [ObservableProperty]
+    private double _duckingAmountPercent = 50.0;
+
     private bool _isAlertActive;
     public bool IsAlertActive => _isAlertActive;
 
@@ -363,7 +396,7 @@ public partial class AlertOverlayContent : ObservableObject, IAdvancedOverlayCon
 
     private readonly object _triggerLock = new();
 
-    public async Task TriggerAsync(AlertTriggerContext context, Func<SourceSlot, Task> onContentUpdate)
+    public async Task TriggerAsync(AlertTriggerContext context, Func<SourceSlot, Task> onContentUpdate, EventBus? eventBus = null)
     {
         lock (_triggerLock)
         {
@@ -378,6 +411,18 @@ public partial class AlertOverlayContent : ObservableObject, IAdvancedOverlayCon
             AnimatingXOffsetPercent = 0.0;
             AnimatingYOffsetPercent = 0.0;
             AnimatingScalePercent = 100.0;
+
+            if (IsAudioEnabled && !string.IsNullOrWhiteSpace(AudioPath) && eventBus is not null)
+            {
+                eventBus.Publish(new PlayAudioEvent(
+                    AudioPath,
+                    IsAudioLooping,
+                    AudioVolumePercent,
+                    TargetAudioChannelId,
+                    EnableAudioDucking,
+                    DuckingAmountPercent
+                ));
+            }
 
             // Find all child text overlays and update their text
             var textOverlays = Children.Where(c => c.Content is TextOverlayContent).ToList();
@@ -546,6 +591,10 @@ public partial class AlertOverlayContent : ObservableObject, IAdvancedOverlayCon
         }
         finally
         {
+            if (IsAudioEnabled && !string.IsNullOrWhiteSpace(AudioPath) && eventBus is not null)
+            {
+                eventBus.Publish(new StopAudioEvent(AudioPath));
+            }
             lock (_triggerLock)
             {
                 _isAlertActive = false;

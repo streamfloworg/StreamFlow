@@ -27,6 +27,21 @@ public sealed class OverlayTypeRegistry
         }
     }
 
+    public void Unregister(IOverlayTypeDescriptor descriptor)
+    {
+        ArgumentNullException.ThrowIfNull(descriptor);
+        _byKey.TryRemove(descriptor.TypeKey, out _);
+        if (_byKind.TryGetValue(descriptor.Kind, out var existingKind) && ReferenceEquals(existingKind, descriptor))
+        {
+            _byKind.TryRemove(descriptor.Kind, out _);
+        }
+        var defaultContent = descriptor.CreateDefault();
+        if (defaultContent is not null)
+        {
+            _byContentType.TryRemove(defaultContent.GetType(), out _);
+        }
+    }
+
     public IOverlayTypeDescriptor? GetByKey(string? typeKey) =>
         !string.IsNullOrEmpty(typeKey) && _byKey.TryGetValue(typeKey, out var d) ? d : null;
 

@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Windows.Media;
+using StreamFlow.App.Helpers.Behaviors;
 using StreamFlow.Core.Data;
 
 namespace StreamFlow.App.ViewModels.Pages;
@@ -41,6 +42,21 @@ public partial class SourceSlot : ObservableObject
     public bool IsAdvancedOverlay => Content is IAdvancedOverlayContent;
     public bool IsGroupOverlay => Content is GroupOverlayContent;
 
+    public bool IsTextBasedOverlay => Content is IHasTextStyle && Content is not ChatOverlayContent;
+    public TextStyle? TextOverlayStyle => (Content as IHasTextStyle)?.Style;
+    public string TextOverlayDisplayText => Content switch
+    {
+        TextOverlayContent text => text.OverlayText ?? "",
+        TimerOverlayContent timer => timer.TimerDisplayText ?? "",
+        _ => (Content as IHasTextStyle)?.Style is not null ? Content?.ToString() ?? "" : ""
+    };
+
+    public void NotifyTextContentChanged()
+    {
+        OnPropertyChanged(nameof(TextOverlayStyle));
+        OnPropertyChanged(nameof(TextOverlayDisplayText));
+    }
+
     /// <summary>True for overlay kinds registered once via AddStaticOverlay (image/text/color)
     /// — no ongoing session, so Start/StopCapture are skipped for these. False for video
     /// overlays, which decode/loop continuously in the core exactly like a live capture.</summary>
@@ -77,6 +93,9 @@ public partial class SourceSlot : ObservableObject
         OnPropertyChanged(nameof(IsAlertOverlay));
         OnPropertyChanged(nameof(IsAdvancedOverlay));
         OnPropertyChanged(nameof(IsGroupOverlay));
+        OnPropertyChanged(nameof(IsTextBasedOverlay));
+        OnPropertyChanged(nameof(TextOverlayStyle));
+        OnPropertyChanged(nameof(TextOverlayDisplayText));
         OnPropertyChanged(nameof(IsStaticOverlay));
         OnPropertyChanged(nameof(HasLiveThumbnail));
         OnPropertyChanged(nameof(SupportsChromaKey));
@@ -94,8 +113,17 @@ public partial class SourceSlot : ObservableObject
 
     public bool CanBeAddedToGroup => !IsPrimary && OverlayKind != StreamFlow.Core.Data.OverlayKind.Group && OverlayKind != StreamFlow.Core.Data.OverlayKind.Alert;
 
-    [ObservableProperty]
     private bool _lockChildren = true;
+    public bool LockChildren
+    {
+        get => (Content as GroupOverlayContent)?.LockChildren ?? (Content as AlertOverlayContent)?.LockChildren ?? _lockChildren;
+        set
+        {
+            if (Content is GroupOverlayContent g) g.LockChildren = value;
+            if (Content is AlertOverlayContent a) a.LockChildren = value;
+            SetProperty(ref _lockChildren, value);
+        }
+    }
 
     [ObservableProperty]
     private string? _sourceId;
@@ -110,11 +138,33 @@ public partial class SourceSlot : ObservableObject
     [ObservableProperty]
     private bool _isRenaming;
 
-    /// <summary>Whether this slot is the one currently selected on the placement canvas —
-    /// toggled by GoLiveViewModel whenever SelectedSlot changes. Drives whether the box's
-    /// border and resize handle are visible; unselected boxes render bare.</summary>
     [ObservableProperty]
     private bool _isSelected;
+
+    partial void OnIsSelectedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsSelectedOrChildSelected));
+        ParentGroup?.NotifyChildSelectionChanged();
+    }
+
+    public void NotifyChildSelectionChanged()
+    {
+        OnPropertyChanged(nameof(IsSelectedOrChildSelected));
+        ParentGroup?.NotifyChildSelectionChanged();
+    }
+
+    public bool IsSelectedOrChildSelected
+    {
+        get
+        {
+            if (IsSelected) return true;
+            if (Content is AlertOverlayContent alert && alert.Children.Any(c => c.IsSelected))
+                return true;
+            if (Content is GroupOverlayContent group && group.Children.Cast<SourceSlot>().Any(c => c.IsSelected))
+                return true;
+            return false;
+        }
+    }
 
     [ObservableProperty]
     private double _xPercent;
@@ -170,6 +220,43 @@ public partial class SourceSlot : ObservableObject
     /// be added later if a user wants to distort a source.</summary>
     [ObservableProperty]
     private bool _isAspectLocked = true;
+
+    partial void OnIsAspectLockedChanged(bool value)
+    {
+        if (value && WPercent > 0 && HPercent > 0 && CanvasWidth > 0 && CanvasHeight > 0)
+        {
+            var pixelW = WPercent / 100.0 * CanvasWidth;
+            var pixelH = HPercent / 100.0 * CanvasHeight;
+            if (pixelH > 0)
+            {
+                AspectRatio = pixelW / pixelH;
+            }
+        }
+    }
+
+    [RelayCommand]
+    public void SetSlotAspectRatioPreset(string ratioPreset)
+    {
+        double? newRatio = ratioPreset.ToLowerInvariant() switch
+        {
+            "16:9" or "169" => 16.0 / 9.0,
+            "9:16" or "916" or "vertical" => 9.0 / 16.0,
+            "4:3" or "43" => 4.0 / 3.0,
+            "1:1" or "11" or "square" => 1.0,
+            "21:9" or "219" or "ultrawide" => 21.0 / 9.0,
+            _ => null
+        };
+
+        if (newRatio.HasValue)
+        {
+            AspectRatio = newRatio.Value;
+            IsAspectLocked = true;
+            if (WPercent > 0)
+            {
+                ResizeToWidthPercent(WPercent);
+            }
+        }
+    }
 
     public SourceSlot(
         bool isPrimary, double x, double y, double w, double h,
@@ -261,6 +348,109 @@ public partial class SourceSlot : ObservableObject
     }
 
     /// <summary>
+    /// Applies a handle drag for any corner or side (8-direction resize) while respecting <see cref="AspectRatio"/>
+    /// and canvas boundaries.
+    /// </summary>
+    public void ResizeByHandleDelta(SlotResizeDirection direction, double horizontalPixelDelta, double verticalPixelDelta)
+    {
+        double minWPercent = 5.0;
+        double minHPercent = 5.0;
+
+        double dxPercent = horizontalPixelDelta / CanvasWidth * 100.0;
+        double dyPercent = verticalPixelDelta / CanvasHeight * 100.0;
+
+        // Unlocked / Freeform Resize
+        if (!IsAspectLocked || AspectRatio is not double ar || ar <= 0)
+        {
+            if (direction is SlotResizeDirection.Left or SlotResizeDirection.TopLeft or SlotResizeDirection.BottomLeft)
+            {
+                double oldRight = XPercent + WPercent;
+                double newX = Math.Clamp(XPercent + dxPercent, 0, oldRight - minWPercent);
+                XPercent = newX;
+                WPercent = oldRight - newX;
+            }
+            else if (direction is SlotResizeDirection.Right or SlotResizeDirection.TopRight or SlotResizeDirection.BottomRight)
+            {
+                WPercent = Math.Clamp(WPercent + dxPercent, minWPercent, 100 - XPercent);
+            }
+
+            if (direction is SlotResizeDirection.Top or SlotResizeDirection.TopLeft or SlotResizeDirection.TopRight)
+            {
+                double oldBottom = YPercent + HPercent;
+                double newY = Math.Clamp(YPercent + dyPercent, 0, oldBottom - minHPercent);
+                YPercent = newY;
+                HPercent = oldBottom - newY;
+            }
+            else if (direction is SlotResizeDirection.Bottom or SlotResizeDirection.BottomLeft or SlotResizeDirection.BottomRight)
+            {
+                HPercent = Math.Clamp(HPercent + dyPercent, minHPercent, 100 - YPercent);
+            }
+            return;
+        }
+
+        // Aspect-Locked Resize
+        double oldR = XPercent + WPercent;
+        double oldB = YPercent + HPercent;
+
+        double currentPxW = WPercent / 100.0 * CanvasWidth;
+        double currentPxH = HPercent / 100.0 * CanvasHeight;
+
+        double targetPxW = currentPxW;
+        double targetPxH = currentPxH;
+
+        if (direction is SlotResizeDirection.Left or SlotResizeDirection.TopLeft or SlotResizeDirection.BottomLeft)
+        {
+            targetPxW = Math.Max(minWPercent / 100.0 * CanvasWidth, currentPxW - horizontalPixelDelta);
+        }
+        else if (direction is SlotResizeDirection.Right or SlotResizeDirection.TopRight or SlotResizeDirection.BottomRight)
+        {
+            targetPxW = Math.Max(minWPercent / 100.0 * CanvasWidth, currentPxW + horizontalPixelDelta);
+        }
+
+        if (direction is SlotResizeDirection.Top or SlotResizeDirection.TopLeft or SlotResizeDirection.TopRight)
+        {
+            targetPxH = Math.Max(minHPercent / 100.0 * CanvasHeight, currentPxH - verticalPixelDelta);
+        }
+        else if (direction is SlotResizeDirection.Bottom or SlotResizeDirection.BottomLeft or SlotResizeDirection.BottomRight)
+        {
+            targetPxH = Math.Max(minHPercent / 100.0 * CanvasHeight, currentPxH + verticalPixelDelta);
+        }
+
+        double newPxW, newPxH;
+        if (direction is SlotResizeDirection.TopLeft or SlotResizeDirection.TopRight or SlotResizeDirection.BottomLeft or SlotResizeDirection.BottomRight)
+        {
+            var t = (targetPxW * ar + targetPxH) / (ar * ar + 1);
+            newPxW = t * ar;
+            newPxH = t;
+        }
+        else if (direction is SlotResizeDirection.Left or SlotResizeDirection.Right)
+        {
+            newPxW = targetPxW;
+            newPxH = newPxW / ar;
+        }
+        else
+        {
+            newPxH = targetPxH;
+            newPxW = newPxH * ar;
+        }
+
+        double newWPercent = Math.Clamp(newPxW / CanvasWidth * 100.0, minWPercent, 100);
+        double newHPercent = Math.Clamp(newPxH / CanvasHeight * 100.0, minHPercent, 100);
+
+        if (direction is SlotResizeDirection.Left or SlotResizeDirection.TopLeft or SlotResizeDirection.BottomLeft)
+        {
+            XPercent = Math.Clamp(oldR - newWPercent, 0, oldR - minWPercent);
+        }
+        if (direction is SlotResizeDirection.Top or SlotResizeDirection.TopLeft or SlotResizeDirection.TopRight)
+        {
+            YPercent = Math.Clamp(oldB - newHPercent, 0, oldB - minHPercent);
+        }
+
+        WPercent = newWPercent;
+        HPercent = newHPercent;
+    }
+
+    /// <summary>
     /// Applies a corner-handle drag while preserving <see cref="AspectRatio"/>. The raw
     /// horizontal/vertical deltas (in canvas pixels) are combined via vector projection onto
     /// the aspect-ratio line, so width and height are never independently changeable when
@@ -270,26 +460,7 @@ public partial class SourceSlot : ObservableObject
     /// </summary>
     public void ResizeByDragDelta(double horizontalPixelDelta, double verticalPixelDelta)
     {
-        if (!IsAspectLocked || AspectRatio is not double ar || ar <= 0)
-        {
-            WPercent = Math.Clamp(WPercent + horizontalPixelDelta / CanvasWidth * 100.0, 5, 100 - XPercent);
-            HPercent = Math.Clamp(HPercent + verticalPixelDelta / CanvasHeight * 100.0, 5, 100 - YPercent);
-            return;
-        }
-
-        var targetPixelW = WPercent / 100.0 * CanvasWidth + horizontalPixelDelta;
-        var targetPixelH = HPercent / 100.0 * CanvasHeight + verticalPixelDelta;
-
-        // Project the unconstrained target point onto the line w = ar*h (direction (ar, 1)),
-        // giving a single scalar "size along the ratio" that reflects both drag axes at once.
-        var t = (targetPixelW * ar + targetPixelH) / (ar * ar + 1);
-
-        var minT = Math.Max(5.0 / 100.0 * CanvasWidth / ar, 5.0 / 100.0 * CanvasHeight);
-        var maxT = Math.Min((CanvasWidth - XPercent / 100.0 * CanvasWidth) / ar, CanvasHeight - YPercent / 100.0 * CanvasHeight);
-        t = Math.Clamp(t, minT, Math.Max(minT, maxT));
-
-        WPercent = t * ar / CanvasWidth * 100.0;
-        HPercent = t / CanvasHeight * 100.0;
+        ResizeByHandleDelta(SlotResizeDirection.BottomRight, horizontalPixelDelta, verticalPixelDelta);
     }
 
     partial void OnWPercentChanged(double value)
@@ -316,6 +487,7 @@ public partial class SourceSlot : ObservableObject
     {
         NotifyRenderBoundsChanged();
         if (_isSettingDimensions) return;
+
         if (IsAspectLocked && AspectRatio is double ar && ar > 0)
         {
             _isSettingDimensions = true;

@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 
 using StreamFlow.Core.AudioProperties;
 
@@ -50,6 +50,16 @@ public partial class GoLiveSceneViewModel : ObservableObject
     /// duplicate-combo check run before this gets set.</summary>
     [ObservableProperty]
     private Hotkey? _switchHotkey;
+
+    public bool HasCaptureSource => Slots.Any(s => !s.IsStaticOverlay && !s.IsGroupOverlay && !string.IsNullOrEmpty(s.SourceId));
+
+    public bool HasPrimaryCaptureSource => Slots.Any(s => s.IsPrimary && !s.IsStaticOverlay && !string.IsNullOrEmpty(s.SourceId));
+
+    public void NotifyCaptureSourceStateChanged()
+    {
+        OnPropertyChanged(nameof(HasCaptureSource));
+        OnPropertyChanged(nameof(HasPrimaryCaptureSource));
+    }
 
     public GoLiveSceneViewModel(string id, string name)
     {

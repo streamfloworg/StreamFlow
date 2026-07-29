@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
 	<TargetFramework>net9.0-windows10.0.17763.0</TargetFramework>
     <UseWPF>false</UseWPF>
@@ -18,5 +18,7 @@
   <ItemGroup>
     <ProjectReference Include="..\StreamFlow.App\StreamFlow.App.csproj" />
     <ProjectReference Include="..\StreamFlow.Core\StreamFlow.Core.csproj" />
+    <ProjectReference Include="..\StreamFlow.Plugin.SDK\StreamFlow.Plugin.SDK.csproj" />
+    <ProjectReference Include="..\plugins\StreamFlow.Plugin.Marquee\StreamFlow.Plugin.Marquee.csproj" />
   </ItemGroup>
 </Project>

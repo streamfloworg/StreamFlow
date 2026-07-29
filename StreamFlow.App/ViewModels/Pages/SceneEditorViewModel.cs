@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 
@@ -47,6 +48,7 @@ public partial class SceneEditorViewModel : ObservableObject
     private readonly EventBus _eventBus;
     private readonly ILogger<SceneEditorViewModel> _logger;
     private readonly StreamFlow.App.Services.Overlays.OverlayTypeRegistry _overlayRegistry;
+    public StreamFlow.App.Services.Overlays.OverlayTypeRegistry OverlayRegistry => _overlayRegistry;
 
     private bool _isLive;
 
@@ -56,7 +58,8 @@ public partial class SceneEditorViewModel : ObservableObject
         SceneSetService sceneSetService,
         EventBus eventBus,
         ILogger<SceneEditorViewModel> logger,
-        StreamFlow.App.Services.Overlays.OverlayTypeRegistry overlayRegistry)
+        StreamFlow.App.Services.Overlays.OverlayTypeRegistry overlayRegistry,
+        StreamFlow.App.Services.Overlays.Plugins.PluginManagerService pluginManager)
     {
         _core = core;
         _dialogs = dialogs;
@@ -64,6 +67,14 @@ public partial class SceneEditorViewModel : ObservableObject
         _eventBus = eventBus;
         _logger = logger;
         _overlayRegistry = overlayRegistry;
+
+        pluginManager.PluginUninstalled += (_, plugin) =>
+        {
+            if (plugin.Descriptor is IOverlayTypeDescriptor descriptor)
+            {
+                RemoveSlotsForDescriptor(descriptor);
+            }
+        };
 
         Scenes.CollectionChanged += (_, _) => RemoveActiveSceneCommand.NotifyCanExecuteChanged();
 
@@ -191,7 +202,7 @@ public partial class SceneEditorViewModel : ObservableObject
                     if (child.SourceId is not null)
                         await RestoreStaticOverlayAsync(child, child.SourceId);
                 });
-            });
+            }, _eventBus);
         });
 
         await Task.WhenAll(tasks);
@@ -235,7 +246,7 @@ public partial class SceneEditorViewModel : ObservableObject
                 if (child.SourceId is not null)
                     await RestoreStaticOverlayAsync(child, child.SourceId);
             });
-        });
+        }, _eventBus);
     }
 
     [RelayCommand]
@@ -479,7 +490,8 @@ public partial class SceneEditorViewModel : ObservableObject
     [RelayCommand]
     private void AddSubLayerToAlert(string layerKind)
     {
-        if (SelectedSlot?.Content is not AlertOverlayContent alert) return;
+        var alertSlot = SelectedSlot?.Content is AlertOverlayContent ? SelectedSlot : SelectedSlot?.ParentGroup;
+        if (alertSlot?.Content is not AlertOverlayContent alert) return;
 
         SourceSlot? newSubSlot = null;
         var sourceId = $"overlay:{Guid.NewGuid():N}";
@@ -492,7 +504,7 @@ public partial class SceneEditorViewModel : ObservableObject
                 {
                     DisplayName = "Alert Text",
                     SourceId = sourceId,
-                    IsAspectLocked = false
+                    IsAspectLocked = true
                 };
                 break;
             case "image":
@@ -501,7 +513,7 @@ public partial class SceneEditorViewModel : ObservableObject
                 {
                     DisplayName = "Alert Image",
                     SourceId = sourceId,
-                    IsAspectLocked = false
+                    IsAspectLocked = true
                 };
                 break;
             case "color":
@@ -519,7 +531,7 @@ public partial class SceneEditorViewModel : ObservableObject
                 {
                     DisplayName = "Alert Video",
                     SourceId = sourceId,
-                    IsAspectLocked = false
+                    IsAspectLocked = true
                 };
                 break;
         }
@@ -533,7 +545,7 @@ public partial class SceneEditorViewModel : ObservableObject
                 newSubSlot.CanvasHeight = ActiveScene.CanvasHeight;
             }
 
-            newSubSlot.ParentGroup = SelectedSlot;
+            newSubSlot.ParentGroup = alertSlot;
             newSubSlot.PropertyChanged += OnSlotPropertyChanged;
             HookContentPropertyChanged(newSubSlot);
             alert.SubLayers.Add(newSubSlot);
@@ -555,7 +567,8 @@ public partial class SceneEditorViewModel : ObservableObject
     [RelayCommand]
     private void RemoveSubLayerFromAlert(SourceSlot subSlot)
     {
-        if (SelectedSlot?.Content is AlertOverlayContent alert && subSlot is not null)
+        var alertSlot = SelectedSlot?.Content is AlertOverlayContent ? SelectedSlot : SelectedSlot?.ParentGroup;
+        if (alertSlot?.Content is AlertOverlayContent alert && subSlot is not null)
         {
             alert.SubLayers.Remove(subSlot);
             if (alert.SelectedSubLayer == subSlot)
@@ -588,6 +601,103 @@ public partial class SceneEditorViewModel : ObservableObject
     [ObservableProperty]
     private SourceSlot? _selectedSlot;
 
+    [ObservableProperty]
+    private IReadOnlyList<StreamFlow.Plugin.SDK.Overlays.Sections.IOverlayPropertySection>? _selectedSlotInspectorSections;
+
+    [ObservableProperty]
+    private IReadOnlyList<StreamFlow.Plugin.SDK.Overlays.Sections.IOverlayPropertySection>? _selectedAlertSubLayerInspectorSections;
+
+    public void RefreshInspectorSections()
+    {
+        SelectedAlertSubLayerInspectorSections = null;
+
+        var content = SelectedSlot?.Content;
+        if (content is null)
+        {
+            SelectedSlotInspectorSections = null;
+            return;
+        }
+
+        var descriptor = _overlayRegistry.GetForContent(content);
+        var sections = descriptor?.GetInspectorSections(content).ToList() ?? [];
+
+        switch (content)
+        {
+            case TimerOverlayContent:
+                sections.Add(new StreamFlow.App.Services.Overlays.Sections.CommandGroupSection("Timer Controls", [
+                    new("▶ Start", StartTimerCommand, SelectedSlot),
+                    new("⏸ Pause", PauseTimerCommand, SelectedSlot),
+                    new("↺ Reset", ResetTimerCommand, SelectedSlot)
+                ]));
+                break;
+
+            case AlertOverlayContent alert:
+                sections.Add(new StreamFlow.App.Services.Overlays.Sections.GroupedSection("Test Stream Alert", [
+                    new StreamFlow.App.Services.Overlays.Sections.CommandGroupSection(null, [
+                        new StreamFlow.App.Services.Overlays.Sections.CommandEntry("▶ Test Current Alert", TestAlertWithTypeCommand, SelectedSlot),
+                        new StreamFlow.App.Services.Overlays.Sections.CommandEntry("Follower", TestAlertWithTypeAndTriggerCommand, "TwitchFollower"),
+                        new StreamFlow.App.Services.Overlays.Sections.CommandEntry("Subscriber", TestAlertWithTypeAndTriggerCommand, "TwitchSubscriber"),
+                        new StreamFlow.App.Services.Overlays.Sections.CommandEntry("Bits", TestAlertWithTypeAndTriggerCommand, "TwitchBits"),
+                        new StreamFlow.App.Services.Overlays.Sections.CommandEntry("Raid", TestAlertWithTypeAndTriggerCommand, "TwitchRaid"),
+                        new StreamFlow.App.Services.Overlays.Sections.CommandEntry("Super Chat", TestAlertWithTypeAndTriggerCommand, "YouTubeSuperChat"),
+                        new StreamFlow.App.Services.Overlays.Sections.CommandEntry("Donation", TestAlertWithTypeAndTriggerCommand, "GeneralDonation")
+                    ])
+                ]));
+                sections.Add(new StreamFlow.App.Services.Overlays.Sections.GroupedSection("Alert Sub-Layers Manager", [
+                    new StreamFlow.App.Services.Overlays.Sections.AlertSubLayerManagerSection(alert, AddSubLayerToAlertCommand, RemoveSubLayerFromAlertCommand)
+                ]));
+                sections.AddRange(BuildSubLayerGroupSections(alert));
+                break;
+
+            case GroupOverlayContent:
+                sections.Add(new StreamFlow.App.Services.Overlays.Sections.GroupMembershipSection(AvailableGroupCandidates));
+                break;
+        }
+
+        if (SelectedSlot?.ParentGroup?.Content is AlertOverlayContent parentAlert)
+        {
+            // If a sub-layer is directly selected, wrap its sections in a GroupedSection for that sub-layer
+            var wrappedSections = new List<StreamFlow.Plugin.SDK.Overlays.Sections.IOverlayPropertySection>
+            {
+                new StreamFlow.App.Services.Overlays.Sections.GroupedSection($"Sub-Layer: {SelectedSlot.DisplayName}", sections)
+            };
+            SelectedSlotInspectorSections = wrappedSections;
+            return;
+        }
+
+        SelectedSlotInspectorSections = sections;
+    }
+
+    private IEnumerable<StreamFlow.Plugin.SDK.Overlays.Sections.IOverlayPropertySection> BuildSubLayerGroupSections(AlertOverlayContent alert)
+    {
+        var groupSections = new List<StreamFlow.Plugin.SDK.Overlays.Sections.IOverlayPropertySection>();
+        foreach (var subSlot in alert.SubLayers)
+        {
+            if (subSlot.Content is null || subSlot.Content is AlertOverlayContent) continue;
+            var desc = _overlayRegistry.GetForContent(subSlot.Content);
+            var subSections = desc?.GetInspectorSections(subSlot.Content).ToList() ?? [];
+            if (subSlot.SupportsChromaKey && subSlot.Content is IChromaKeyable chromaTarget)
+            {
+                subSections.Add(new StreamFlow.App.Services.Overlays.Sections.ChromaKeySection(chromaTarget));
+            }
+
+            subSections.Add(new StreamFlow.App.Services.Overlays.Sections.SubLayerLayoutSection(subSlot));
+            if (subSections.Count > 0)
+            {
+                groupSections.Add(new StreamFlow.App.Services.Overlays.Sections.GroupedSection($"Sub-Layer: {subSlot.DisplayName}", subSections));
+            }
+        }
+        return groupSections;
+    }
+
+    private void OnSelectedSlotPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(SourceSlot.Content))
+        {
+            RefreshInspectorSections();
+        }
+    }
+
     [RelayCommand]
     private void SelectSlot(SourceSlot slot) => SelectedSlot = slot;
 
@@ -595,8 +705,35 @@ public partial class SceneEditorViewModel : ObservableObject
 
     partial void OnSelectedSlotChanged(SourceSlot? oldValue, SourceSlot? newValue)
     {
-        if (oldValue is not null) oldValue.IsSelected = false;
-        if (newValue is not null) newValue.IsSelected = true;
+        if (oldValue is not null)
+        {
+            oldValue.IsSelected = false;
+            oldValue.PropertyChanged -= OnSelectedSlotPropertyChanged;
+            if (oldValue.Content is AlertOverlayContent oldAlert)
+            {
+                oldAlert.PropertyChanged -= OnAlertContentPropertyChanged;
+            }
+        }
+        if (newValue is not null)
+        {
+            newValue.IsSelected = true;
+            newValue.PropertyChanged -= OnSelectedSlotPropertyChanged;
+            newValue.PropertyChanged += OnSelectedSlotPropertyChanged;
+            if (newValue.Content is AlertOverlayContent newAlert)
+            {
+                newAlert.PropertyChanged -= OnAlertContentPropertyChanged;
+                newAlert.PropertyChanged += OnAlertContentPropertyChanged;
+            }
+        }
+
+        // Keep SelectedSubLayer on parent Alert in sync with canvas selection
+        if (newValue?.ParentGroup?.Content is AlertOverlayContent parentAlert)
+        {
+            if (parentAlert.SelectedSubLayer != newValue)
+            {
+                parentAlert.SelectedSubLayer = newValue;
+            }
+        }
 
         _isUpdatingSelection = true;
         try
@@ -604,7 +741,7 @@ public partial class SceneEditorViewModel : ObservableObject
             if (ActiveScene is not null)
             {
                 var selectedGroup = newValue?.Content as GroupOverlayContent;
-                var selectedAlert = newValue?.Content as AlertOverlayContent;
+                var selectedAlert = newValue?.Content as AlertOverlayContent ?? newValue?.ParentGroup?.Content as AlertOverlayContent;
                 foreach (var slot in FlattenedSlots)
                 {
                     slot.IsInSelectedGroup = (selectedGroup?.Children.Contains(slot) ?? false) || (selectedAlert?.Children.Contains(slot) ?? false);
@@ -617,6 +754,18 @@ public partial class SceneEditorViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(AvailableGroupCandidates));
+        RefreshInspectorSections();
+    }
+
+    private void OnAlertContentPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(AlertOverlayContent.SelectedSubLayer) && sender is AlertOverlayContent alert)
+        {
+            if (alert.SelectedSubLayer is not null && SelectedSlot != alert.SelectedSubLayer)
+            {
+                SelectedSlot = alert.SelectedSubLayer;
+            }
+        }
     }
 
     public void OnDisplaySettingsChanged(object? sender, EventArgs e)
@@ -830,6 +979,21 @@ public partial class SceneEditorViewModel : ObservableObject
         if (slot.Content is null) return;
         var descriptor = _overlayRegistry.GetForContent(slot.Content);
         descriptor?.HookPropertyChanges(slot.Content, propName => OnSlotContentPropertyChanged(slot, new System.ComponentModel.PropertyChangedEventArgs(propName)));
+
+        if (slot.Content is AlertOverlayContent alert)
+        {
+            foreach (var child in alert.Children)
+            {
+                HookContentPropertyChanged(child);
+            }
+        }
+        else if (slot.Content is GroupOverlayContent group)
+        {
+            foreach (var child in group.Children.Cast<SourceSlot>())
+            {
+                HookContentPropertyChanged(child);
+            }
+        }
     }
 
     /// <summary>Applies the persisted shared text-formatting fields (see SlotSettings' Text*
@@ -1148,6 +1312,43 @@ public partial class SceneEditorViewModel : ObservableObject
     }
 
     [RelayCommand]
+    public async Task AddOverlayFromDescriptorAsync(IOverlayTypeDescriptor descriptor)
+    {
+        var content = descriptor.CreateDefault();
+        var sourceId = $"overlay:{Guid.NewGuid():N}";
+        var slot = new SourceSlot(
+            isPrimary: false, x: 30, y: 30, w: 30, h: 30,
+            isOverlay: true, content: content)
+        {
+            DisplayName = descriptor.DisplayName,
+            SourceId = sourceId
+        };
+
+        AttachSlot(slot);
+
+        if (descriptor.SessionMode == OverlaySessionMode.StaticPixels)
+        {
+            var rendered = descriptor.RenderStaticBgra(content, slot);
+            if (rendered is not null)
+            {
+                var (width, height, pixels) = rendered.Value;
+                await _core.SendCommandAsync(BuildConfigCommand());
+                await RegisterStaticOverlayAsync(sourceId, width, height, pixels);
+            }
+            else
+            {
+                await _core.SendCommandAsync(BuildConfigCommand());
+            }
+        }
+        else
+        {
+            await _core.SendCommandAsync(BuildConfigCommand());
+        }
+
+        NotifyChanged();
+    }
+
+    [RelayCommand]
     private async Task AddChatOverlayAsync()
     {
         var sourceId = $"overlay:{Guid.NewGuid():N}";
@@ -1226,16 +1427,33 @@ public partial class SceneEditorViewModel : ObservableObject
     private void AddAlertOverlay()
     {
         var sourceId = $"overlay:{Guid.NewGuid():N}";
+        var alertContent = new AlertOverlayContent();
         var slot = new SourceSlot(
             isPrimary: false, x: 25, y: 25, w: 30, h: 20,
-            isOverlay: true, content: new AlertOverlayContent())
+            isOverlay: true, content: alertContent)
         {
             SourceId = sourceId,
             DisplayName = "Stream Alert",
             IsAspectLocked = false
         };
+
+        var textSubSourceId = $"overlay:{Guid.NewGuid():N}";
+        var textContent = new TextOverlayContent { OverlayText = "New Follower: %followerName%" };
+        var textSubSlot = new SourceSlot(isPrimary: false, x: 10, y: 35, w: 80, h: 30, isOverlay: true, content: textContent)
+        {
+            DisplayName = "Alert Text",
+            SourceId = textSubSourceId,
+            IsAspectLocked = true,
+            ParentGroup = slot
+        };
+        textSubSlot.PropertyChanged += OnSlotPropertyChanged;
+        HookContentPropertyChanged(textSubSlot);
+        alertContent.Children.Add(textSubSlot);
+        alertContent.SelectedSubLayer = textSubSlot;
+
         AttachSlot(slot);
         NotifyChanged();
+        _ = RestoreStaticOverlayAsync(textSubSlot, textSubSourceId);
     }
 
     public void GroupSlots(List<SourceSlot> slotsToGroup)
@@ -1363,14 +1581,17 @@ public partial class SceneEditorViewModel : ObservableObject
     // probes CanExecute(null) while the CommandParameter binding is still activating, before the
     // real SourceSlot value has resolved — an un-guarded slot.Content access here is a guaranteed
     // NullReferenceException on every app startup.
-    private bool CanStartTimer(SourceSlot? slot) => slot?.Content is TimerOverlayContent { IsTimerRunning: false };
+    private bool CanStartTimer(SourceSlot? slot) => slot?.Content is TimerOverlayContent { IsTimerRunning: false, TimerDurationSeconds: > 0 };
 
     [RelayCommand(CanExecute = nameof(CanStartTimer))]
-    private async Task StartTimer(SourceSlot slot)
+    private async Task StartTimer(SourceSlot? slot)
     {
-        if (slot.Content is not TimerOverlayContent timer || timer.IsTimerRunning || slot.SourceId is not string sourceId) return;
+        if (slot?.Content is not TimerOverlayContent timer || timer.IsTimerRunning) return;
+        slot.SourceId ??= $"overlay-{Guid.NewGuid():N}";
+        var sourceId = slot.SourceId;
         timer.TimerStartedAtUtc = DateTime.UtcNow;
         timer.IsTimerRunning = true;
+        slot.NotifyTextContentChanged();
         StartTimerCommand.NotifyCanExecuteChanged();
         PauseTimerCommand.NotifyCanExecuteChanged();
         await RestoreStaticOverlayAsync(slot, sourceId);
@@ -1379,25 +1600,31 @@ public partial class SceneEditorViewModel : ObservableObject
     private bool CanPauseTimer(SourceSlot? slot) => slot?.Content is TimerOverlayContent { IsTimerRunning: true };
 
     [RelayCommand(CanExecute = nameof(CanPauseTimer))]
-    private async Task PauseTimer(SourceSlot slot)
+    private async Task PauseTimer(SourceSlot? slot)
     {
-        if (slot.Content is not TimerOverlayContent timer || !timer.IsTimerRunning || slot.SourceId is not string sourceId) return;
+        if (slot?.Content is not TimerOverlayContent timer || !timer.IsTimerRunning) return;
+        slot.SourceId ??= $"overlay-{Guid.NewGuid():N}";
+        var sourceId = slot.SourceId;
         if (timer.TimerStartedAtUtc is DateTime started)
             timer.TimerElapsedBaseSeconds += (DateTime.UtcNow - started).TotalSeconds;
         timer.TimerStartedAtUtc = null;
         timer.IsTimerRunning = false;
+        slot.NotifyTextContentChanged();
         StartTimerCommand.NotifyCanExecuteChanged();
         PauseTimerCommand.NotifyCanExecuteChanged();
         await RestoreStaticOverlayAsync(slot, sourceId);
     }
 
     [RelayCommand]
-    private async Task ResetTimer(SourceSlot slot)
+    private async Task ResetTimer(SourceSlot? slot)
     {
-        if (slot.Content is not TimerOverlayContent timer || slot.SourceId is not string sourceId) return;
+        if (slot?.Content is not TimerOverlayContent timer) return;
+        slot.SourceId ??= $"overlay-{Guid.NewGuid():N}";
+        var sourceId = slot.SourceId;
         timer.IsTimerRunning = false;
         timer.TimerStartedAtUtc = null;
         timer.TimerElapsedBaseSeconds = 0;
+        slot.NotifyTextContentChanged();
         StartTimerCommand.NotifyCanExecuteChanged();
         PauseTimerCommand.NotifyCanExecuteChanged();
         await RestoreStaticOverlayAsync(slot, sourceId);
@@ -1413,7 +1640,8 @@ public partial class SceneEditorViewModel : ObservableObject
         foreach (var slot in ActiveScene.Slots.Where(s => s.Content is TimerOverlayContent { IsTimerRunning: true }).ToList())
         {
             var timer = (TimerOverlayContent)slot.Content!;
-            if (slot.SourceId is not string sourceId) continue;
+            slot.SourceId ??= $"overlay-{Guid.NewGuid():N}";
+            var sourceId = slot.SourceId;
 
             if (timer.TimerMode == TimerMode.CountDown)
             {
@@ -1428,6 +1656,7 @@ public partial class SceneEditorViewModel : ObservableObject
                 }
             }
 
+            slot.NotifyTextContentChanged();
             await RestoreStaticOverlayAsync(slot, sourceId);
         }
     }
@@ -1475,6 +1704,21 @@ public partial class SceneEditorViewModel : ObservableObject
         if (slot.Content is not VideoOverlayContent video) return;
 
         video.VideoPath = dialog.FileName;
+    }
+
+    [RelayCommand]
+    private void BrowseAlertAudio(SourceSlot slot)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Select Alert Audio Sound",
+            Filter = "Audio Files|*.mp3;*.wav;*.ogg;*.flac;*.aac;*.wma;*.m4a|All Files|*.*",
+            CheckFileExists = true,
+        };
+        if (dialog.ShowDialog() != true) return;
+        if (slot.Content is not AlertOverlayContent alert) return;
+
+        alert.AudioPath = dialog.FileName;
     }
 
     [RelayCommand]
@@ -1718,10 +1962,12 @@ public partial class SceneEditorViewModel : ObservableObject
         // was never re-rendered at the new dimensions, so the compositor kept stretching the
         // stale one into the resized box, non-uniformly, worse the more it diverged from
         // whatever size it was first rendered at.
-        if (e.PropertyName is nameof(SourceSlot.WPercent) or nameof(SourceSlot.HPercent)
-            && slot.Content is ChatOverlayContent && slot.IsStaticOverlay)
+        if (e.PropertyName is nameof(SourceSlot.WPercent) or nameof(SourceSlot.HPercent))
         {
-            ScheduleOverlayContentUpdate(slot);
+            if (slot.IsStaticOverlay || (slot.ParentGroup?.Content is AlertOverlayContent && slot.SourceId is not null))
+            {
+                ScheduleOverlayContentUpdate(slot);
+            }
         }
     }
 
@@ -1731,6 +1977,10 @@ public partial class SceneEditorViewModel : ObservableObject
     /// <see cref="HookContentPropertyChanged"/>).</summary>
     private void OnSlotContentPropertyChanged(SourceSlot slot, System.ComponentModel.PropertyChangedEventArgs e)
     {
+        var propName = e.PropertyName?.StartsWith("Style.") == true
+            ? e.PropertyName["Style.".Length..]
+            : e.PropertyName;
+
         // Properties-panel edits to an existing overlay's content: re-render and re-register
         // its pixels (debounced, since text edits fire on every keystroke). A re-browsed video
         // is different — its "content" is the file the core itself decodes — so that's handled
@@ -1738,24 +1988,36 @@ public partial class SceneEditorViewModel : ObservableObject
         // across Text/Chat/Timer (see IHasTextStyle) — one check covers all three instead of
         // per-kind duplicates, since HookContentPropertyChanged forwards Style's own
         // PropertyChanged through this same handler now.
-        if ((e.PropertyName is nameof(TextOverlayContent.OverlayText)
+        if (propName is nameof(TextOverlayContent.OverlayText)
                 or nameof(TextStyle.FontFamily) or nameof(TextStyle.FontSize) or nameof(TextStyle.FontColor)
                 or nameof(TextStyle.IsBold) or nameof(TextStyle.IsItalic) or nameof(TextStyle.Alignment)
                 or nameof(TextStyle.OutlineEnabled) or nameof(TextStyle.OutlineColor) or nameof(TextStyle.OutlineThickness)
                 or nameof(ImageOverlayContent.ImagePath) or nameof(ColorOverlayContent.OverlayColor)
-                or nameof(TimerOverlayContent.TimerMode) or nameof(TimerOverlayContent.TimerDurationSeconds))
-            && slot.IsStaticOverlay)
+                or nameof(TimerOverlayContent.TimerMode) or nameof(TimerOverlayContent.TimerDurationSeconds)
+                or nameof(TimerOverlayContent.RawDurationText))
         {
-            ScheduleOverlayContentUpdate(slot);
+            slot.NotifyTextContentChanged();
+            if (slot.IsStaticOverlay || (slot.ParentGroup?.Content is AlertOverlayContent && slot.SourceId is not null))
+            {
+                ScheduleOverlayContentUpdate(slot);
+            }
         }
 
-        if (e.PropertyName is nameof(VideoOverlayContent.VideoPath) or nameof(VideoOverlayContent.LoopVideo)
+        // TimerDisplayText is set by FormatTimerDisplay after RawDurationText/TimerDurationSeconds
+        // change — the canvas WYSIWYG reads it via TextOverlayDisplayText, so we need to re-notify
+        // whenever it's updated. Excluded from ScheduleOverlayContentUpdate to avoid a render loop.
+        if (propName is nameof(TimerOverlayContent.TimerDisplayText))
+        {
+            slot.NotifyTextContentChanged();
+        }
+
+        if (propName is nameof(VideoOverlayContent.VideoPath) or nameof(VideoOverlayContent.LoopVideo)
             && slot.Content is VideoOverlayContent { VideoPath: not null } video)
         {
             slot.SourceId = BuildVideoSourceId(video.VideoPath, video.LoopVideo);
         }
 
-        if (e.PropertyName is nameof(TextOverlayContent.OverlayText)
+        if (propName is nameof(TextOverlayContent.OverlayText)
             or nameof(TextStyle.FontFamily) or nameof(TextStyle.FontSize) or nameof(TextStyle.FontColor)
             or nameof(TextStyle.IsBold) or nameof(TextStyle.IsItalic) or nameof(TextStyle.Alignment)
             or nameof(TextStyle.OutlineEnabled) or nameof(TextStyle.OutlineColor) or nameof(TextStyle.OutlineThickness)
@@ -1771,7 +2033,7 @@ public partial class SceneEditorViewModel : ObservableObject
             NotifyChanged();
         }
 
-        if (e.PropertyName is nameof(BlurOverlayContent.BlurRadius)
+        if (propName is nameof(BlurOverlayContent.BlurRadius)
             or nameof(IChromaKeyable.ChromaKeyEnabled) or nameof(IChromaKeyable.ChromaKeyColor) or nameof(IChromaKeyable.ChromaKeySimilarity)
             or nameof(AlertOverlayContent.AnimatingOpacity) or nameof(AlertOverlayContent.AnimatingXOffsetPercent)
             or nameof(AlertOverlayContent.AnimatingYOffsetPercent) or nameof(AlertOverlayContent.AnimatingScalePercent))
@@ -1783,7 +2045,7 @@ public partial class SceneEditorViewModel : ObservableObject
         // already chroma-keyed by the core regardless of this. No-ops (and clears any stale
         // preview) for anything other than an image overlay with chromakey enabled; video's own
         // live thumbnail is chroma-keyed in place instead (see GoLiveView.xaml.cs).
-        if (e.PropertyName is nameof(IChromaKeyable.ChromaKeyEnabled) or nameof(IChromaKeyable.ChromaKeyColor)
+        if (propName is nameof(IChromaKeyable.ChromaKeyEnabled) or nameof(IChromaKeyable.ChromaKeyColor)
             or nameof(IChromaKeyable.ChromaKeySimilarity) or nameof(ImageOverlayContent.ImagePath))
         {
             ScheduleChromaKeyPreviewUpdate(slot);
@@ -1847,7 +2109,11 @@ public partial class SceneEditorViewModel : ObservableObject
             if (t.IsCanceled || slot.SourceId is not string sourceId) return;
             // Re-renders content and adjusts the box's size, both WPF-bound — must run on the
             // UI thread the way the rest of this ViewModel's dispatched work already does.
-            System.Windows.Application.Current.Dispatcher.InvokeAsync(() => RestoreStaticOverlayAsync(slot, sourceId));
+            System.Windows.Application.Current.Dispatcher.InvokeAsync(async () =>
+            {
+                await RestoreStaticOverlayAsync(slot, sourceId);
+                ScheduleLiveConfigPush();
+            });
         }, TaskScheduler.Default);
     }
 
@@ -1873,6 +2139,7 @@ public partial class SceneEditorViewModel : ObservableObject
         {
             if (t.IsCanceled) return;
             await _core.SendCommandAsync(BuildConfigCommand());
+            await _core.SendCommandAsync(new EnablePreviewCommand());
         }, TaskScheduler.Default);
     }
 
@@ -1980,7 +2247,7 @@ public partial class SceneEditorViewModel : ObservableObject
         // arrives too — sending these first would race Config's own arrival and could have a
         // freshly re-registered frame pruned right back out before Config ever listed this
         // scene's sources as live.
-        foreach (var slot in scene.Slots.Where(s => s.IsStaticOverlay && s.SourceId is not null))
+        foreach (var slot in FlattenSlots(scene.Slots).Where(s => s.IsStaticOverlay && s.SourceId is not null))
             await RestoreStaticOverlayAsync(slot, slot.SourceId!);
 
         await _core.SendCommandAsync(new EnablePreviewCommand());
@@ -1991,6 +2258,8 @@ public partial class SceneEditorViewModel : ObservableObject
         OnPropertyChanged(nameof(Slots));
         OnPropertyChanged(nameof(FlattenedSlots));
         OnPropertyChanged(nameof(PrimarySlot));
+        OnPropertyChanged(nameof(HasNoCaptureSourcesInActiveScene));
+        OnPropertyChanged(nameof(ActiveSceneAspectRatioText));
         OnPropertyChanged(nameof(IsActiveSceneDefault));
         OnPropertyChanged(nameof(AvailableGroupCandidates));
         SelectedSlot = null;
@@ -2413,6 +2682,97 @@ public partial class SceneEditorViewModel : ObservableObject
         SyncSelectedCanvasResolution();
     }
 
+    public bool HasNoCaptureSourcesInActiveScene => ActiveScene is null || !ActiveScene.HasCaptureSource;
+
+    public string ActiveSceneAspectRatioText
+    {
+        get
+        {
+            var w = ActiveScene?.CanvasResolutionWidth ?? ManualCanvasWidth;
+            var h = ActiveScene?.CanvasResolutionHeight ?? ManualCanvasHeight;
+            if (w == 0 || h == 0) return "16:9";
+
+            double ratio = (double)w / h;
+            if (Math.Abs(ratio - (16.0 / 9.0)) < 0.02) return "16:9";
+            if (Math.Abs(ratio - (9.0 / 16.0)) < 0.02) return "9:16 (Vertical)";
+            if (Math.Abs(ratio - (21.0 / 9.0)) < 0.02) return "21:9 (Ultrawide)";
+            if (Math.Abs(ratio - (4.0 / 3.0)) < 0.02) return "4:3";
+            if (Math.Abs(ratio - 1.0) < 0.02) return "1:1 (Square)";
+            return $"{w}:{h} ({ratio:F2})";
+        }
+    }
+
+    public void SetCanvasResolution(GoLiveSceneViewModel scene, uint width, uint height)
+    {
+        if (width == 0 || height == 0) return;
+        scene.CanvasResolutionWidth = width;
+        scene.CanvasResolutionHeight = height;
+        ManualCanvasWidth = width;
+        ManualCanvasHeight = height;
+        UpdateCanvasReference(scene);
+        ScheduleLiveConfigPush();
+        SyncSelectedCanvasResolution();
+        OnPropertyChanged(nameof(ActiveSceneAspectRatioText));
+        OnPropertyChanged(nameof(HasNoCaptureSourcesInActiveScene));
+    }
+
+    [RelayCommand]
+    private void ApplyManualCanvasResolution()
+    {
+        if (ActiveScene is null) return;
+        SetCanvasResolution(ActiveScene, ManualCanvasWidth, ManualCanvasHeight);
+    }
+
+    [RelayCommand]
+    private void SetCanvasResolutionFromDevice(StreamFlow.App.Services.Core.NativeCaptureSource? source)
+    {
+        if (ActiveScene is null || source is null || source.Width == 0 || source.Height == 0) return;
+        SetCanvasResolution(ActiveScene, source.Width, source.Height);
+    }
+
+    [RelayCommand]
+    private void SetAspectRatioPreset(string preset)
+    {
+        if (ActiveScene is null) return;
+
+        uint newWidth = 1920;
+        uint newHeight = 1080;
+
+        switch (preset.ToLowerInvariant())
+        {
+            case "16:9":
+            case "169":
+                newWidth = 1920;
+                newHeight = 1080;
+                break;
+            case "9:16":
+            case "916":
+            case "vertical":
+                newWidth = 1080;
+                newHeight = 1920;
+                break;
+            case "21:9":
+            case "219":
+            case "ultrawide":
+                newWidth = 2560;
+                newHeight = 1080;
+                break;
+            case "4:3":
+            case "43":
+                newWidth = 1440;
+                newHeight = 1080;
+                break;
+            case "1:1":
+            case "11":
+            case "square":
+                newWidth = 1080;
+                newHeight = 1080;
+                break;
+        }
+
+        SetCanvasResolution(ActiveScene, newWidth, newHeight);
+    }
+
     private void SyncSelectedCanvasResolution()
     {
         if (ActiveScene is null) return;
@@ -2498,36 +2858,7 @@ public partial class SceneEditorViewModel : ObservableObject
         }
     }
 
-    /// <summary>Manually sets the active scene's real canvas resolution — for a primary-less
-    /// scene, since there's otherwise no way to know what size to render overlays at. A no-op
-    /// effect-wise once a primary exists and reports its own resolution, since that's always
-    /// authoritative (see ApplyAspectRatio).</summary>
-    [RelayCommand]
-    private void ApplyManualCanvasResolution()
-    {
-        if (ActiveScene is null) return;
-        SetCanvasResolution(ActiveScene, ManualCanvasWidth, ManualCanvasHeight);
-    }
 
-    /// <summary>Pre-seeds the active scene's canvas resolution from a known device's reported
-    /// native resolution, without starting a capture session — lets a primary-less scene match
-    /// a capture source's real shape ahead of time, so adding that source later as an actual
-    /// layer doesn't jump/resize the canvas.</summary>
-    [RelayCommand]
-    private void SetCanvasResolutionFromDevice(NativeCaptureSource device)
-    {
-        if (ActiveScene is null || device is not { Width: > 0, Height: > 0 }) return;
-        SetCanvasResolution(ActiveScene, device.Width, device.Height);
-    }
-
-    private void SetCanvasResolution(GoLiveSceneViewModel scene, uint width, uint height)
-    {
-        scene.CanvasResolutionWidth = width;
-        scene.CanvasResolutionHeight = height;
-        UpdateCanvasReference(scene);
-        ScheduleLiveConfigPush();
-        NotifyChanged();
-    }
 
     /// <summary>Keeps every slot's CanvasWidth/CanvasHeight — the placement canvas's reference
     /// pixel size, used for all percent/pixel conversions and drag/resize/snap math — in sync
@@ -2562,7 +2893,7 @@ public partial class SceneEditorViewModel : ObservableObject
         }
     }
 
-    private List<SceneSettings> BuildScenesSnapshot() =>
+    internal List<SceneSettings> BuildScenesSnapshot() =>
         Scenes.Select(scene => new SceneSettings
         {
             Id = scene.Id,
@@ -2577,8 +2908,18 @@ public partial class SceneEditorViewModel : ObservableObject
     /// <summary>Flattens a SourceSlot's Content back into the persisted SlotSettings shape —
     /// SlotSettings itself stays a flat, all-nullable DTO for full backward compatibility with
     /// existing settings files, even though the runtime SourceSlot no longer is.</summary>
-    private SlotSettings ToSlotSettings(SourceSlot s)
+    internal SlotSettings ToSlotSettings(SourceSlot s)
     {
+        List<SlotSettings>? childrenSettings = null;
+        if (s.Content is GroupOverlayContent group)
+        {
+            childrenSettings = group.Children.Select(ToSlotSettings).ToList();
+        }
+        else if (s.Content is IAdvancedOverlayContent advanced)
+        {
+            childrenSettings = advanced.SubLayers.Select(ToSlotSettings).ToList();
+        }
+
         var settings = new SlotSettings
         {
             IsPrimary = s.IsPrimary,
@@ -2586,7 +2927,7 @@ public partial class SceneEditorViewModel : ObservableObject
             OverlayKind = s.OverlayKind,
             SourceId = s.SourceId,
             DisplayName = s.DisplayName,
-            Children = s.Children?.Cast<SourceSlot>().Select(ToSlotSettings).ToList(),
+            Children = childrenSettings,
             LockChildren = s.LockChildren,
             XPercent = s.XPercent,
             YPercent = s.YPercent,
@@ -2705,4 +3046,51 @@ public partial class SceneEditorViewModel : ObservableObject
     partial void OnHasUnsavedChangesChanged(bool value) => SaveActiveSceneSetCommand.NotifyCanExecuteChanged();
 
     partial void OnActiveSceneSetChanged(SceneSetRegistration? value) => SaveActiveSceneSetCommand.NotifyCanExecuteChanged();
+
+    public void RemoveSlotsForDescriptor(IOverlayTypeDescriptor descriptor)
+    {
+        ArgumentNullException.ThrowIfNull(descriptor);
+        var targetTypeKey = descriptor.TypeKey;
+        var targetContentType = descriptor.CreateDefault()?.GetType();
+
+        bool IsMatch(SourceSlot s)
+        {
+            if (s.Content is null) return false;
+            if (targetContentType is not null && targetContentType.IsInstanceOfType(s.Content))
+                return true;
+            var desc = _overlayRegistry.GetForContent(s.Content);
+            if (desc is not null && string.Equals(desc.TypeKey, targetTypeKey, StringComparison.OrdinalIgnoreCase))
+                return true;
+            return false;
+        }
+
+        // 1. Remove matching slots from active scene Slots
+        var activeToRemove = Slots.Where(IsMatch).ToList();
+        foreach (var slot in activeToRemove)
+        {
+            Slots.Remove(slot);
+            if (ReferenceEquals(SelectedSlot, slot))
+                SelectedSlot = null;
+        }
+
+        // 2. Remove matching slots from all scenes in Scenes list
+        foreach (var sceneVM in Scenes)
+        {
+            var sceneSlotsToRemove = sceneVM.Slots.Where(IsMatch).ToList();
+            foreach (var slot in sceneSlotsToRemove)
+            {
+                sceneVM.Slots.Remove(slot);
+            }
+        }
+
+        // 3. Save scene set layout and notify core compositor
+        if (ActiveSceneSet is not null)
+        {
+            SaveActiveSceneSet();
+        }
+
+        NotifyChanged();
+        OnPropertyChanged(nameof(FlattenedSlots));
+        OnPropertyChanged(nameof(PrimarySlot));
+    }
 }

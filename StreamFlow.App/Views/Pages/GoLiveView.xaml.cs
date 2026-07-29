@@ -26,6 +26,35 @@ public partial class GoLiveView
         get;
     }
 
+    private void AddAudioDeviceButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.Button btn)
+        {
+            var menu = new System.Windows.Controls.ContextMenu();
+            foreach (var item in ViewModel.UnselectedAudioSources)
+            {
+                var menuItem = new System.Windows.Controls.MenuItem
+                {
+                    Header = item.Device.Name,
+                    Command = ViewModel.AddAudioDeviceCommand,
+                    CommandParameter = item
+                };
+                menu.Items.Add(menuItem);
+            }
+            if (menu.Items.Count == 0)
+            {
+                var emptyItem = new System.Windows.Controls.MenuItem
+                {
+                    Header = "All devices added",
+                    IsEnabled = false
+                };
+                menu.Items.Add(emptyItem);
+            }
+            menu.PlacementTarget = btn;
+            menu.IsOpen = true;
+        }
+    }
+
     private WriteableBitmap? _previewBitmap;
     private volatile bool _frameDispatchPending;
 
@@ -283,9 +312,58 @@ public partial class GoLiveView
     {
         if (sender is System.Windows.Controls.Button btn && btn.ContextMenu is not null)
         {
+            PopulateCustomPluginMenuItems(btn.ContextMenu, ViewModel.SceneEditor);
             btn.ContextMenu.PlacementTarget = btn;
             btn.ContextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
             btn.ContextMenu.IsOpen = true;
+        }
+    }
+
+    private static readonly HashSet<string> BuiltInTypeKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "image", "text", "color", "video", "chat", "blur", "timer", "group", "alert"
+    };
+
+    private static void PopulateCustomPluginMenuItems(System.Windows.Controls.ContextMenu menu, SceneEditorViewModel sceneEditor)
+    {
+        var pluginItems = menu.Items.OfType<System.Windows.Controls.MenuItem>()
+            .Where(i => i.Tag is string tag && !BuiltInTypeKeys.Contains(tag))
+            .ToList();
+
+        foreach (var item in pluginItems)
+        {
+            menu.Items.Remove(item);
+        }
+
+        var pluginSeps = menu.Items.OfType<System.Windows.Controls.Separator>()
+            .Where(s => s.Tag as string == "plugin_sep")
+            .ToList();
+
+        foreach (var sep in pluginSeps)
+        {
+            menu.Items.Remove(sep);
+        }
+
+        var registry = sceneEditor.OverlayRegistry;
+        var customDescriptors = registry.All.Where(d => !BuiltInTypeKeys.Contains(d.TypeKey)).ToList();
+        if (customDescriptors.Count == 0) return;
+
+        var newSep = new System.Windows.Controls.Separator { Tag = "plugin_sep" };
+        menu.Items.Add(newSep);
+
+        foreach (var descriptor in customDescriptors)
+        {
+            var item = new System.Windows.Controls.MenuItem
+            {
+                Header = $"{descriptor.IconGlyph} {descriptor.DisplayName}",
+                Tag = descriptor.TypeKey
+            };
+            var desc = descriptor;
+            item.Click += async (s, e) =>
+            {
+                await sceneEditor.AddOverlayFromDescriptorAsync(desc);
+            };
+            menu.Items.Add(item);
         }
     }
 

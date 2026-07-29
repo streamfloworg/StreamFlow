@@ -66,7 +66,8 @@ public partial class App : IDisposable
             services.AddSingleton<SceneSetService>();
             services.AddSingleton<GpuEncoderDetectionService>();
             services.AddSingleton<UpdateService>();
-
+            services.AddSingleton<StreamFlow.App.Services.Alerts.AlertAudioPlaybackService>();
+            services.AddSingleton<StreamFlow.App.Services.Overlays.Plugins.PluginManagerService>();
             services.AddSingleton<StreamFlow.App.Services.Overlays.Plugins.IPluginLoader, StreamFlow.App.Services.Overlays.Plugins.DirectoryPluginLoader>();
 
             services.AddSingleton<StreamFlow.App.Services.Overlays.OverlayTypeRegistry>(sp =>
@@ -81,10 +82,6 @@ public partial class App : IDisposable
                 registry.Register(new StreamFlow.App.Services.Overlays.Descriptors.TimerOverlayTypeDescriptor());
                 registry.Register(new StreamFlow.App.Services.Overlays.Descriptors.GroupOverlayTypeDescriptor());
                 registry.Register(new StreamFlow.App.Services.Overlays.Descriptors.AlertOverlayTypeDescriptor());
-
-                var pluginLoader = sp.GetRequiredService<StreamFlow.App.Services.Overlays.Plugins.IPluginLoader>();
-                pluginLoader.LoadPlugins(registry);
-
                 return registry;
             });
 
@@ -172,8 +169,11 @@ public partial class App : IDisposable
         // Store startup args for processing after host is ready
         _startupArgs = e.Args;
 
-        //Listen to notification activation
+        // Listen to notification activation
         await _host.StartAsync();
+
+        // Eagerly instantiate AlertAudioPlaybackService to listen for EventBus audio events
+        _host.Services.GetRequiredService<StreamFlow.App.Services.Alerts.AlertAudioPlaybackService>();
 
         // Process startup args after host is started
         if (_startupArgs != null && _startupArgs.Length > 0)

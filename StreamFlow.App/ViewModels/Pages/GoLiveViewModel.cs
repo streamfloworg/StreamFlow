@@ -267,27 +267,28 @@ public partial class GoLiveViewModel : ViewModel
 
     private void ApplySettings(GoLiveSettings saved)
     {
-        _bitrateKbps = saved.BitrateKbps;
-        _fps = saved.Fps;
-        if (saved.Encoder is not null) _encoder = saved.Encoder;
-        _masterVolumePercent = saved.MasterVolumePercent;
+        BitrateKbps = saved.BitrateKbps;
+        Fps = saved.Fps;
+        if (saved.Encoder is not null) Encoder = saved.Encoder;
+        MasterVolumePercent = saved.MasterVolumePercent;
         _persistedSelectedAudioDeviceIds = saved.SelectedAudioDeviceIds;
         _persistedAudioDeviceDisplayNames = saved.AudioDeviceDisplayNames;
 
-        _isDuckingEnabled = saved.IsDuckingEnabled;
-        _duckingTriggerDeviceId = saved.DuckingTriggerDeviceId;
-        _duckingThresholdDb = saved.DuckingThresholdDb;
-        _duckingDepth = saved.DuckingDepth;
-        _duckingAttackMs = saved.DuckingAttackMs;
-        _duckingReleaseMs = saved.DuckingReleaseMs;
-        _duckingHoldMs = saved.DuckingHoldMs;
+        IsDuckingEnabled = saved.IsDuckingEnabled;
+        DuckingTriggerDeviceId = saved.DuckingTriggerDeviceId;
+        DuckingThresholdDb = saved.DuckingThresholdDb;
+        DuckingDepth = saved.DuckingDepth;
+        DuckingAttackMs = saved.DuckingAttackMs;
+        DuckingReleaseMs = saved.DuckingReleaseMs;
+        DuckingHoldMs = saved.DuckingHoldMs;
+        DuckingPreset = string.IsNullOrEmpty(saved.DuckingPreset) ? "medium" : saved.DuckingPreset;
         _persistedDuckingTargetDeviceIds = saved.DuckingTargetDeviceIds != null ? [.. saved.DuckingTargetDeviceIds] : [];
 
-        _isSpoutOutputEnabled = true; // Always enable Spout2
-        _spoutSenderName = string.IsNullOrEmpty(saved.SpoutSenderName) ? "StreamFlow" : saved.SpoutSenderName;
+        IsSpoutOutputEnabled = true; // Always enable Spout2
+        SpoutSenderName = string.IsNullOrEmpty(saved.SpoutSenderName) ? "StreamFlow" : saved.SpoutSenderName;
 
-        _isRecordingEnabled = saved.IsRecordingEnabled;
-        _recordFolderPath = string.IsNullOrEmpty(saved.RecordFolderPath)
+        IsRecordingEnabled = saved.IsRecordingEnabled;
+        RecordFolderPath = string.IsNullOrEmpty(saved.RecordFolderPath)
             ? Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyVideos), "StreamFlow")
             : saved.RecordFolderPath;
 
@@ -376,31 +377,7 @@ public partial class GoLiveViewModel : ViewModel
         {
             TransitionKind = SceneEditorViewModel.TransitionKindToWire(SceneEditor.TransitionKind),
             TransitionDurationMs = (uint)Math.Max(0, SceneEditor.TransitionDurationMs),
-            Scenes = SceneEditor.ActiveSceneSet is null ? SceneEditor.Scenes.Select(scene => new SceneSettings
-            {
-                Id = scene.Id,
-                Name = scene.Name,
-                CanvasResolutionWidth = scene.CanvasResolutionWidth,
-                CanvasResolutionHeight = scene.CanvasResolutionHeight,
-                Slots = scene.Slots.Select(s => new SlotSettings
-                {
-                    IsPrimary = s.IsPrimary,
-                    IsOverlay = s.IsOverlay,
-                    OverlayKind = s.OverlayKind,
-                    SourceId = s.SourceId,
-                    DisplayName = s.DisplayName,
-                    ImagePath = (s.Content as ImageOverlayContent)?.ImagePath,
-                    OverlayText = (s.Content as TextOverlayContent)?.OverlayText,
-                    OverlayColorHex = (s.Content as ColorOverlayContent)?.OverlayColor?.ToString(CultureInfo.InvariantCulture),
-                    VideoPath = (s.Content as VideoOverlayContent)?.VideoPath,
-                    XPercent = s.XPercent,
-                    YPercent = s.YPercent,
-                    WPercent = s.WPercent,
-                    HPercent = s.HPercent,
-                    CornerRadiusPercent = s.CornerRadiusPercent,
-                    BlurRadius = (s.Content as BlurOverlayContent)?.BlurRadius ?? 0,
-                }).ToList(),
-            }).ToList() : _localDefaultScenes,
+            Scenes = SceneEditor.ActiveSceneSet is null ? SceneEditor.BuildScenesSnapshot() : _localDefaultScenes,
             DefaultSceneId = SceneEditor.ActiveSceneSet is null ? SceneEditor.DefaultScene?.Id : null,
             Profiles = Profiles.Where(p => p.Id != "none").Select(p => new StreamingProfileSettings
             {
@@ -444,6 +421,7 @@ public partial class GoLiveViewModel : ViewModel
             DuckingAttackMs = DuckingAttackMs,
             DuckingReleaseMs = DuckingReleaseMs,
             DuckingHoldMs = DuckingHoldMs,
+            DuckingPreset = DuckingPreset,
             DuckingTargetDeviceIds = AudioSources.Count > 0
                 ? AudioSources.Where(a => a.IsSelected && a.IsDuckingTarget).Select(a => a.Device.Id).ToList()
                 : [.. _persistedDuckingTargetDeviceIds]

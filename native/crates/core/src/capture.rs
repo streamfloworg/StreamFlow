@@ -109,12 +109,11 @@ unsafe impl Sync for GpuState {}
 pub struct CaptureSession {
     _session: GraphicsCaptureSession,
     _pool: Direct3D11CaptureFramePool,
+    last_frame_millis: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl CaptureSession {
     /// Start capturing `item`. Each decoded BGRA frame is broadcast on `tx`.
-    /// `shared_overlay` is polled each frame for fresh pixels from the offscreen
-    /// overlay BrowserWindow — no WGC session for the overlay is needed.
     pub fn new(
         source_id: String,
         item: GraphicsCaptureItem,
@@ -150,6 +149,13 @@ impl CaptureSession {
             "[diag] Capture session starting: source_id={source_id} initial_dims={init_w}x{init_h}"
         );
 
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let last_frame_millis = Arc::new(std::sync::atomic::AtomicU64::new(now_ms));
+        let last_frame_millis_cb = last_frame_millis.clone();
+
         let device_arc = Arc::new(device.clone());
         let gpu_arc = Arc::new(Mutex::new(GpuState {
             ctx:          context,
@@ -179,6 +185,39 @@ impl CaptureSession {
                         }
                     };
 
+                    let now_ticks = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as u64;
+                    last_frame_millis_cb.store(now_ticks, std::sync::atomic::Ordering::Relaxed);
+
+                    if let Ok(content_size) = frame.ContentSize() {
+                        let cw = content_size.Width as u32;
+                        let ch = content_size.Height as u32;
+                        let mut gpu = gpu_arc_main.lock().unwrap();
+                        if cw > 0 && ch > 0 && (cw != gpu.staging_w || ch != gpu.staging_h) {
+                            tracing::info!(
+                                "[capture] Content size changed for {source_id}: {}x{} -> {}x{}",
+                                gpu.staging_w, gpu.staging_h, cw, ch
+                            );
+                            if let Ok(d3d_dev) = wrap_as_direct3d_device(&device_arc) {
+                                if let Err(e) = pool.Recreate(
+                                    &d3d_dev,
+                                    DirectXPixelFormat::B8G8R8A8UIntNormalized,
+                                    2,
+                                    content_size,
+                                ) {
+                                    tracing::warn!("[capture] pool.Recreate failed: {e}");
+                                }
+                            }
+                            if let Ok(new_staging) = create_staging_texture(&device_arc, cw, ch) {
+                                gpu.staging = new_staging;
+                                gpu.staging_w = cw;
+                                gpu.staging_h = ch;
+                            }
+                        }
+                    }
+
                     let n = frame_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     if n == 0 {
                         tracing::warn!("[diag] First frame arrived from WGC: source_id={source_id}");
@@ -198,7 +237,20 @@ impl CaptureSession {
 
         session.StartCapture().context("StartCapture failed")?;
 
-        Ok(Self { _session: session, _pool: pool })
+        Ok(Self {
+            _session: session,
+            _pool: pool,
+            last_frame_millis,
+        })
+    }
+
+    pub fn is_stale(&self, timeout_ms: u64) -> bool {
+        let last = self.last_frame_millis.load(std::sync::atomic::Ordering::Relaxed);
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        now_ms.saturating_sub(last) > timeout_ms
     }
 
     pub fn stop(&mut self) -> Result<()> {

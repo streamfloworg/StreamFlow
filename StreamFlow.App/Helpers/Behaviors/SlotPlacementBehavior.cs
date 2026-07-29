@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -14,6 +14,18 @@ public enum SlotPlacementMode
     None,
     Move,
     Resize,
+}
+
+public enum SlotResizeDirection
+{
+    BottomRight,
+    Bottom,
+    Right,
+    TopRight,
+    Top,
+    TopLeft,
+    Left,
+    BottomLeft,
 }
 
 public enum SlotGuideRole
@@ -45,6 +57,10 @@ public static class SlotPlacementBehavior
     public static readonly DependencyProperty GuideRoleProperty = DependencyProperty.RegisterAttached(
         "GuideRole", typeof(SlotGuideRole), typeof(SlotPlacementBehavior), new PropertyMetadata(SlotGuideRole.None));
 
+    public static readonly DependencyProperty ResizeDirectionProperty = DependencyProperty.RegisterAttached(
+        "ResizeDirection", typeof(SlotResizeDirection), typeof(SlotPlacementBehavior),
+        new PropertyMetadata(SlotResizeDirection.BottomRight));
+
     public static bool GetIsEnabled(DependencyObject element) => (bool)element.GetValue(IsEnabledProperty);
     public static void SetIsEnabled(DependencyObject element, bool value) => element.SetValue(IsEnabledProperty, value);
 
@@ -56,6 +72,9 @@ public static class SlotPlacementBehavior
 
     public static SlotGuideRole GetGuideRole(DependencyObject element) => (SlotGuideRole)element.GetValue(GuideRoleProperty);
     public static void SetGuideRole(DependencyObject element, SlotGuideRole value) => element.SetValue(GuideRoleProperty, value);
+
+    public static SlotResizeDirection GetResizeDirection(DependencyObject element) => (SlotResizeDirection)element.GetValue(ResizeDirectionProperty);
+    public static void SetResizeDirection(DependencyObject element, SlotResizeDirection value) => element.SetValue(ResizeDirectionProperty, value);
 
     private static void OnIsEnabledChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
@@ -142,29 +161,30 @@ public static class SlotPlacementBehavior
         var canvas = FindPlacementCanvas(thumb);
         if (canvas is null) return;
 
-        // Both axes are combined (see SourceSlot.ResizeByDragDelta) so width and height are
-        // never independently changeable while aspect-locked, regardless of drag direction.
-        slot.ResizeByDragDelta(e.HorizontalChange, e.VerticalChange);
+        var direction = GetResizeDirection(thumb);
+        slot.ResizeByHandleDelta(direction, e.HorizontalChange, e.VerticalChange);
 
-        // Snap the resulting right/bottom edge to canvas bounds/center or another item's
-        // edges. Only one edge can win when aspect-locked (both simultaneously would need an
-        // exact geometric coincidence), so whichever edge is actually closest takes it.
         var xTargets = CollectSnapTargets(thumb, slot, horizontal: true);
         var yTargets = CollectSnapTargets(thumb, slot, horizontal: false);
 
-        var right = FindNearestTarget(slot.XPercent + slot.WPercent, xTargets, slot.CanvasWidth, out var rightDistPx);
-        var bottom = FindNearestTarget(slot.YPercent + slot.HPercent, yTargets, slot.CanvasHeight, out var bottomDistPx);
-
         double? vGuide = null, hGuide = null;
-        if (rightDistPx <= SnapTolerancePixels && rightDistPx <= bottomDistPx)
+        if (direction is SlotResizeDirection.Right or SlotResizeDirection.TopRight or SlotResizeDirection.BottomRight)
         {
-            slot.ResizeToWidthPercent(right - slot.XPercent);
-            vGuide = right / 100.0 * slot.CanvasWidth;
+            var right = FindNearestTarget(slot.XPercent + slot.WPercent, xTargets, slot.CanvasWidth, out var rightDistPx);
+            if (rightDistPx <= SnapTolerancePixels)
+            {
+                slot.ResizeToWidthPercent(right - slot.XPercent);
+                vGuide = right / 100.0 * slot.CanvasWidth;
+            }
         }
-        else if (bottomDistPx <= SnapTolerancePixels)
+        else if (direction is SlotResizeDirection.Bottom or SlotResizeDirection.BottomLeft)
         {
-            slot.ResizeToHeightPercent(bottom - slot.YPercent);
-            hGuide = bottom / 100.0 * slot.CanvasHeight;
+            var bottom = FindNearestTarget(slot.YPercent + slot.HPercent, yTargets, slot.CanvasHeight, out var bottomDistPx);
+            if (bottomDistPx <= SnapTolerancePixels)
+            {
+                slot.ResizeToHeightPercent(bottom - slot.YPercent);
+                hGuide = bottom / 100.0 * slot.CanvasHeight;
+            }
         }
 
         SetGuideLine(canvas, SlotGuideRole.Vertical, vGuide);

@@ -1,0 +1,10 @@
+{
+  "id": "streamflow.plugin.marquee",
+  "name": "Marquee Banner",
+  "version": "1.0.0",
+  "author": "StreamFlow Example",
+  "description": "Renders a scrolling-style marquee banner overlay with customizable text and colors.",
+  "entryDll": "StreamFlow.Plugin.Marquee.dll",
+  "minAppVersion": "1.0.0",
+  "icon": "icon.png"
+}

@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.IO;
 using System.Globalization;
 using System.Windows.Media;
@@ -84,25 +84,7 @@ public static class OverlayContentRenderer
     public static void ApplyRenderedAspectRatio(SourceSlot slot, int width, int height, bool trackNaturalSize = false)
     {
         if (width <= 0 || height <= 0) return;
-
-        if (!trackNaturalSize)
-        {
-            slot.AspectRatio = width / (double)height;
-            if (slot.IsAspectLocked)
-                slot.ResizeToWidthPercent(slot.WPercent);
-            return;
-        }
-
-        var scaleFactor = slot.LastRenderedContentWidth is double lastWidth && lastWidth > 0
-            ? width / lastWidth
-            : 1.0;
-        slot.LastRenderedContentWidth = width;
-
         slot.AspectRatio = width / (double)height;
-        if (!slot.IsAspectLocked) return;
-
-        var targetWPercent = Math.Clamp(slot.WPercent * scaleFactor, 5, 100 - slot.XPercent);
-        slot.ResizeToWidthPercent(targetWPercent);
     }
 
     /// <summary>Headroom over an image overlay's current on-screen pixel size when capping its
@@ -160,7 +142,7 @@ public static class OverlayContentRenderer
     /// overlay — formatting (font/size/color/bold/italic/alignment/outline) comes from
     /// <paramref name="style"/>, defaulting to TextStyle's own defaults (white bold Segoe UI,
     /// no outline) when omitted.</summary>
-    public static (int Width, int Height, byte[] Pixels)? RenderTextToBgra(string text, TextStyle? style = null)
+    public static (int Width, int Height, byte[] Pixels)? RenderTextToBgra(string text, TextStyle? style = null, SourceSlot? slot = null)
     {
         style ??= new TextStyle();
         var fontFamily = string.IsNullOrWhiteSpace(style.FontFamily) ? "Segoe UI" : style.FontFamily;
@@ -175,31 +157,52 @@ public static class OverlayContentRenderer
             {
                 TextHorizontalAlignment.Center => System.Windows.TextAlignment.Center,
                 TextHorizontalAlignment.Right => System.Windows.TextAlignment.Right,
+                TextHorizontalAlignment.Justify => System.Windows.TextAlignment.Justify,
                 _ => System.Windows.TextAlignment.Left,
             }
         };
 
-        // Outline needs extra room around the glyph bounds so the stroke doesn't get clipped
-        // at the bitmap edge — padded on all sides, origin shifted to match.
         var outlinePad = style.OutlineEnabled ? style.OutlineThickness * TextSupersampleFactor : 0;
-        var width = (int)Math.Ceiling(formatted.WidthIncludingTrailingWhitespace + outlinePad * 2);
-        var height = (int)Math.Ceiling(formatted.Height + outlinePad * 2);
-        if (width <= 0 || height <= 0) return null;
+        var naturalW = (int)Math.Ceiling(formatted.WidthIncludingTrailingWhitespace + outlinePad * 2);
+        var naturalH = (int)Math.Ceiling(formatted.Height + outlinePad * 2);
+        if (naturalW <= 0 || naturalH <= 0) return null;
+
+        int width = naturalW;
+        int height = naturalH;
+
+        if (slot is not null && slot.CanvasWidth > 0 && slot.CanvasHeight > 0)
+        {
+            var targetPxW = (int)Math.Ceiling(slot.WPercent / 100.0 * slot.CanvasWidth * TextSupersampleFactor);
+            var targetPxH = (int)Math.Ceiling(slot.HPercent / 100.0 * slot.CanvasHeight * TextSupersampleFactor);
+            if (targetPxW > 0 && targetPxH > 0)
+            {
+                width = Math.Max(naturalW, targetPxW);
+                height = Math.Max(naturalH, targetPxH);
+                formatted.MaxTextWidth = width - outlinePad * 2;
+            }
+        }
 
         var visual = new DrawingVisual();
-        // RenderTargetBitmap doesn't apply ClearType (there's no real subpixel geometry off
-        // screen), but explicitly force grayscale antialiasing rather than leaving it to
-        // whatever the default happens to resolve to.
         TextOptions.SetTextRenderingMode(visual, TextRenderingMode.Grayscale);
         TextOptions.SetTextFormattingMode(visual, TextFormattingMode.Ideal);
-        var origin = new System.Windows.Point(outlinePad, outlinePad);
+
+        double originX = outlinePad;
+        if (width > naturalW)
+        {
+            if (style.Alignment == TextHorizontalAlignment.Center)
+                originX = (width - formatted.WidthIncludingTrailingWhitespace) / 2.0;
+            else if (style.Alignment == TextHorizontalAlignment.Right)
+                originX = width - formatted.WidthIncludingTrailingWhitespace - outlinePad;
+        }
+
+        double originY = (height - formatted.Height) / 2.0;
+        if (originY < outlinePad) originY = outlinePad;
+
+        var origin = new System.Windows.Point(originX, originY);
         using (var dc = visual.RenderOpen())
         {
             if (style.OutlineEnabled)
             {
-                // Stroke the glyphs' own outline geometry rather than the classic "draw N
-                // offset copies behind it" hack — centers evenly on the glyph edge at any
-                // thickness instead of looking uneven/gappy at larger strokes.
                 var geometry = formatted.BuildGeometry(origin);
                 var pen = new System.Windows.Media.Pen(new SolidColorBrush(style.OutlineColor), style.OutlineThickness * TextSupersampleFactor)
                 {

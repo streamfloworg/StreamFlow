@@ -1,19 +1,31 @@
-﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:converters="clr-namespace:StreamFlow.App.Converter">
 
-  <!-- Converters shared across the app -->
+    <!-- Converters shared across the app -->
     <converters:ColorMediaBrushConverter x:Key="ColorMediaBrushConverter" />
+    <converters:ColorToBrushConverter x:Key="ColorToBrush" />
     <converters:BooleanToResourceConverter x:Key="BooleanToResourceConverter" />
     <converters:ObjectToPlayingStringConverter x:Key="ObjectToPlayingStringConverter" />
     <converters:DecimalToAudioTime x:Key="DecimalToAudioTimeConverter" />
     <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+    <converters:BooleanToVisibilityConverter x:Key="BoolToVisibility" />
     <converters:BooleanInvertConverter x:Key="BooleanInvertConverter" />
     <converters:NextAudioTrackToBooleanConverter x:Key="NextAudioTrackToBooleanConverter" />
     <converters:IsDefaultAudioToBooleanConverter x:Key="IsDefaultAudioToBooleanConverter" />
     <converters:VisibilityToBooleanConverter x:Key="VisibilityToBooleanConverter" />
     <converters:NullVisibilityConverter x:Key="NullVisibilityConverter" />
+    <converters:NullVisibilityConverter x:Key="NullToVisibility" />
     <converters:InvertedNullVisibilityConverter x:Key="InvertedNullVisibilityConverter" />
+    <converters:InvertedNullVisibilityConverter x:Key="InvertedNullToVisibility" />
+    <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
+    <converters:TextHorizontalAlignmentToIndexConverter x:Key="TextAlignmentToIndex" />
+    <converters:TextHorizontalAlignmentToTextAlignmentConverter x:Key="TextAlignmentToWpf" />
+    <converters:TimerModeToIndexConverter x:Key="TimerModeToIndex" />
+    <converters:TimerModeToVisibilityConverter x:Key="CountDownToVisibility" />
+    <converters:RotationDegreesToIndexConverter x:Key="RotationDegreesToIndex" />
+    <converters:BoolToFontWeightConverter x:Key="BoolToFontWeight" />
+    <converters:BoolToFontStyleConverter x:Key="BoolToFontStyle" />
     <converters:ValueConverterGroup x:Key="InvertedBooleanVisibilityConverter">
         <converters:BooleanInvertConverter />
         <converters:BooleanToVisibilityConverter />

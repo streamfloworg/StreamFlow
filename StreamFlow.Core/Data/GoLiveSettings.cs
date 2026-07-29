@@ -49,6 +49,13 @@ public sealed class SlotSettings
     public int AlertDurationSeconds { get; set; } = 5;
     public AlertEntranceAnimation AlertEntranceAnimation { get; set; } = AlertEntranceAnimation.Fade;
     public AlertExitAnimation AlertExitAnimation { get; set; } = AlertExitAnimation.Fade;
+    public string? AlertAudioPath { get; set; }
+    public bool AlertIsAudioEnabled { get; set; } = true;
+    public bool AlertIsAudioLooping { get; set; }
+    public double AlertAudioVolumePercent { get; set; } = 100;
+    public string? AlertTargetAudioChannelId { get; set; }
+    public bool AlertEnableAudioDucking { get; set; }
+    public double AlertDuckingAmountPercent { get; set; } = 50;
 }
 
 public sealed class SceneSettings
@@ -125,6 +132,7 @@ public sealed class GoLiveSettings
     public float DuckingReleaseMs { get; set; } = 300.0f;
     public float DuckingHoldMs { get; set; } = 100.0f;
     public List<string> DuckingTargetDeviceIds { get; set; } = [];
+    public string DuckingPreset { get; set; } = "medium";
 
     // Legacy fields for backwards compatibility
     public string? SceneName { get; set; }

@@ -1,4 +1,5 @@
-﻿
+
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 using StreamFlow.Core.Data;
@@ -45,12 +46,13 @@ public class ApplicationHostService : IHostedService
     {
         if (!System.Windows.Application.Current.Windows.OfType<MainWindow>().Any())
         {
-            
+            var pluginManager = _serviceProvider.GetService<StreamFlow.App.Services.Overlays.Plugins.PluginManagerService>();
+            pluginManager?.LoadPlugins();
+
             _hostWindow = (
                 _serviceProvider.GetService(typeof(Window)) as Window
             )!;
             _hostWindow.Show();
-            //_hostWindow.Navigate(typeof(Views.Pages.AudioView));
         }
 
         await Task.CompletedTask;

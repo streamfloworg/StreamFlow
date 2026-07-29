@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0-windows10.0.17763.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>StreamFlow.Plugin.Marquee</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\StreamFlow.Plugin.SDK\StreamFlow.Plugin.SDK.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="plugin.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <!-- Post-build target to package into a standalone .sfplugin archive -->
+  <Target Name="PackageSfPlugin" AfterTargets="Build">
+    <PropertyGroup>
+      <PluginOutputDir>$(TargetDir)</PluginOutputDir>
+      <SfPluginZipPath>$(TargetDir)..\StreamFlow.Plugin.Marquee.sfplugin</SfPluginZipPath>
+    </PropertyGroup>
+
+    <ZipDirectory SourceDirectory="$(PluginOutputDir)" DestinationFile="$(SfPluginZipPath)" Overwrite="true" />
+    <Message Text="Packaged standalone plugin archive to $(SfPluginZipPath)" Importance="high" />
+  </Target>
+</Project>
