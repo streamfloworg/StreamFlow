@@ -745,17 +745,6 @@
                 </Border.Background>
             </Border>
 
-            <!-- Soft top highlight, like light grazing the panel — most of the "glassy" read
-                 from the reference image comes from a single low-opacity radial gradient like
-                 this rather than anything more elaborate. -->
-            <!--<Border CornerRadius="6" Height="40" VerticalAlignment="Top" Margin="1" IsHitTestVisible="False">
-                <Border.Background>
-                    <RadialGradientBrush GradientOrigin="0.5,0" Center="0.5,0" RadiusX="0.9" RadiusY="1.4">
-                        <GradientStop Color="#22FFFFFF" Offset="0"/>
-                        <GradientStop Color="#00FFFFFF" Offset="1"/>
-                    </RadialGradientBrush>
-                </Border.Background>
-            </Border>-->
 
         <Grid Margin="4">
             <Grid.RowDefinitions>
