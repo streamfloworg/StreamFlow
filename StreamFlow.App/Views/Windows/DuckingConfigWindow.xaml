@@ -56,6 +56,12 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
+        <!-- Explicit enable toggle — the only thing that actually sets IsDuckingEnabled=true is
+             a preset button click (see GoLiveViewModel.ApplyDuckingPreset); this gives a direct,
+             discoverable way to turn ducking off (or back on at the current slider values)
+             without needing to reason about preset-click side effects. -->
+        <CheckBox Grid.Row="0" Content="Enable Ducking" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,16"
+                  IsChecked="{Binding IsDuckingEnabled, Mode=TwoWay}"/>
 
         <!-- Preset Segmented Button Group -->
         <StackPanel Grid.Row="1" Margin="0,0,0,20">

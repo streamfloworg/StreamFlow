@@ -34,30 +34,11 @@ public partial class DuckingConfigWindow : Window
         if (sender is WpfButton { Tag: string preset })
         {
             _isUpdatingPreset = true;
-            switch (preset)
-            {
-                case "light":
-                    _viewModel.DuckingThresholdDb = -24;
-                    _viewModel.DuckingDepth = 0.30f;
-                    _viewModel.DuckingAttackMs = 20;
-                    _viewModel.DuckingReleaseMs = 200;
-                    _viewModel.DuckingHoldMs = 50;
-                    break;
-                case "medium":
-                    _viewModel.DuckingThresholdDb = -30;
-                    _viewModel.DuckingDepth = 0.60f;
-                    _viewModel.DuckingAttackMs = 15;
-                    _viewModel.DuckingReleaseMs = 300;
-                    _viewModel.DuckingHoldMs = 100;
-                    break;
-                case "aggressive":
-                    _viewModel.DuckingThresholdDb = -36;
-                    _viewModel.DuckingDepth = 0.90f;
-                    _viewModel.DuckingAttackMs = 5;
-                    _viewModel.DuckingReleaseMs = 500;
-                    _viewModel.DuckingHoldMs = 150;
-                    break;
-            }
+            // Delegates to GoLiveViewModel.ApplyDuckingPreset — the single source of truth for
+            // preset values (see its own doc comment) — instead of duplicating them here, and
+            // (unlike the values this used to hardcode inline) that method also sets
+            // IsDuckingEnabled = true, which was previously never set from any UI at all.
+            _viewModel.ApplyDuckingPresetCommand.Execute(preset);
             _isUpdatingPreset = false;
             SetActivePreset(preset);
         }

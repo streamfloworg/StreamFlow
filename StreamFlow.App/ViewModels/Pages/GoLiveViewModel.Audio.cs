@@ -314,6 +314,14 @@ public partial class GoLiveViewModel
     partial void OnDuckingHoldMsChanged(float value) { SendDuckingRules(); ScheduleSaveSettings(); }
     partial void OnDuckingPresetChanged(string value) { ScheduleSaveSettings(); }
 
+    /// <summary>Single source of truth for ducking preset values — DuckingConfigWindow's preset
+    /// buttons call this (via DuckingPresetCommand) instead of hand-rolling their own copy, which
+    /// is what let the two drift: this method used to be dead code (no XAML ever bound it), while
+    /// the window's own OnPresetClick had a second, inconsistent set of values under different
+    /// names ("aggressive" vs "heavy") and never set IsDuckingEnabled at all — since that's the
+    /// only place that ever sets it true, ducking could never actually turn on through the UI.
+    /// Preset names/values match what the window has shipped with (light/medium/aggressive),
+    /// "standard"/"heavy" kept as aliases for any other caller still using the older names.</summary>
     [RelayCommand]
     private void ApplyDuckingPreset(string preset)
     {
@@ -324,28 +332,33 @@ public partial class GoLiveViewModel
                 break;
             case "light":
                 IsDuckingEnabled = true;
-                DuckingThresholdDb = -18.0f;
-                DuckingDepth = 0.5f;
-                DuckingAttackMs = 15.0f;
-                DuckingReleaseMs = 250.0f;
+                DuckingThresholdDb = -24.0f;
+                DuckingDepth = 0.30f;
+                DuckingAttackMs = 20.0f;
+                DuckingReleaseMs = 200.0f;
                 DuckingHoldMs = 50.0f;
                 break;
             case "standard":
             case "medium":
                 IsDuckingEnabled = true;
                 DuckingThresholdDb = -30.0f;
-                DuckingDepth = 0.8f;
-                DuckingAttackMs = 10.0f;
+                DuckingDepth = 0.60f;
+                DuckingAttackMs = 15.0f;
                 DuckingReleaseMs = 300.0f;
                 DuckingHoldMs = 100.0f;
                 break;
             case "heavy":
+            case "aggressive":
                 IsDuckingEnabled = true;
-                DuckingThresholdDb = -42.0f;
-                DuckingDepth = 0.95f;
+                DuckingThresholdDb = -36.0f;
+                DuckingDepth = 0.90f;
                 DuckingAttackMs = 5.0f;
                 DuckingReleaseMs = 500.0f;
                 DuckingHoldMs = 150.0f;
+                break;
+            case "custom":
+                // Sliders already hold whatever values the user set — just mark the preset
+                // active, don't overwrite them. Doesn't imply IsDuckingEnabled either way.
                 break;
         }
     }
