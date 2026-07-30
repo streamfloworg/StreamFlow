@@ -1002,9 +1002,16 @@
                                             </Image>
                                             <!-- Unified Text-Based Overlay Renderer (Text, Timer, Sub-Layers, Plugins) -->
                                             <Grid Visibility="{Binding IsTextBasedOverlay, Converter={StaticResource BoolToVisibility}}" ClipToBounds="True">
+                                                <!-- FontSize bound 1:1, no DoubleScale — OverlayContentRenderer.RenderTextToBgra renders
+                                                     at style.FontSize (times its own internal supersample factor, which cancels out once
+                                                     the compositor scales the bitmap back down to the slot's actual box), so a plain
+                                                     FontSize DIP in this 640-wide reference canvas already matches the composited/stream
+                                                     output's effective size. A leftover *0.5 factor here previously made this preview
+                                                     render at half that — most visible for a Stream Alert's text sub-layer, whose box
+                                                     size (see SourceSlot.RenderWPercent) is usually a small fraction of the full canvas. -->
                                                 <TextBlock Text="{Binding TextOverlayDisplayText}"
                                                            FontFamily="{Binding TextOverlayStyle.FontFamily}"
-                                                           FontSize="{Binding TextOverlayStyle.FontSize, Converter={StaticResource DoubleScale}, ConverterParameter=0.5}"
+                                                           FontSize="{Binding TextOverlayStyle.FontSize}"
                                                            FontWeight="{Binding TextOverlayStyle.IsBold, Converter={StaticResource BoolToFontWeight}}"
                                                            FontStyle="{Binding TextOverlayStyle.IsItalic, Converter={StaticResource BoolToFontStyle}}"
                                                            TextAlignment="{Binding TextOverlayStyle.Alignment, Converter={StaticResource TextAlignmentToWpf}}"
