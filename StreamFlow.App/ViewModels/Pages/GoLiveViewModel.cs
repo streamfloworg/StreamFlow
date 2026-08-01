@@ -13,6 +13,7 @@ using Microsoft.Extensions.Logging;
 
 using StreamFlow.App.Services;
 using StreamFlow.App.Services.Core;
+using StreamFlow.Core.Helpers;
 
 namespace StreamFlow.App.ViewModels.Pages;
 
@@ -34,6 +35,8 @@ public partial class GoLiveViewModel : ViewModel
     private readonly SceneSetService _sceneSetService;
     private readonly EventBus _eventBus;
     private readonly ILogger<GoLiveViewModel> _logger;
+    private readonly StreamFlow.App.Services.AI.AiProviderRegistryService _aiProviders;
+    private readonly StreamFlow.App.Services.CategoryMediaService _categoryMedia;
 
     /// <summary>Shared with ScenesViewModel — same live Scenes/Slots/ActiveScene state,
     /// registered as a DI singleton. See SceneEditorViewModel's own doc comment for the
@@ -211,7 +214,8 @@ public partial class GoLiveViewModel : ViewModel
         CoreBridgeService core, IDialogService dialogs, TwitchAuthService twitchAuth, YouTubeAuthService youTubeAuth,
         TwitchChatService twitchChat, YouTubeChatService youTubeChat,
         SceneSetService sceneSetService, GpuEncoderDetectionService gpuEncoderDetection,
-        SceneEditorViewModel sceneEditor, EventBus eventBus, ILogger<GoLiveViewModel> logger)
+        SceneEditorViewModel sceneEditor, EventBus eventBus, ILogger<GoLiveViewModel> logger,
+        StreamFlow.App.Services.AI.AiProviderRegistryService aiProviders, StreamFlow.App.Services.CategoryMediaService categoryMedia)
     {
         _core = core;
         _dialogs = dialogs;
@@ -222,6 +226,8 @@ public partial class GoLiveViewModel : ViewModel
         _sceneSetService = sceneSetService;
         _eventBus = eventBus;
         _logger = logger;
+        _aiProviders = aiProviders;
+        _categoryMedia = categoryMedia;
         SceneEditor = sceneEditor;
         _core.StateChanged += OnCoreStateChanged;
         _core.EventReceived += OnCoreEventReceived;
@@ -291,6 +297,12 @@ public partial class GoLiveViewModel : ViewModel
         RecordFolderPath = string.IsNullOrEmpty(saved.RecordFolderPath)
             ? Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyVideos), "StreamFlow")
             : saved.RecordFolderPath;
+
+        GenerateCategoryMediaEnabled = saved.GenerateCategoryMediaEnabled;
+        CategoryMediaFolderPath = string.IsNullOrEmpty(saved.CategoryMediaFolderPath)
+            ? Path.Combine(AppDataPaths.RootFolder, "CategoryMedia")
+            : saved.CategoryMediaFolderPath;
+        AutoUseExistingCategoryMedia = saved.AutoUseExistingCategoryMedia;
 
         // Force spout output to active
         _ = _core.SendCommandAsync(new SetSpoutOutputCommand(true, _spoutSenderName));
@@ -408,6 +420,9 @@ public partial class GoLiveViewModel : ViewModel
             SpoutSenderName = SpoutSenderName,
             IsRecordingEnabled = IsRecordingEnabled,
             RecordFolderPath = RecordFolderPath,
+            GenerateCategoryMediaEnabled = GenerateCategoryMediaEnabled,
+            CategoryMediaFolderPath = CategoryMediaFolderPath,
+            AutoUseExistingCategoryMedia = AutoUseExistingCategoryMedia,
             BitrateKbps = BitrateKbps,
             Fps = Fps,
             IsStreamDeckServerEnabled = currentOnDisk.IsStreamDeckServerEnabled,

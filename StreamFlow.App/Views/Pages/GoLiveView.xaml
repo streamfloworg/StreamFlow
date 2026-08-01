@@ -1675,6 +1675,35 @@
                                             Command="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.BrowseRecordFolderCommand}"/>
                                 </Grid>
                             </StackPanel>
+
+                            <!-- Category media generation settings -->
+                            <CheckBox Content="Generate media for new categories" Margin="0,4,0,8"
+                                      ToolTip="When you update the stream category/game, check a folder for existing media and offer to AI-generate an image if none is found"
+                                      IsChecked="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.GenerateCategoryMediaEnabled, Mode=TwoWay}"/>
+
+                            <StackPanel Visibility="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.IsCategoryMediaFolderVisible, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="Category Media Folder" Style="{StaticResource FieldLabelStyle}"/>
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.CategoryMediaFolderPath, FallbackValue='(none selected)', TargetNullValue='(none selected)'}"
+                                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                               Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,8,0"/>
+                                    <Button Grid.Column="1" Content="Browse…" Padding="8,4"
+                                            Command="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.BrowseCategoryMediaFolderCommand}"/>
+                                </Grid>
+
+                                <CheckBox Content="Automatically use existing media if found" Margin="0,0,0,8"
+                                          IsChecked="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.AutoUseExistingCategoryMedia, Mode=TwoWay}"/>
+
+                                <TextBlock Text="Image Provider" Style="{StaticResource FieldLabelStyle}"/>
+                                <ComboBox ItemsSource="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.AvailableCategoryMediaProviders}"
+                                          DisplayMemberPath="Name"
+                                          SelectedItem="{Binding RelativeSource={RelativeSource AncestorType=local:GoLiveView}, Path=ViewModel.SelectedCategoryMediaProvider, Mode=TwoWay}"
+                                          Margin="0,0,0,12"/>
+                            </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
 

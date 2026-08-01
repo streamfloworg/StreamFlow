@@ -118,6 +118,24 @@ public sealed class GoLiveSettings
 
     public string? RecordFolderPath { get; set; }
 
+    /// <summary>Triggers CategoryMediaService.RunAsync from UpdateStreamInfoAsync (GoLiveViewModel.
+    /// Chat.cs) whenever a category/game update is pushed to Twitch/YouTube — checks
+    /// CategoryMediaFolderPath for existing media and offers to AI-generate an image if none is
+    /// found (or if the user wants one anyway). Which AI provider to use is
+    /// AiSettings.DefaultImageProviderId, not a field here — that's provider/connection config,
+    /// not a streaming-workflow setting.</summary>
+    public bool GenerateCategoryMediaEnabled { get; set; }
+
+    /// <summary>Null until the user picks one — CategoryMediaService falls back to
+    /// %LOCALAPPDATA%\StreamFlow\CategoryMedia at that point rather than storing that default
+    /// here, so the default location can change later without a stale absolute path baked into
+    /// old settings files.</summary>
+    public string? CategoryMediaFolderPath { get; set; }
+
+    /// <summary>When true, finding an existing match in CategoryMediaFolderPath skips the Use
+    /// Existing/Generate New/Skip prompt entirely and just uses it.</summary>
+    public bool AutoUseExistingCategoryMedia { get; set; }
+
     public bool IsStreamDeckServerEnabled { get; set; }
 
     public int StreamDeckServerPort { get; set; } = 8080;

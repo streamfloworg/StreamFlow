@@ -61,6 +61,9 @@ public partial class App : IDisposable
             services.AddSingleton<HotkeyConflictService>();
             services.AddSingleton<TwitchAuthService>();
             services.AddSingleton<YouTubeAuthService>();
+            services.AddSingleton<StreamFlow.App.Services.AI.AiCredentialStore>();
+            services.AddSingleton<StreamFlow.App.Services.AI.AiProviderRegistryService>();
+            services.AddSingleton<StreamFlow.App.Services.CategoryMediaService>();
             services.AddSingleton<TwitchChatService>();
             services.AddSingleton<YouTubeChatService>();
             services.AddSingleton<SceneSetService>();

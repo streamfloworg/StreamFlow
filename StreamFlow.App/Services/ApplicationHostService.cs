@@ -49,6 +49,9 @@ public class ApplicationHostService : IHostedService
             var pluginManager = _serviceProvider.GetService<StreamFlow.App.Services.Overlays.Plugins.PluginManagerService>();
             pluginManager?.LoadPlugins();
 
+            var aiProviders = _serviceProvider.GetService<StreamFlow.App.Services.AI.AiProviderRegistryService>();
+            aiProviders?.LoadFromSettings();
+
             _hostWindow = (
                 _serviceProvider.GetService(typeof(Window)) as Window
             )!;

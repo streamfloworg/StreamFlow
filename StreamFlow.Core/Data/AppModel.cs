@@ -18,6 +18,7 @@ using Newtonsoft.Json;
 using StreamFlow.Core.AudioHandling;
 using StreamFlow.Core.AudioProperties;
 using StreamFlow.Core.Cache;
+using StreamFlow.Core.Data.Ai;
 using StreamFlow.Core.Helpers;
 
 using SoundFlow.Structs;
@@ -71,6 +72,9 @@ public partial class AppModel : ObservableObject, INotifyPropertyChanged
 
     [ObservableProperty]
     private GoLiveSettings _goLiveSettings = new();
+
+    [ObservableProperty]
+    private AiSettings _aiSettings = new();
 
     [ObservableProperty]
     private ObservableCollection<AudioTag> tags = [];
@@ -148,7 +152,8 @@ public partial class AppModel : ObservableObject, INotifyPropertyChanged
                 SceneList = [.. SceneList],
                 Settings = Settings,
                 WindowOptions = WindowOptions,
-                GoLiveSettings = GoLiveSettings
+                GoLiveSettings = GoLiveSettings,
+                AiSettings = AiSettings
             };
 
             new Persistence.PersistenceJsonDataManager().Save(persistentData);
@@ -208,6 +213,7 @@ public partial class AppModel : ObservableObject, INotifyPropertyChanged
                 Settings = data.Settings;
                 WindowOptions = data.WindowOptions;
                 GoLiveSettings = data.GoLiveSettings ?? new();
+                AiSettings = data.AiSettings ?? new();
 
                 // Migration check:
                 var legacyPath = Path.Combine(AppDataPaths.RootFolder, "golive_settings.json");
@@ -370,6 +376,34 @@ public partial class AppModel : ObservableObject, INotifyPropertyChanged
         try
         {
             var path = Path.Combine(AppDataPaths.RootFolder, "stream_keys.dat");
+            var bytes = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(keys));
+            File.WriteAllBytes(path, ProtectedData.Protect(bytes, null, DataProtectionScope.CurrentUser));
+        }
+        catch { }
+    }
+    #endregion
+
+    #region AI Provider Keys
+    public Dictionary<string, string> LoadAiProviderKeys()
+    {
+        try
+        {
+            var path = Path.Combine(AppDataPaths.RootFolder, "ai_provider_keys.dat");
+            if (!File.Exists(path)) return [];
+            var bytes = ProtectedData.Unprotect(File.ReadAllBytes(path), null, DataProtectionScope.CurrentUser);
+            return JsonConvert.DeserializeObject<Dictionary<string, string>>(Encoding.UTF8.GetString(bytes)) ?? [];
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    public void SaveAiProviderKeys(Dictionary<string, string> keys)
+    {
+        try
+        {
+            var path = Path.Combine(AppDataPaths.RootFolder, "ai_provider_keys.dat");
             var bytes = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(keys));
             File.WriteAllBytes(path, ProtectedData.Protect(bytes, null, DataProtectionScope.CurrentUser));
         }

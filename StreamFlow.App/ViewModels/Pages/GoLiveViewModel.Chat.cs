@@ -217,5 +217,10 @@ public partial class GoLiveViewModel
         }
 
         UpdateInfoStatus = success ? "Success: Stream info updated!" : "Error: Failed to update stream info";
+
+        // Fire-and-forget — CategoryMediaService's own checking/found/generating toasts shouldn't
+        // block this status text from showing immediately, and it already no-ops silently when
+        // the setting is off or no image provider is connected (see its own RunAsync).
+        if (success) _ = _categoryMedia.RunAsync(StreamCategory);
     }
 }

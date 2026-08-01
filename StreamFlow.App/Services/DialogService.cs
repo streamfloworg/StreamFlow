@@ -77,6 +77,29 @@ public class DialogService : IDialogService
         return await Task.FromResult(res);
     }
 
+    public async Task<string> PromptExistingCategoryMediaAsync(string title, string message)
+    {
+        var model = new MessageBoxModel
+        {
+            Text = message,
+            Caption = title,
+            Icon = MessageBoxImage.Question,
+            Buttons =
+            [
+                MessageBoxButtons.Custom("Use Existing", "use-existing"),
+                MessageBoxButtons.Custom("Generate New", "generate-new"),
+                MessageBoxButtons.Custom("Skip", "skip")
+            ]
+        };
+        MessageBox.Show(model);
+        var res = "skip";
+        if (model.Result == MessageBoxResult.Custom && model.ButtonPressed != null)
+        {
+            res = model.ButtonPressed.Id?.ToString() ?? "skip";
+        }
+        return await Task.FromResult(res);
+    }
+
     public async Task PropertiesDialog(Audio audio)
     {
         var propEd = new PropertiesEditor() { Audio = audio };

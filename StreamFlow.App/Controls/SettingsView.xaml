@@ -8,9 +8,10 @@
     xmlns:adonisExtensions="clr-namespace:AdonisUI.Extensions;assembly=AdonisUI"
     xmlns:conv="clr-namespace:StreamFlow.App.Converter"
     xmlns:vm="clr-namespace:StreamFlow.App.ViewModels.Pages"
+    xmlns:behaviors="clr-namespace:StreamFlow.App.Helpers.Behaviors"
     mc:Ignorable="d"
-    Width="450"
-    FontSize="12"
+    Width="599"
+    FontSize="12.6"
     d:DataContext="{d:DesignInstance vm:SettingsViewModel, IsDesignTimeCreatable=False}">
 
     <UserControl.Resources>
@@ -38,7 +39,7 @@
             </Grid.RowDefinitions>
 
             <!-- Header -->
-            <TextBlock Grid.Row="0" Text="Settings" FontWeight="Bold" FontSize="16" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Margin="0,0,0,16"/>
+            <TextBlock Grid.Row="0" Text="Settings" FontWeight="Bold" FontSize="16.8" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Margin="0,0,0,16"/>
 
             <!-- Settings Content -->
             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,0,0,12">
@@ -54,7 +55,7 @@
                             </Grid.ColumnDefinitions>
                             <Path Grid.Column="0" Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="16" Height="16" Margin="0,0,12,0" VerticalAlignment="Center" Data="{StaticResource SpeakerIconData}" />
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                <TextBlock Text="Audio Output Device" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"/>
+                                <TextBlock Text="Audio Output Device" FontWeight="SemiBold" FontSize="12.6" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"/>
                             </StackPanel>
                             <ComboBox Grid.Column="2"
                                       Width="180"
@@ -77,7 +78,7 @@
                             </Grid.ColumnDefinitions>
                             <Path Grid.Column="0" Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="16" Height="16" Margin="0,0,12,0" VerticalAlignment="Center" Data="{StaticResource SettingsIconData}" />
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                <TextBlock Text="Theme" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"/>
+                                <TextBlock Text="Theme" FontWeight="SemiBold" FontSize="12.6" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"/>
                             </StackPanel>
                             <ComboBox x:Name="cbThemeSelection"
                                       Grid.Column="2"
@@ -104,8 +105,8 @@
                                 </Grid.ColumnDefinitions>
                                 <Path Grid.Column="0" Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="16" Height="16" Margin="0,0,12,0" VerticalAlignment="Center" Data="{StaticResource SettingsIconData}" />
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,0">
-                                    <TextBlock Text="Stream Deck Server" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"/>
-                                    <TextBlock Text="Allows Stream Deck integration" FontSize="10" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Stream Deck Server" FontWeight="SemiBold" FontSize="12.6" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"/>
+                                    <TextBlock Text="Allows Stream Deck integration" FontSize="10.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <CheckBox Grid.Column="2" Content="Enabled" VerticalAlignment="Center"
                                           IsChecked="{Binding IsStreamDeckServerEnabled, Mode=TwoWay}"/>
@@ -135,7 +136,7 @@
                                     <Button Grid.Column="3" Content="Regen" Padding="6,2" Margin="4,0,0,0"
                                             Command="{Binding RegenerateStreamDeckApiKeyCommand}"/>
                                 </Grid>
-                                <TextBlock Text="{Binding StreamDeckServerStatusText}" FontSize="10" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                <TextBlock Text="{Binding StreamDeckServerStatusText}" FontSize="10.5" Foreground="{StaticResource TextSecondaryBrush}"/>
                             </StackPanel>
                         </StackPanel>
                     </Border>
@@ -149,7 +150,7 @@
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <Path Grid.Column="0" Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="16" Height="16" Margin="0,0,12,0" VerticalAlignment="Center" Data="{StaticResource DeleteForeverIconData}" />
-                                <TextBlock Grid.Column="1" Text="Cache" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"/>
+                                <TextBlock Grid.Column="1" Text="Cache" FontWeight="SemiBold" FontSize="12.6" VerticalAlignment="Center" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"/>
                             </Grid>
                         </Expander.Header>
                         <StackPanel Margin="12,6">
@@ -163,7 +164,7 @@
                                     </Grid.ColumnDefinitions>
                                     <Path Grid.Column="0" Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="16" Height="16" Margin="0,0,12,0" VerticalAlignment="Center" Data="{StaticResource LevelMeterIconData}" />
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                        <TextBlock Text="Image Cache" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"/>
+                                        <TextBlock Text="Image Cache" FontWeight="SemiBold" FontSize="12.6" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"/>
                                     </StackPanel>
                                     <Menu Grid.Column="2" x:Name="AudioMenu" Background="Transparent" BorderThickness="0" VerticalAlignment="Center">
                                         <MenuItem AutomationProperties.Name="Unused Menu" x:Name="AudioMenuItem" FocusVisualStyle="{DynamicResource {x:Static SystemParameters.FocusVisualStyleKey}}">
@@ -188,7 +189,7 @@
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <Path Grid.Column="0" Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="16" Height="16" Margin="0,0,12,0" VerticalAlignment="Center" Data="{StaticResource SettingsIconData}" />
-                                <TextBlock Grid.Column="1" Text="Plugins &amp; Extensions" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" Text="Plugins &amp; Extensions" FontWeight="SemiBold" FontSize="12.6" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" VerticalAlignment="Center"/>
                             </Grid>
                         </Expander.Header>
                         <Grid Margin="0,10,0,0">
@@ -210,9 +211,9 @@
                                                 </Grid.ColumnDefinitions>
                                                 <CheckBox Grid.Column="0" IsChecked="{Binding IsEnabled, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,0">
-                                                    <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="11" TextWrapping="Wrap"/>
-                                                    <TextBlock Text="{Binding Description}" FontSize="10" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap"/>
-                                                    <TextBlock Text="{Binding Version, StringFormat=v{0}}" FontSize="9" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                    <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="11.55" TextWrapping="Wrap"/>
+                                                    <TextBlock Text="{Binding Description}" FontSize="10.5" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+                                                    <TextBlock Text="{Binding Version, StringFormat=v{0}}" FontSize="9.45" Foreground="{StaticResource TextSecondaryBrush}"/>
                                                 </StackPanel>
                                                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                                                     <Button Content="⚙" ToolTip="Configure" Command="{Binding DataContext.ConfigurePluginCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" Visibility="{Binding HasConfiguration, Converter={StaticResource BoolToVisibility}}" Margin="0,0,4,0"/>
@@ -226,6 +227,121 @@
                         </Grid>
                     </Expander>
 
+                    <!-- AI Providers Expander -->
+                    <Expander Background="{DynamicResource {x:Static adonisUi:Brushes.Layer1BackgroundBrush}}" BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="1" Padding="12,10" Margin="0,0,0,6">
+                        <Expander.Header>
+                            <Grid HorizontalAlignment="Stretch">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Path Grid.Column="0" Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="16" Height="16" Margin="0,0,12,0" VerticalAlignment="Center" Data="{StaticResource SettingsIconData}" />
+                                <TextBlock Grid.Column="1" Text="AI Providers" FontWeight="SemiBold" FontSize="12.6" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Expander.Header>
+                        <StackPanel Margin="0,10,0,0">
+                            <!-- Add Provider: dropdown + Add button (see AiProviderCatalog) — one
+                                 button per catalog entry didn't fit the window on a single row. -->
+                            <TextBlock Text="Add a provider" FontSize="10.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,4"/>
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ComboBox Grid.Column="0" ItemsSource="{Binding AvailableAiProviderKinds}" DisplayMemberPath="DisplayName"
+                                          SelectedItem="{Binding SelectedAiProviderKindToAdd, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <Button Grid.Column="1" Content="Add" Padding="10,4" Command="{Binding AddAiProviderCommand}"/>
+                            </Grid>
+
+                            <!-- Configured Providers -->
+                            <ItemsControl ItemsSource="{Binding AiProviders.Profiles}" HorizontalContentAlignment="Stretch">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:AiProviderProfile}">
+                                        <Border Background="{DynamicResource {x:Static adonisUi:Brushes.Layer2BackgroundBrush}}" CornerRadius="4" Padding="10,8" Margin="0,0,0,6" HorizontalAlignment="Stretch">
+                                            <StackPanel>
+                                                <Grid Margin="0,0,0,6">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Column="0">
+                                                        <TextBox Text="{Binding Name, UpdateSourceTrigger=LostFocus}" Background="Transparent" BorderThickness="0" FontWeight="Bold" FontSize="11.55" Padding="0"/>
+                                                        <TextBlock Text="{Binding Capabilities.DisplayName}" FontSize="9.45" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                    </StackPanel>
+                                                    <Button Grid.Column="1" Content="🗑" ToolTip="Remove" Padding="4"
+                                                            Command="{Binding DataContext.RemoveAiProviderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                            CommandParameter="{Binding}"/>
+                                                </Grid>
+
+                                                <!-- Cloud: API key + Connect/Disconnect -->
+                                                <StackPanel Visibility="{Binding IsLocal, Converter={StaticResource InverseBoolToVisibility}}">
+                                                    <Grid Margin="0,0,0,4">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <PasswordBox Grid.Column="0" behaviors:PasswordBoxHelper.Attach="True"
+                                                                     behaviors:PasswordBoxHelper.BoundPassword="{Binding ApiKey, UpdateSourceTrigger=PropertyChanged}"
+                                                                     VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                        <Button Grid.Column="1" Content="Connect" Padding="8,3"
+                                                                Command="{Binding DataContext.ConnectAiProviderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                CommandParameter="{Binding}"
+                                                                Visibility="{Binding IsConnected, Converter={StaticResource InverseBoolToVisibility}}"/>
+                                                        <Button Grid.Column="1" Content="Disconnect" Padding="8,3"
+                                                                Command="{Binding DataContext.DisconnectAiProviderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                CommandParameter="{Binding}"
+                                                                Visibility="{Binding IsConnected, Converter={StaticResource BoolToVisibility}}"/>
+                                                    </Grid>
+                                                </StackPanel>
+
+                                                <!-- Local: base URL + Test Connection -->
+                                                <StackPanel Visibility="{Binding IsLocal, Converter={StaticResource BoolToVisibility}}">
+                                                    <Grid Margin="0,0,0,4">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBox Grid.Column="0" Text="{Binding BaseUrl, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="0,0,6,0"
+                                                                 ToolTip="The local server's address — only needs an API key for tunneled/remote setups."/>
+                                                        <Button Grid.Column="1" Content="Test Connection" Padding="8,3"
+                                                                Command="{Binding DataContext.TestAiProviderConnectionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                CommandParameter="{Binding}"/>
+                                                    </Grid>
+                                                </StackPanel>
+
+                                                <!-- Model pickers: only shown once AvailableModels has something to pick from
+                                                     (a successful Connect/Test Connection), one per modality this provider supports. -->
+                                                <StackPanel Visibility="{Binding IsConnected, Converter={StaticResource BoolToVisibility}}">
+                                                    <Grid Margin="0,0,0,4" Visibility="{Binding SupportsText, Converter={StaticResource BoolToVisibility}}">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Grid.Column="0" Text="Text model" FontSize="9.45" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                        <ComboBox Grid.Column="1" ItemsSource="{Binding AvailableModels}" SelectedItem="{Binding DefaultModelText, Mode=TwoWay}"/>
+                                                    </Grid>
+                                                    <Grid Margin="0,0,0,4" Visibility="{Binding SupportsImage, Converter={StaticResource BoolToVisibility}}">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Grid.Column="0" Text="Image model" FontSize="9.45" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                        <ComboBox Grid.Column="1" ItemsSource="{Binding AvailableModels}" SelectedItem="{Binding DefaultModelImage, Mode=TwoWay}"/>
+                                                    </Grid>
+                                                </StackPanel>
+
+                                                <TextBlock Text="{Binding StatusMessage}" FontSize="9.45" Foreground="#EF4444" TextWrapping="Wrap" Margin="0,0,0,2"
+                                                           Visibility="{Binding StatusMessage, Converter={StaticResource NullToVisibility}}"/>
+                                                <TextBlock FontSize="9.45" Foreground="{StaticResource TextSecondaryBrush}"
+                                                           Text="{Binding ConnectionStatus, StringFormat='Status: {0}'}"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Expander>
+
                     <!-- About Card -->
                     <Border Background="{DynamicResource {x:Static adonisUi:Brushes.Layer1BackgroundBrush}}" BorderBrush="{DynamicResource {x:Static adonisUi:Brushes.Layer1BorderBrush}}" BorderThickness="1" CornerRadius="4" Padding="12,10" Margin="0,0,0,6">
                         <Grid>
@@ -236,18 +352,18 @@
                             </Grid.ColumnDefinitions>
                             <Path Grid.Column="0" Fill="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" Stretch="Uniform" Width="16" Height="16" Margin="0,0,12,0" VerticalAlignment="Center" Data="{StaticResource GoLiveIconData}" />
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,0">
-                                <TextBlock Text="About StreamFlow" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"/>
-                                <TextBlock Text="StreamFlow soundboard application" FontSize="10" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0"/>
+                                <TextBlock Text="About StreamFlow" FontWeight="SemiBold" FontSize="12.6" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}"/>
+                                <TextBlock Text="StreamFlow soundboard application" FontSize="10.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0"/>
                                 <StackPanel Orientation="Horizontal" Margin="0,4,0,0"
                                             Visibility="{Binding ShowUpdateCheck, Converter={StaticResource BoolToVisibility}}">
-                                    <Button Content="Check Updates" Padding="6,2" FontSize="10" Command="{Binding CheckForUpdatesCommand}"/>
-                                    <Button Content="Install" Padding="6,2" FontSize="10" Margin="4,0,0,0"
+                                    <Button Content="Check Updates" Padding="6,2" FontSize="10.5" Command="{Binding CheckForUpdatesCommand}"/>
+                                    <Button Content="Install" Padding="6,2" FontSize="10.5" Margin="4,0,0,0"
                                             Command="{Binding InstallUpdateCommand}"/>
-                                    <TextBlock Text="{Binding UpdateStatusText}" FontSize="10" VerticalAlignment="Center" Margin="6,0,0,0"
+                                    <TextBlock Text="{Binding UpdateStatusText}" FontSize="10.5" VerticalAlignment="Center" Margin="6,0,0,0"
                                                Foreground="{StaticResource TextSecondaryBrush}"/>
                                 </StackPanel>
                             </StackPanel>
-                            <TextBlock Grid.Column="2" Text="{Binding AppVersion}" VerticalAlignment="Center" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" FontSize="11"/>
+                            <TextBlock Grid.Column="2" Text="{Binding AppVersion}" VerticalAlignment="Center" Foreground="{DynamicResource {x:Static adonisUi:Brushes.ForegroundBrush}}" FontSize="11.55"/>
                         </Grid>
                     </Border>
                     

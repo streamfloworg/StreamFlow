@@ -432,13 +432,16 @@ public partial class MainWindow : AdonisWindow, INotifyPropertyChanged, IDisposa
             var settingsVm = App.Services.GetService(typeof(SettingsViewModel)) as SettingsViewModel;
             if (settingsVm is null) return;
             var settingsView = new SettingsView(settingsVm);
+            // 33% larger than the original 470x490 — the AI Providers section (API key/base
+            // URL/status per provider card) needs more room to actually be usable without
+            // constant scrolling.
             var dialog = new SimpleDialog(settingsView, settingsView.SettingsCloseButton)
             {
                 Title = "Settings",
-                MinHeight = 490,
-                MaxHeight = 490,
-                MinWidth = 470,
-                MaxWidth = 470,
+                MinHeight = 652,
+                MaxHeight = 652,
+                MinWidth = 625,
+                MaxWidth = 625,
                 Padding = new Thickness(0)
             };
             _ = dialog.ShowAsync();
