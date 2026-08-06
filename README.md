@@ -53,7 +53,7 @@ YouTube — while a per-device audio channel strip mixer, backed by
 ## Getting started
 
 ```powershell
-git clone --recurse-submodules https://github.com/nomadamo/StreamFlow.git
+git clone --recurse-submodules https://github.com/streamfloworg/StreamFlow.git
 cd StreamFlow
 dotnet build StreamFlow.sln
 ```
