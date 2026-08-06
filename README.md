@@ -74,27 +74,9 @@ git submodule update --init --recursive
 
 Launch `StreamFlow.App` from Visual Studio or `dotnet run --project StreamFlow.App`.
 
-## Versioning & releases
+**or**
 
-The whole app shares one version number, defined by `Directory.Build.props` at the repo root and
-applied to every StreamFlow-owned project (submodules are deliberately excluded — they carry
-their own versioning). Local/dev builds get a placeholder (`0.0.1-dev`); CI resolves the real
-version from whatever triggered the run.
-
-Pushing to `main` or opening a PR runs the full build/test/MSIX-artifact matrix, but does **not**
-cut a release — that only happens when:
-
-- a tag matching `vX.Y.Z` (e.g. `v1.4.0`) is pushed to `main`, or
-- the workflow is run manually (`workflow_dispatch`) with a `version` input.
-
-Either path resolves a version, stamps it into the build (assembly version, MSIX manifest,
-Velopack package), and publishes a Velopack release to GitHub Releases — the feed the installed
-app self-updates from. To cut a release:
-
-```powershell
-git tag v1.4.0
-git push origin v1.4.0
-```
+run the executable from the build folder
 
 ## License
 
